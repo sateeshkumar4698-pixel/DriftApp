@@ -10,33 +10,37 @@ export function initFirebase(): void {
     return;
   }
 
-  const explicitPath =
+  // ── Option 1: JSON string in env var (recommended for Railway / cloud) ────
+  // Set FIREBASE_SERVICE_ACCOUNT_JSON to the full contents of service-account.json
+  const jsonEnv = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (jsonEnv) {
+    const serviceAccount = JSON.parse(jsonEnv);
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    initialized = true;
+    return;
+  }
+
+  // ── Option 2: File path (local dev) ──────────────────────────────────────
+  const filePath =
     process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
     process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
-  if (explicitPath) {
-    const resolved = path.isAbsolute(explicitPath)
-      ? explicitPath
-      : path.resolve(process.cwd(), explicitPath);
+  if (filePath) {
+    const resolved = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(process.cwd(), filePath);
 
     if (!fs.existsSync(resolved)) {
-      throw new Error(
-        `Firebase service account file not found at: ${resolved}. ` +
-          `Set FIREBASE_SERVICE_ACCOUNT_PATH or GOOGLE_APPLICATION_CREDENTIALS to a valid JSON key path.`
-      );
+      throw new Error(`Service account file not found: ${resolved}`);
     }
-
     const serviceAccount = JSON.parse(fs.readFileSync(resolved, 'utf8'));
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-  } else {
-    // Fall back to Application Default Credentials (useful on GCP).
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-    });
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    initialized = true;
+    return;
   }
 
+  // ── Option 3: Google Application Default Credentials (GCP / Cloud Run) ───
+  admin.initializeApp({ credential: admin.credential.applicationDefault() });
   initialized = true;
 }
 
