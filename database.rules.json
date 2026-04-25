@@ -1,0 +1,31 @@
+{
+  "rules": {
+    // ─── Typing indicators (Chat) ────────────────────────────────────────────
+    // Path: typing/{connectionId}/{uid}
+    "typing": {
+      "$connectionId": {
+        "$uid": {
+          // Only the user themselves can write their typing status
+          ".write": "auth != null && auth.uid == $uid",
+          // Anyone authenticated can read (to show "X is typing...")
+          ".read": "auth != null"
+        }
+      }
+    },
+
+    // ─── Game Room State (RTDB) ──────────────────────────────────────────────
+    // Path: gameRooms/{roomId}/ludo  (low-latency multiplayer state)
+    "gameRooms": {
+      "$roomId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    // ─── Deny everything else ────────────────────────────────────────────────
+    "$other": {
+      ".read":  false,
+      ".write": false
+    }
+  }
+}

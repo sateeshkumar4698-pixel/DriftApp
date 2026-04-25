@@ -31,7 +31,18 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
+.env.local
 .env*.local
+
+# secrets — never commit these
+google-services.json
+google-service-account.json
+backend/service-account.json
+backend/.env
+GoogleService-Info.plist
+*.p8
+*.p12
 
 # typescript
 *.tsbuildinfo

@@ -1,0 +1,45 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ─── User profile photos ───────────────────────────────────────────────────
+    // Path: users/{uid}/profile.*   or   users/{uid}/photos/{index}.*
+    match /users/{uid}/{allPaths=**} {
+      // Anyone signed in can read (needed for displaying other users' photos)
+      allow read: if request.auth != null;
+
+      // Only the owner can upload their own files
+      // File size limit: 5 MB; images only
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // ─── Post media ───────────────────────────────────────────────────────────
+    // Path: posts/{uid}/{filename}
+    match /posts/{uid}/{fileName} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType.matches('video/.*'));
+    }
+
+    // ─── Event images ─────────────────────────────────────────────────────────
+    // Path: events/{eventId}/{filename}
+    match /events/{eventId}/{fileName} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // ─── Deny everything else ─────────────────────────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
