@@ -8,13 +8,20 @@ import notificationRoutes from './routes/notifications';
 import voiceRoutes from './routes/voice';
 import gameRoutes from './routes/games';
 
-initFirebase();
+// ── Init Firebase (crash-safe — logs error but lets server start) ─────────────
+try {
+  initFirebase();
+} catch (err) {
+  console.error('[drift-backend] Firebase init failed:', err);
+  console.error('[drift-backend] Auth routes will not work until FIREBASE_SERVICE_ACCOUNT_JSON is set.');
+}
 
 const app = express();
 
-app.use(cors());
+app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '1mb' }));
 
+// ── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'drift-backend', time: new Date().toISOString() });
 });
@@ -24,23 +31,22 @@ app.use('/notifications', notificationRoutes);
 app.use('/voice', voiceRoutes);
 app.use('/games', gameRoutes);
 
-// Fallback error handler.
+// ── Error handler ─────────────────────────────────────────────────────────────
 app.use(
   (
     err: unknown,
     _req: express.Request,
     res: express.Response,
-    _next: express.NextFunction
+    _next: express.NextFunction,
   ) => {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    // eslint-disable-next-line no-console
     console.error('[drift-backend] unhandled error:', err);
     res.status(500).json({ error: message });
-  }
+  },
 );
 
+// ── Listen on 0.0.0.0 (required for Railway / Docker / cloud) ────────────────
 const PORT = Number(process.env.PORT) || 4000;
-app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`[drift-backend] listening on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[drift-backend] listening on 0.0.0.0:${PORT}`);
 });
