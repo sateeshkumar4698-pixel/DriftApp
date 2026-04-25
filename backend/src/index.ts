@@ -26,6 +26,11 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'drift-backend', time: new Date().toISOString() });
 });
 
+// ── Root ──────────────────────────────────────────────────────────────────────
+app.get('/', (_req, res) => {
+  res.json({ ok: true, service: 'drift-backend' });
+});
+
 app.use('/auth', authRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/voice', voiceRoutes);
