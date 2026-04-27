@@ -108,6 +108,13 @@ export default function App() {
       setFirebaseUser(user);
 
       if (user) {
+        // Email users who haven't verified — don't load profile yet
+        if (user.email && !user.emailVerified) {
+          setUserProfile(null);
+          setLoading(false);
+          return;
+        }
+
         try {
           const profile = await getUserProfile(user.uid);
           setUserProfile(profile);

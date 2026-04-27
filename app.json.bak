@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "DriftApp",
-    "slug": "DriftApp",
+    "name": "Drift",
+    "slug": "drift-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,15 +10,18 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FF4B6E"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.drift.app"
     },
     "android": {
+      "package": "com.drift.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#FF4B6E"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false

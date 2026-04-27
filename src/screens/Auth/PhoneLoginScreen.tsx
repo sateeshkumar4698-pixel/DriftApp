@@ -15,10 +15,13 @@ import {
   signInWithPhoneNumber,
   type ApplicationVerifier,
 } from 'firebase/auth';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { auth } from '../../config/firebase';
 import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
 import { normalizePhone, formatIndianNumber } from '../../utils/helpers';
 import { isBackendOtpEnabled, sendBackendOtp, verifyBackendOtp } from '../../services/otpService';
+import { RootStackParamList } from '../../types';
 
 /**
  * Firebase SDK v12 requires an ApplicationVerifier even when
@@ -36,7 +39,10 @@ const mockVerifier = {
   _reset: (): void => { /* no-op — no DOM widget to reset in React Native */ },
 } as unknown as ApplicationVerifier;
 
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
 export default function PhoneLoginScreen() {
+  const navigation = useNavigation<Nav>();
   const [digits, setDigits]             = useState('');
   const [otp, setOtp]                   = useState('');
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
@@ -152,6 +158,21 @@ export default function PhoneLoginScreen() {
               {loading
                 ? <ActivityIndicator color="#fff" />
                 : <Text style={styles.btnText}>Send OTP</Text>}
+            </TouchableOpacity>
+
+            {/* ── OR divider ── */}
+            <View style={styles.orRow}>
+              <View style={styles.orLine} />
+              <Text style={styles.orText}>OR</Text>
+              <View style={styles.orLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.emailBtn}
+              onPress={() => navigation.navigate('EmailAuth')}
+              activeOpacity={0.82}
+            >
+              <Text style={styles.emailBtnText}>Continue with Email →</Text>
             </TouchableOpacity>
           </>
         ) : (
@@ -345,4 +366,36 @@ const styles = StyleSheet.create({
 
   hint:     { alignSelf: 'center', marginTop: spacing.md },
   hintText: { ...typography.small, color: colors.textSecondary, textDecorationLine: 'underline' },
+
+  // OR divider + email button
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.lg,
+  },
+  orLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  orText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginHorizontal: spacing.sm,
+    fontWeight: '600',
+  },
+  emailBtn: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emailBtnText: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.primary,
+    fontSize: 16,
+  },
 });

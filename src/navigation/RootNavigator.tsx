@@ -9,6 +9,8 @@ import ErrorBoundary from '../components/ErrorBoundary';
 
 import OnboardingScreen, { ONBOARDING_KEY } from '../screens/Auth/OnboardingScreen';
 import PhoneLoginScreen from '../screens/Auth/PhoneLoginScreen';
+import EmailAuthScreen from '../screens/Auth/EmailAuthScreen';
+import EmailVerifyScreen from '../screens/Auth/EmailVerifyScreen';
 import ProfileSetupScreen from '../screens/Auth/ProfileSetupScreen';
 import MainTabs from './MainTabs';
 
@@ -53,8 +55,15 @@ export default function RootNavigator() {
           // First launch — show onboarding slides
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         ) : !firebaseUser ? (
-          // Not signed in
-          <Stack.Screen name="PhoneLogin" component={PhoneLoginScreen} />
+          // Not signed in — phone + email auth screens available
+          <>
+            <Stack.Screen name="PhoneLogin"  component={PhoneLoginScreen} />
+            <Stack.Screen name="EmailAuth"   component={EmailAuthScreen} />
+            <Stack.Screen name="EmailVerify" component={EmailVerifyScreen} />
+          </>
+        ) : (firebaseUser.email && !firebaseUser.emailVerified) ? (
+          // Email user who hasn't verified yet
+          <Stack.Screen name="EmailVerify" component={EmailVerifyScreen} />
         ) : !userProfile ? (
           // Signed in but no profile yet
           <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />

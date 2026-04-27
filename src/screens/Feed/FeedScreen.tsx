@@ -38,7 +38,24 @@ import { FeedStackParamList, Post, PostComment, PostType } from '../../types';
 type Nav = NativeStackNavigationProp<FeedStackParamList>;
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const IMAGE_HEIGHT = (SCREEN_WIDTH - spacing.md * 2) * 0.75;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Resolve the effective post type, accounting for legacy `postType` field */
+function resolvePostType(post: Post): PostType {
+  const t = post.type ?? post.postType;
+  if (t === 'moment' || t === 'memory' || t === 'vibe' || t === 'question' || t === 'achievement') {
+    // Map legacy types to canonical ones
+    if (post.mediaURL) return 'image';
+    if (t === 'question') return 'text';
+    return 'text';
+  }
+  return (t as PostType) ?? 'text';
+}
+
+function resolveCommentCount(post: Post): number {
+  return (post.commentCount ?? post.comments) ?? 0;
+}
 
 // ─── Post type config ─────────────────────────────────────────────────────────
 
@@ -46,26 +63,14 @@ interface PostTypeConfig {
   label: string;
   emoji: string;
   color: string;
-  bg: string;
 }
 
-const POST_TYPE_CONFIG: Record<PostType, PostTypeConfig> = {
-  moment:      { label: 'Moment',      emoji: '📸', color: '#0984E3', bg: '#0984E306' },
-  memory:      { label: 'Memory',      emoji: '🌟', color: '#FDCB6E', bg: '#FDCB6E06' },
-  vibe:        { label: 'Vibe',        emoji: '✨', color: '#6C5CE7', bg: '#6C5CE706' },
-  question:    { label: 'Question',    emoji: '🤔', color: '#00B894', bg: '#00B89406' },
-  achievement: { label: 'Achievement', emoji: '🏆', color: '#FF4B6E', bg: '#FF4B6E06' },
-  thread:      { label: 'Thread',      emoji: '💭', color: '#E17055', bg: '#E1705506' },
-  poll:        { label: 'Poll',        emoji: '📊', color: '#0984E3', bg: '#0984E306' },
+const POST_TYPE_CONFIG: Record<string, PostTypeConfig> = {
+  text:   { label: 'Text',   emoji: '📝', color: '#6C5CE7' },
+  image:  { label: 'Photo',  emoji: '📷', color: '#0984E3' },
+  thread: { label: 'Thread', emoji: '🧵', color: '#E17055' },
+  poll:   { label: 'Poll',   emoji: '📊', color: '#00B894' },
 };
-
-// ─── Reactions ────────────────────────────────────────────────────────────────
-
-const REACTIONS = ['❤️', '🔥', '😂', '😮', '👏'];
-
-// ─── Trending topics ──────────────────────────────────────────────────────────
-
-const TRENDING = ['#vibecheck', '#memories', '#goodvibes', '#drifters', '#connections'];
 
 // ─── Mock stories ─────────────────────────────────────────────────────────────
 
@@ -84,23 +89,21 @@ const MOCK_STORIES: StoryItem[] = [
   { id: 'anjali', name: 'Anjali', initial: 'A', color: '#6C5CE7', hasStory: true },
   { id: 'dev',    name: 'Dev',    initial: 'D', color: '#00B894', hasStory: false },
   { id: 'mia',    name: 'Mia',    initial: 'M', color: '#FDCB6E', hasStory: true },
-];
-
-// ─── Filter tabs ──────────────────────────────────────────────────────────────
-
-const FILTER_TABS: { key: PostType | 'all'; label: string }[] = [
-  { key: 'all',         label: 'For You' },
-  { key: 'moment',      label: 'Moments 📸' },
-  { key: 'vibe',        label: 'Vibes ✨' },
-  { key: 'thread',      label: 'Thoughts 💭' },
-  { key: 'question',    label: 'Questions 🤔' },
+  { id: 'arjun',  name: 'Arjun',  initial: 'A', color: '#FF4B6E', hasStory: true },
 ];
 
 // ─── Stories bar ──────────────────────────────────────────────────────────────
 
 function StoriesBar({ userName, userPhotoURL }: { userName: string; userPhotoURL?: string }) {
   const items: StoryItem[] = [
-    { id: 'me', name: 'Your Story', initial: userName ? userName[0].toUpperCase() : '?', color: colors.primary, hasStory: false, isUser: true },
+    {
+      id: 'me',
+      name: 'Your Story',
+      initial: userName ? userName[0].toUpperCase() : '?',
+      color: colors.primary,
+      hasStory: false,
+      isUser: true,
+    },
     ...MOCK_STORIES,
   ];
 
@@ -114,7 +117,7 @@ function StoriesBar({ userName, userPhotoURL }: { userName: string; userPhotoURL
         contentContainerStyle={sb.list}
         renderItem={({ item }) => (
           <TouchableOpacity style={sb.item} activeOpacity={0.8}>
-            <View style={[sb.ring, item.hasStory && sb.ringActive]}>
+            <View style={[sb.ring, item.hasStory ? sb.ringActive : sb.ringInactive]}>
               <View style={[sb.circle, { backgroundColor: item.color }]}>
                 {item.isUser && userPhotoURL ? (
                   <Image source={{ uri: userPhotoURL }} style={sb.photo} />
@@ -122,8 +125,8 @@ function StoriesBar({ userName, userPhotoURL }: { userName: string; userPhotoURL
                   <Text style={sb.initial}>{item.initial}</Text>
                 )}
                 {item.isUser && (
-                  <View style={sb.addIcon}>
-                    <Ionicons name="add" size={12} color="#fff" />
+                  <View style={sb.addBadge}>
+                    <Ionicons name="add" size={10} color="#fff" />
                   </View>
                 )}
               </View>
@@ -144,31 +147,200 @@ const sb = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   list: { paddingHorizontal: spacing.md, gap: spacing.md },
-  item: { alignItems: 'center', width: 70 },
+  item: { alignItems: 'center', width: 66 },
   ring: {
-    width: 68, height: 68, borderRadius: 34,
-    borderWidth: 2, borderColor: colors.border,
-    padding: 2,
+    width: 64, height: 64, borderRadius: 32,
+    borderWidth: 2.5, padding: 2,
   },
-  ringActive: { borderColor: colors.primary },
+  ringActive:   { borderColor: colors.primary },
+  ringInactive: { borderColor: colors.border },
   circle: {
-    flex: 1, borderRadius: 30,
+    flex: 1, borderRadius: 28,
     alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
-  photo: { width: '100%', height: '100%' },
-  initial: { fontSize: 22, fontWeight: '700', color: '#fff' },
-  addIcon: {
+  photo:   { width: '100%', height: '100%' },
+  initial: { fontSize: 20, fontWeight: '700', color: '#fff' },
+  addBadge: {
     position: 'absolute', bottom: 0, right: 0,
     width: 18, height: 18, borderRadius: 9,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: '#fff',
   },
-  name: { ...typography.small, color: colors.textSecondary, marginTop: 4, textAlign: 'center', maxWidth: 64 },
+  name: {
+    ...typography.small, color: colors.textSecondary,
+    marginTop: spacing.xs, textAlign: 'center', maxWidth: 62,
+  },
 });
 
-// ─── Comment modal ────────────────────────────────────────────────────────────
+// ─── Hashtag-highlighted caption ──────────────────────────────────────────────
+
+function HighlightedCaption({
+  text,
+  style,
+  numberOfLines,
+}: {
+  text: string;
+  style?: object;
+  numberOfLines?: number;
+}) {
+  // Split on hashtags so we can colour them
+  const parts = text.split(/(#\w+)/g);
+  return (
+    <Text style={style} numberOfLines={numberOfLines}>
+      {parts.map((part, i) =>
+        part.startsWith('#') ? (
+          <Text key={i} style={{ color: colors.primary, fontWeight: '600' }}>
+            {part}
+          </Text>
+        ) : (
+          <Text key={i}>{part}</Text>
+        ),
+      )}
+    </Text>
+  );
+}
+
+// ─── Poll content ─────────────────────────────────────────────────────────────
+
+function PollContent({ post, uid }: { post: Post; uid: string }) {
+  const rawOptions = post.pollOptions ?? [];
+
+  // Normalise: legacy options may lack an `id` field
+  const [localOptions, setLocalOptions] = useState(
+    rawOptions.map((o, i) => ({
+      id: 'id' in o ? (o as { id: string }).id : String(i),
+      text: o.text,
+      votes: [...o.votes],
+    })),
+  );
+
+  const totalVotes = localOptions.reduce((s, o) => s + o.votes.length, 0);
+  const hasVoted   = localOptions.some((o) => o.votes.includes(uid));
+
+  function handleVote(idx: number) {
+    if (!uid) return;
+    setLocalOptions((prev) =>
+      prev.map((opt, i) => {
+        if (i !== idx) {
+          // single-choice: clear votes from other options
+          return { ...opt, votes: opt.votes.filter((u) => u !== uid) };
+        }
+        const alreadyVoted = opt.votes.includes(uid);
+        return {
+          ...opt,
+          votes: alreadyVoted
+            ? opt.votes.filter((u) => u !== uid)
+            : [...opt.votes, uid],
+        };
+      }),
+    );
+  }
+
+  return (
+    <View style={poll.container}>
+      {localOptions.map((opt, idx) => {
+        const pct    = totalVotes > 0 ? Math.round((opt.votes.length / totalVotes) * 100) : 0;
+        const voted  = opt.votes.includes(uid);
+        return (
+          <TouchableOpacity
+            key={opt.id}
+            style={[poll.option, voted && poll.optionVoted]}
+            onPress={() => handleVote(idx)}
+            activeOpacity={0.8}
+          >
+            {/* fill bar */}
+            <View style={[poll.bar, { width: `${pct}%` as `${number}%` }]} />
+            <Text style={[poll.optionText, voted && poll.optionTextVoted]}>
+              {opt.text}
+            </Text>
+            {hasVoted && (
+              <Text style={poll.pct}>{pct}%</Text>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+      <Text style={poll.meta}>
+        {totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}
+        {post.pollEndsAt && post.pollEndsAt > Date.now()
+          ? ` · ends ${formatRelativeTime(post.pollEndsAt)}`
+          : ''}
+      </Text>
+    </View>
+  );
+}
+
+const poll = StyleSheet.create({
+  container: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
+  option: {
+    borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border,
+    paddingHorizontal: spacing.md, paddingVertical: 12,
+    overflow: 'hidden', position: 'relative', minHeight: 46,
+    justifyContent: 'center', backgroundColor: colors.surface,
+  },
+  optionVoted: { borderColor: colors.primary },
+  bar: {
+    position: 'absolute', left: 0, top: 0, bottom: 0,
+    backgroundColor: colors.primary + '1A',
+  },
+  optionText: { ...typography.body, color: colors.text, fontWeight: '500', zIndex: 1 },
+  optionTextVoted: { color: colors.primary, fontWeight: '700' },
+  pct: {
+    position: 'absolute', right: spacing.md,
+    ...typography.small, color: colors.textSecondary, fontWeight: '600',
+  },
+  meta: { ...typography.small, color: colors.textSecondary, marginTop: spacing.xs },
+});
+
+// ─── Thread content ───────────────────────────────────────────────────────────
+
+function ThreadContent({ lines, caption }: { lines?: string[]; caption: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const allLines = lines && lines.length > 0 ? lines : [caption];
+  const visibleLines = expanded ? allLines : allLines.slice(0, 3);
+  const hasMore = allLines.length > 3;
+
+  return (
+    <View style={thread.container}>
+      {/* Drift "wave" connector */}
+      <View style={thread.waveBar} />
+      <View style={thread.content}>
+        {visibleLines.map((line, i) => (
+          <View key={i} style={thread.segment}>
+            <Text style={thread.line}>{line}</Text>
+          </View>
+        ))}
+        {hasMore && !expanded && (
+          <TouchableOpacity onPress={() => setExpanded(true)} style={thread.readMore}>
+            <Text style={thread.readMoreText}>Read more →</Text>
+          </TouchableOpacity>
+        )}
+        {expanded && hasMore && (
+          <TouchableOpacity onPress={() => setExpanded(false)} style={thread.readMore}>
+            <Text style={thread.readMoreText}>Show less</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const thread = StyleSheet.create({
+  container: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+  waveBar: {
+    width: 3, borderRadius: 2,
+    backgroundColor: colors.primary + '40',
+    marginRight: spacing.sm,
+  },
+  content: { flex: 1 },
+  segment: { marginBottom: spacing.sm },
+  line: { ...typography.body, color: colors.text, lineHeight: 26, fontSize: 16 },
+  readMore: { marginTop: spacing.xs },
+  readMoreText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
+});
+
+// ─── Comments modal ───────────────────────────────────────────────────────────
 
 function CommentsModal({
   post,
@@ -283,7 +455,7 @@ const cm = StyleSheet.create({
   sheet: {
     backgroundColor: colors.background,
     borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg,
-    maxHeight: '80%', paddingBottom: 24,
+    maxHeight: '80%', paddingBottom: 28,
   },
   handle: {
     width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border,
@@ -294,14 +466,11 @@ const cm = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  title: { ...typography.body, fontWeight: '700', color: colors.text },
-  empty: { ...typography.body, color: colors.textSecondary, textAlign: 'center', padding: spacing.xl },
-  list: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, maxHeight: 360 },
-  row: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, alignItems: 'flex-start' },
-  bubble: {
-    flex: 1, backgroundColor: colors.surface, borderRadius: radius.md,
-    padding: spacing.sm,
-  },
+  title:      { ...typography.body, fontWeight: '700', color: colors.text },
+  empty:      { ...typography.body, color: colors.textSecondary, textAlign: 'center', padding: spacing.xl },
+  list:       { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, maxHeight: 360 },
+  row:        { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, alignItems: 'flex-start' },
+  bubble:     { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.sm },
   bubbleName: { ...typography.small, fontWeight: '700', color: colors.text },
   bubbleText: { ...typography.body, color: colors.text, marginTop: 2, lineHeight: 22 },
   bubbleTime: { ...typography.small, color: colors.textSecondary, marginTop: 4 },
@@ -323,185 +492,133 @@ const cm = StyleSheet.create({
   sendBtnDisabled: { opacity: 0.4 },
 });
 
-// ─── Poll card content ────────────────────────────────────────────────────────
-
-function PollContent({
-  post,
-  uid,
-}: {
-  post: Post;
-  uid: string;
-}) {
-  const [localOptions, setLocalOptions] = useState(
-    (post.pollOptions ?? []).map((o) => ({ ...o, votes: [...o.votes] })),
-  );
-
-  const totalVotes = localOptions.reduce((s, o) => s + o.votes.length, 0);
-  const hasVoted   = localOptions.some((o) => o.votes.includes(uid));
-
-  function toggleVote(idx: number) {
-    if (!uid) return;
-    setLocalOptions((prev) =>
-      prev.map((opt, i) => {
-        if (i !== idx) {
-          // If single-choice: remove vote from all others
-          return { ...opt, votes: opt.votes.filter((u) => u !== uid) };
-        }
-        const alreadyVoted = opt.votes.includes(uid);
-        return {
-          ...opt,
-          votes: alreadyVoted ? opt.votes.filter((u) => u !== uid) : [...opt.votes, uid],
-        };
-      }),
-    );
-  }
-
-  return (
-    <View style={pc.container}>
-      {localOptions.map((opt, idx) => {
-        const pct = totalVotes > 0 ? Math.round((opt.votes.length / totalVotes) * 100) : 0;
-        const voted = opt.votes.includes(uid);
-        return (
-          <TouchableOpacity
-            key={idx}
-            style={[pc.option, voted && pc.optionVoted]}
-            onPress={() => toggleVote(idx)}
-            activeOpacity={0.8}
-          >
-            <View style={[pc.bar, { width: `${pct}%` as `${number}%` }]} />
-            <Text style={[pc.optionText, voted && pc.optionTextVoted]}>{opt.text}</Text>
-            {hasVoted && (
-              <Text style={pc.pct}>{pct}%</Text>
-            )}
-          </TouchableOpacity>
-        );
-      })}
-      <Text style={pc.meta}>{totalVotes} votes</Text>
-    </View>
-  );
-}
-
-const pc = StyleSheet.create({
-  container: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
-  option: {
-    borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    overflow: 'hidden', position: 'relative', minHeight: 44,
-    justifyContent: 'center',
-  },
-  optionVoted: { borderColor: colors.primary },
-  bar: {
-    position: 'absolute', left: 0, top: 0, bottom: 0,
-    backgroundColor: colors.primary + '18', borderRadius: radius.md,
-  },
-  optionText: { ...typography.body, color: colors.text, fontWeight: '500', zIndex: 1 },
-  optionTextVoted: { color: colors.primary, fontWeight: '700' },
-  pct: { position: 'absolute', right: spacing.md, ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
-  meta: { ...typography.small, color: colors.textSecondary, marginTop: spacing.xs },
-});
-
 // ─── Post card ────────────────────────────────────────────────────────────────
 
 function PostCard({
   post,
   uid,
-  userName,
-  userPhotoURL,
   onLike,
-  onReaction,
   onBookmark,
   onCommentOpen,
 }: {
   post: Post;
   uid: string;
-  userName: string;
-  userPhotoURL?: string;
   onLike: () => void;
-  onReaction: (emoji: string) => void;
   onBookmark: () => void;
   onCommentOpen: () => void;
 }) {
-  const liked   = post.likes.includes(uid);
-  const saved   = (post.savedBy ?? []).includes(uid);
-  const typeCfg = post.postType ? POST_TYPE_CONFIG[post.postType] : POST_TYPE_CONFIG.moment;
-  const isThread = post.postType === 'thread';
-  const isPoll   = post.postType === 'poll';
+  const liked        = post.likes.includes(uid);
+  const saved        = (post.savedBy ?? []).includes(uid);
+  const effectiveType = resolvePostType(post);
+  const typeCfg      = POST_TYPE_CONFIG[effectiveType] ?? POST_TYPE_CONFIG.text;
+  const commentCount = resolveCommentCount(post);
 
-  // Reaction state
-  const reactions = post.reactions ?? {};
-  const reactionEntries = Object.entries(reactions)
-    .map(([emoji, uids]) => ({ emoji, count: uids.length }))
-    .filter((e) => e.count > 0)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
-  const myReaction = REACTIONS.find((e) => (reactions[e] ?? []).includes(uid));
+  // Like animation
+  const likeScale = useRef(new Animated.Value(1)).current;
+  function animateLike() {
+    Animated.sequence([
+      Animated.timing(likeScale, { toValue: 1.4, duration: 100, useNativeDriver: true }),
+      Animated.timing(likeScale, { toValue: 1,   duration: 100, useNativeDriver: true }),
+    ]).start();
+  }
 
-  // Double-tap to like
-  const lastTapRef = useRef<number>(0);
-  const heartOverlayAnim = useRef(new Animated.Value(0)).current;
-  const heartScaleAnim   = useRef(new Animated.Value(0)).current;
+  // Double-tap heart overlay (image posts)
+  const lastTapRef       = useRef(0);
+  const heartOpacity     = useRef(new Animated.Value(0)).current;
+  const heartScale       = useRef(new Animated.Value(0)).current;
 
-  function handleImageDoubleTap() {
+  function handleImagePress() {
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
-      // Double tap!
-      if (!liked) {
-        onLike();
-      }
-      // Animate heart overlay
-      heartOverlayAnim.setValue(1);
-      heartScaleAnim.setValue(0);
+      if (!liked) { onLike(); animateLike(); }
+      heartOpacity.setValue(1);
+      heartScale.setValue(0.4);
       Animated.sequence([
-        Animated.spring(heartScaleAnim, { toValue: 1.4, useNativeDriver: true, speed: 60 }),
+        Animated.spring(heartScale, { toValue: 1.3, useNativeDriver: true, speed: 80 }),
         Animated.delay(500),
-        Animated.timing(heartOverlayAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(heartOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
       ]).start();
     }
     lastTapRef.current = now;
   }
 
-  // Like button scale
-  const likeScale = useRef(new Animated.Value(1)).current;
-  function animateLike() {
-    Animated.sequence([
-      Animated.spring(likeScale, { toValue: 1.35, useNativeDriver: true, speed: 60 }),
-      Animated.spring(likeScale, { toValue: 1, useNativeDriver: true }),
-    ]).start();
-  }
-
-  const totalLikes = post.likes.length;
+  const imageHeight = SCREEN_WIDTH * (effectiveType === 'image' ? 0.8 : 0.6);
 
   return (
-    <View style={[card.container, isThread && { backgroundColor: typeCfg.bg }]}>
-      {/* Header row */}
+    <View style={card.container}>
+      {/* ── Header ── */}
       <View style={card.header}>
-        <Avatar name={post.userName} photoURL={post.userPhotoURL} size={36} />
-        <View style={card.headerInfo}>
+        <Avatar name={post.userName} photoURL={post.userPhotoURL} size={38} />
+        <View style={card.headerMeta}>
           <Text style={card.username}>{post.userName}</Text>
           <Text style={card.time}>{formatRelativeTime(post.createdAt)}</Text>
         </View>
-        {/* Type badge pill */}
-        <View style={[card.typeBadge, { backgroundColor: typeCfg.color + '18', borderColor: typeCfg.color + '40' }]}>
-          <Text style={card.typeBadgeEmoji}>{typeCfg.emoji}</Text>
-          <Text style={[card.typeBadgeLabel, { color: typeCfg.color }]}>{typeCfg.label}</Text>
+        {/* Type badge */}
+        <View style={[card.badge, { backgroundColor: typeCfg.color + '15', borderColor: typeCfg.color + '35' }]}>
+          <Text style={card.badgeEmoji}>{typeCfg.emoji}</Text>
+          <Text style={[card.badgeLabel, { color: typeCfg.color }]}>{typeCfg.label}</Text>
         </View>
-        <TouchableOpacity style={card.menuBtn}>
+        <TouchableOpacity style={card.moreBtn}>
           <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
-      {/* Caption / thread text */}
-      {!!post.caption && (
-        <Text
-          style={[card.caption, isThread && card.threadCaption]}
-          numberOfLines={isThread ? undefined : 4}
-        >
-          {post.caption}
-        </Text>
+      {/* ── Content ── */}
+      {effectiveType === 'thread' ? (
+        <ThreadContent lines={post.threadLines} caption={post.caption} />
+      ) : effectiveType === 'poll' ? (
+        <>
+          {!!post.caption && (
+            <HighlightedCaption
+              text={post.caption}
+              style={card.caption}
+              numberOfLines={4}
+            />
+          )}
+          <PollContent post={post} uid={uid} />
+        </>
+      ) : effectiveType === 'image' ? (
+        <>
+          {!!post.caption && (
+            <HighlightedCaption
+              text={post.caption}
+              style={card.caption}
+              numberOfLines={3}
+            />
+          )}
+          {!!post.mediaURL && (
+            <TouchableWithoutFeedback onPress={handleImagePress}>
+              <View style={[card.imageWrap, { height: imageHeight }]}>
+                <Image
+                  source={{ uri: post.mediaURL }}
+                  style={card.image}
+                  resizeMode="cover"
+                />
+                <Animated.View
+                  style={[card.heartOverlay, { opacity: heartOpacity }]}
+                  pointerEvents="none"
+                >
+                  <Animated.Text style={[card.heartEmoji, { transform: [{ scale: heartScale }] }]}>
+                    ❤️
+                  </Animated.Text>
+                </Animated.View>
+              </View>
+            </TouchableWithoutFeedback>
+          )}
+        </>
+      ) : (
+        /* text post */
+        !!post.caption && (
+          <HighlightedCaption
+            text={post.caption}
+            style={card.caption}
+            numberOfLines={6}
+          />
+        )
       )}
 
-      {/* Tags */}
-      {!isPoll && (post.tags ?? []).length > 0 && (
+      {/* ── Tags ── */}
+      {(post.tags ?? []).length > 0 && (
         <View style={card.tagsRow}>
           {(post.tags ?? []).map((tag) => (
             <View key={tag} style={card.tag}>
@@ -511,70 +628,25 @@ function PostCard({
         </View>
       )}
 
-      {/* Image (photo posts) */}
-      {!!post.mediaURL && !isPoll && (
-        <TouchableWithoutFeedback onPress={handleImageDoubleTap}>
-          <View style={card.imageWrap}>
-            <Image
-              source={{ uri: post.mediaURL }}
-              style={card.image}
-              resizeMode="cover"
-            />
-            {/* Heart overlay on double-tap */}
-            <Animated.View
-              style={[card.heartOverlay, { opacity: heartOverlayAnim }]}
-              pointerEvents="none"
-            >
-              <Animated.Text
-                style={[card.heartEmoji, { transform: [{ scale: heartScaleAnim }] }]}
-              >
-                ❤️
-              </Animated.Text>
-            </Animated.View>
-          </View>
-        </TouchableWithoutFeedback>
-      )}
-
-      {/* Poll content */}
-      {isPoll && post.pollOptions && post.pollOptions.length > 0 && (
-        <PollContent post={post} uid={uid} />
-      )}
-
-      {/* Reactions strip */}
-      {reactionEntries.length > 0 && (
-        <View style={card.reactionsStrip}>
-          {reactionEntries.map(({ emoji, count }) => (
-            <TouchableOpacity
-              key={emoji}
-              style={[
-                card.reactionPill,
-                (reactions[emoji] ?? []).includes(uid) && card.reactionPillActive,
-              ]}
-              onPress={() => onReaction(emoji)}
-              activeOpacity={0.75}
-            >
-              <Text style={card.reactionEmoji}>{emoji}</Text>
-              <Text style={card.reactionCount}>{count}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* Likes count + view comments */}
+      {/* ── Likes count ── */}
       <View style={card.likesRow}>
-        {totalLikes > 0 && (
-          <Text style={card.likesText}>❤️ {totalLikes} {totalLikes === 1 ? 'like' : 'likes'}</Text>
+        {post.likes.length > 0 && (
+          <Text style={card.likesText}>
+            ❤️ {post.likes.length} {post.likes.length === 1 ? 'like' : 'likes'}
+          </Text>
         )}
-        {post.comments > 0 && (
+        {commentCount > 0 && (
           <TouchableOpacity onPress={onCommentOpen}>
-            <Text style={card.viewComments}>View {post.comments} comments →</Text>
+            <Text style={card.viewComments}>
+              View all {commentCount} {commentCount === 1 ? 'comment' : 'comments'}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Action bar */}
+      {/* ── Action bar ── */}
       <View style={card.actions}>
-        {/* Like */}
+        {/* Heart */}
         <TouchableOpacity
           style={card.actionBtn}
           onPress={() => { animateLike(); onLike(); }}
@@ -583,7 +655,7 @@ function PostCard({
           <Animated.View style={{ transform: [{ scale: likeScale }] }}>
             <Ionicons
               name={liked ? 'heart' : 'heart-outline'}
-              size={22}
+              size={24}
               color={liked ? colors.primary : colors.textSecondary}
             />
           </Animated.View>
@@ -597,39 +669,28 @@ function PostCard({
         {/* Comment */}
         <TouchableOpacity style={card.actionBtn} onPress={onCommentOpen} activeOpacity={0.75}>
           <Ionicons name="chatbubble-outline" size={22} color={colors.textSecondary} />
-          {post.comments > 0 && (
-            <Text style={card.actionCount}>{post.comments}</Text>
+          {commentCount > 0 && (
+            <Text style={card.actionCount}>{commentCount}</Text>
           )}
         </TouchableOpacity>
 
-        {/* Repost */}
+        {/* Share */}
         <TouchableOpacity
           style={card.actionBtn}
-          onPress={() => Alert.alert('Repost', 'Repost — coming soon!')}
+          onPress={() => Alert.alert('Share', 'Share — coming soon!')}
           activeOpacity={0.75}
         >
-          <Ionicons name="repeat-outline" size={22} color={colors.textSecondary} />
-          {(post.repostCount ?? 0) > 0 && (
-            <Text style={card.actionCount}>{post.repostCount}</Text>
+          <Ionicons name="arrow-redo-outline" size={22} color={colors.textSecondary} />
+          {(post.shareCount ?? 0) > 0 && (
+            <Text style={card.actionCount}>{post.shareCount}</Text>
           )}
         </TouchableOpacity>
 
-        {/* Emoji reactions strip trigger */}
-        <View style={card.reactionsBtnRow}>
-          {REACTIONS.map((emoji) => (
-            <TouchableOpacity
-              key={emoji}
-              onPress={() => onReaction(emoji)}
-              style={card.emojiTap}
-              activeOpacity={0.7}
-            >
-              <Text style={card.emojiTapText}>{emoji}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* Spacer */}
+        <View style={{ flex: 1 }} />
 
         {/* Bookmark */}
-        <TouchableOpacity style={card.bookmarkBtn} onPress={onBookmark} activeOpacity={0.75}>
+        <TouchableOpacity onPress={onBookmark} activeOpacity={0.75}>
           <Ionicons
             name={saved ? 'bookmark' : 'bookmark-outline'}
             size={22}
@@ -657,26 +718,33 @@ const card = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingTop: spacing.md,
     paddingBottom: spacing.xs, gap: spacing.sm,
   },
-  headerInfo: { flex: 1 },
-  username: { ...typography.body, fontWeight: '700', color: colors.text, fontSize: 14 },
-  time: { ...typography.small, color: colors.textSecondary, marginTop: 1 },
-  typeBadge: {
+  headerMeta: { flex: 1 },
+  username:   { ...typography.caption, fontWeight: '700', color: colors.text },
+  time:       { ...typography.small, color: colors.textSecondary, marginTop: 1 },
+  badge: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
     paddingHorizontal: spacing.sm, paddingVertical: 3,
     borderRadius: radius.full, borderWidth: 1,
   },
-  typeBadgeEmoji: { fontSize: 11 },
-  typeBadgeLabel: { ...typography.small, fontWeight: '700', letterSpacing: 0.2, fontSize: 11 },
-  menuBtn: { padding: spacing.xs },
-
+  badgeEmoji: { fontSize: 11 },
+  badgeLabel: { ...typography.small, fontWeight: '700', letterSpacing: 0.2, fontSize: 11 },
+  moreBtn:    { padding: spacing.xs },
   caption: {
     ...typography.body, color: colors.text, lineHeight: 24,
-    paddingHorizontal: spacing.md, paddingBottom: spacing.sm, paddingTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs, paddingBottom: spacing.sm,
   },
-  threadCaption: {
-    fontSize: 18, lineHeight: 26, fontWeight: '400',
+  imageWrap: {
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: spacing.xs,
   },
-
+  image:       { width: '100%', height: '100%' },
+  heartOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  heartEmoji: { fontSize: 80 },
   tagsRow: {
     flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs,
     paddingHorizontal: spacing.md, paddingBottom: spacing.sm,
@@ -687,55 +755,20 @@ const card = StyleSheet.create({
     borderRadius: radius.full,
   },
   tagText: { ...typography.small, color: colors.secondary, fontWeight: '600' },
-
-  imageWrap: {
-    marginHorizontal: 0,
-    height: IMAGE_HEIGHT,
-    position: 'relative',
-    borderRadius: radius.md,
-    overflow: 'hidden',
-    marginBottom: spacing.xs,
-  },
-  image: { width: '100%', height: '100%', borderRadius: radius.md },
-  heartOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  heartEmoji: { fontSize: 80 },
-
-  reactionsStrip: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs,
-    paddingHorizontal: spacing.md, paddingTop: spacing.xs, paddingBottom: spacing.xs,
-  },
-  reactionPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: colors.surface, borderRadius: radius.full,
-    paddingHorizontal: spacing.sm, paddingVertical: 3,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  reactionPillActive: { borderColor: colors.primary, backgroundColor: colors.primary + '12' },
-  reactionEmoji: { fontSize: 14 },
-  reactionCount: { ...typography.small, color: colors.text, fontWeight: '600' },
-
   likesRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
   },
-  likesText: { ...typography.caption, color: colors.text, fontWeight: '600' },
-  viewComments: { ...typography.small, color: colors.primary, fontWeight: '600' },
-
+  likesText:    { ...typography.small, color: colors.text, fontWeight: '700' },
+  viewComments: { ...typography.small, color: colors.textSecondary, fontWeight: '500' },
   actions: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     borderTopWidth: 1, borderTopColor: colors.border,
-    gap: spacing.sm,
+    gap: spacing.md,
   },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  actionBtn:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
   actionCount: { ...typography.small, color: colors.textSecondary, fontWeight: '600' },
-  reactionsBtnRow: { flex: 1, flexDirection: 'row', gap: 2, justifyContent: 'center' },
-  emojiTap: { padding: 2 },
-  emojiTapText: { fontSize: 16 },
-  bookmarkBtn: { marginLeft: 'auto' },
 });
 
 // ─── Main Feed Screen ─────────────────────────────────────────────────────────
@@ -750,8 +783,8 @@ export default function FeedScreen() {
   const [posts, setPosts]           = useState<Post[]>([]);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<PostType | 'all'>('all');
-  const [commentPost, setCommentPost]   = useState<Post | null>(null);
+  const [pageLoading, setPageLoading] = useState(false);
+  const [commentPost, setCommentPost] = useState<Post | null>(null);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
@@ -783,24 +816,6 @@ export default function FeedScreen() {
     togglePostLike(post.id, uid, liked).catch(() => load(true));
   }
 
-  // ── Optimistic reaction ──
-  function handleReaction(post: Post, emoji: string) {
-    if (!uid) return;
-    const current    = (post.reactions ?? {})[emoji] ?? [];
-    const hasReacted = current.includes(uid);
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id !== post.id) return p;
-        const rxns = { ...(p.reactions ?? {}) };
-        rxns[emoji] = hasReacted
-          ? (rxns[emoji] ?? []).filter((u) => u !== uid)
-          : [...(rxns[emoji] ?? []), uid];
-        return { ...p, reactions: rxns };
-      }),
-    );
-    togglePostReaction(post.id, uid, emoji, hasReacted).catch(() => load(true));
-  }
-
   // ── Optimistic bookmark ──
   function handleBookmark(post: Post) {
     if (!uid) return;
@@ -808,16 +823,17 @@ export default function FeedScreen() {
     setPosts((prev) =>
       prev.map((p) =>
         p.id === post.id
-          ? { ...p, savedBy: saved ? (p.savedBy ?? []).filter((u) => u !== uid) : [...(p.savedBy ?? []), uid] }
+          ? {
+              ...p,
+              savedBy: saved
+                ? (p.savedBy ?? []).filter((u) => u !== uid)
+                : [...(p.savedBy ?? []), uid],
+            }
           : p,
       ),
     );
     toggleBookmark(post.id, uid, saved).catch(() => load(true));
   }
-
-  const filtered = activeFilter === 'all'
-    ? posts
-    : posts.filter((p) => (p.postType ?? 'moment') === activeFilter);
 
   if (loading) {
     return (
@@ -840,57 +856,42 @@ export default function FeedScreen() {
           onClose={() => setCommentPost(null)}
           onCommentAdded={() =>
             setPosts((prev) =>
-              prev.map((p) => p.id === commentPost.id ? { ...p, comments: p.comments + 1 } : p),
+              prev.map((p) =>
+                p.id === commentPost.id
+                  ? {
+                      ...p,
+                      commentCount: (p.commentCount ?? p.comments ?? 0) + 1,
+                      comments: (p.commentCount ?? p.comments ?? 0) + 1,
+                    }
+                  : p,
+              ),
             )
           }
         />
       )}
 
-      {/* Header */}
+      {/* ── Header ── */}
       <View style={styles.header}>
         <Text style={styles.wordmark}>Drift</Text>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.iconBtn}>
-            <Ionicons name="search-outline" size={22} color={colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn}>
-            <Ionicons name="notifications-outline" size={22} color={colors.text} />
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => navigation.navigate('CreatePost')}
+          >
+            <Ionicons name="camera-outline" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Stories bar */}
+      {/* ── Stories ── */}
       <StoriesBar userName={userName} userPhotoURL={userPhotoURL} />
 
-      {/* Filter tabs */}
-      <View style={styles.tabsWrap}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabs}
-        >
-          {FILTER_TABS.map((tab) => (
-            <TouchableOpacity
-              key={tab.key}
-              style={styles.tabBtn}
-              onPress={() => setActiveFilter(tab.key)}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.tabLabel, activeFilter === tab.key && styles.tabLabelActive]}>
-                {tab.label}
-              </Text>
-              {activeFilter === tab.key && <View style={styles.tabUnderline} />}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Feed list */}
+      {/* ── Feed ── */}
       <FlatList
-        data={filtered}
+        data={posts}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={filtered.length === 0 ? styles.emptyContainer : styles.list}
+        contentContainerStyle={posts.length === 0 ? styles.emptyContainer : styles.list}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -898,28 +899,41 @@ export default function FeedScreen() {
             tintColor={colors.primary}
           />
         }
+        onEndReachedThreshold={0.4}
+        onEndReached={() => {
+          // Pagination hook — extend with cursor when backend supports it
+          if (!pageLoading) {
+            setPageLoading(true);
+            setTimeout(() => setPageLoading(false), 500);
+          }
+        }}
         ListEmptyComponent={
           <EmptyState
-            emoji="✨"
-            title={activeFilter === 'all' ? 'Nothing here yet' : `No ${activeFilter} posts yet`}
+            emoji="🌊"
+            title="No posts yet"
             subtitle="Be the first to share something amazing!"
           />
+        }
+        ListFooterComponent={
+          pageLoading ? (
+            <ActivityIndicator
+              color={colors.primary}
+              style={{ marginVertical: spacing.lg }}
+            />
+          ) : null
         }
         renderItem={({ item }) => (
           <PostCard
             post={item}
             uid={uid}
-            userName={userName}
-            userPhotoURL={userPhotoURL}
             onLike={() => handleLike(item)}
-            onReaction={(emoji) => handleReaction(item, emoji)}
             onBookmark={() => handleBookmark(item)}
             onCommentOpen={() => setCommentPost(item)}
           />
         )}
       />
 
-      {/* FAB */}
+      {/* ── FAB ── */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => navigation.navigate('CreatePost')}
@@ -934,37 +948,22 @@ export default function FeedScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.surface },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-
+  flex:    { flex: 1, backgroundColor: colors.surface },
+  centered: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
     backgroundColor: colors.background,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  wordmark: {
-    fontSize: 26, fontWeight: '800', color: colors.primary, letterSpacing: -0.5,
-  },
-  headerIcons: { flexDirection: 'row', gap: spacing.xs },
+  wordmark: { fontSize: 26, fontWeight: '800', color: colors.primary, letterSpacing: -0.5 },
+  headerRight: { flexDirection: 'row', gap: spacing.xs },
   iconBtn: { padding: spacing.sm },
-
-  tabsWrap: {
-    backgroundColor: colors.background,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  tabs: { paddingHorizontal: spacing.md, gap: spacing.xs, alignItems: 'flex-end' },
-  tabBtn: { paddingHorizontal: spacing.sm, paddingTop: spacing.sm, paddingBottom: 0, alignItems: 'center' },
-  tabLabel: { ...typography.caption, fontWeight: '600', color: colors.textSecondary, paddingBottom: spacing.sm },
-  tabLabelActive: { color: colors.primary, fontWeight: '700' },
-  tabUnderline: {
-    height: 2, borderRadius: 1, backgroundColor: colors.primary,
-    width: '100%', marginTop: -1,
-  },
-
   list:           { paddingTop: spacing.md, paddingBottom: 120 },
   emptyContainer: { flex: 1 },
-
   fab: {
     position: 'absolute', bottom: 90, right: 20,
     width: 56, height: 56, borderRadius: 28,

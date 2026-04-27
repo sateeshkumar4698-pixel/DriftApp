@@ -10,141 +10,73 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../../config/firebase';
 import { useAuthStore } from '../../store/authStore';
 import { createPost } from '../../utils/firestore-helpers';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { colors, spacing, typography, radius } from '../../utils/theme';
 import Avatar from '../../components/Avatar';
-import { Post, PostType } from '../../types';
+import { Post, PollOption } from '../../types';
 
-// ─── Trending topics for hashtag suggestions ──────────────────────────────────
+// ─── Tab config ───────────────────────────────────────────────────────────────
 
-const TRENDING = [
-  '#vibecheck', '#memories', '#goodvibes', '#drifters', '#connections',
-  '#mumbai', '#bangalore', '#delhi', '#pune', '#hyderabad',
-  '#foodie', '#travel', '#music', '#fashion', '#startup',
-];
+type TabId = 'text' | 'image' | 'thread' | 'poll';
 
-// ─── Poll duration options ────────────────────────────────────────────────────
-
-const POLL_DURATIONS: { label: string; hours: number }[] = [
-  { label: '24h', hours: 24 },
-  { label: '3 days', hours: 72 },
-  { label: '7 days', hours: 168 },
-];
-
-// ─── Post type tabs config ────────────────────────────────────────────────────
-
-interface PostTypeTab {
-  type: PostType;
+interface TabConfig {
+  id: TabId;
   label: string;
   emoji: string;
   color: string;
-  placeholder: string;
-  maxChars: number;
-  defaultTags: string[];
-  hasImage: boolean;
 }
 
-const POST_TYPE_TABS: PostTypeTab[] = [
-  {
-    type: 'thread',
-    label: 'Thread',
-    emoji: '💭',
-    color: '#E17055',
-    placeholder: "What's on your mind?",
-    maxChars: 280,
-    defaultTags: [],
-    hasImage: false,
-  },
-  {
-    type: 'moment',
-    label: 'Moment',
-    emoji: '📸',
-    color: '#0984E3',
-    placeholder: "Capture what's happening right now…",
-    maxChars: 500,
-    defaultTags: ['#moment'],
-    hasImage: true,
-  },
-  {
-    type: 'vibe',
-    label: 'Vibe',
-    emoji: '✨',
-    color: '#6C5CE7',
-    placeholder: "What's the energy? Describe it…",
-    maxChars: 500,
-    defaultTags: ['#vibecheck'],
-    hasImage: true,
-  },
-  {
-    type: 'memory',
-    label: 'Memory',
-    emoji: '🌟',
-    color: '#FDCB6E',
-    placeholder: 'Share a throwback or a memory that stayed with you…',
-    maxChars: 500,
-    defaultTags: ['#memory', '#throwback'],
-    hasImage: true,
-  },
-  {
-    type: 'question',
-    label: 'Question',
-    emoji: '🤔',
-    color: '#00B894',
-    placeholder: 'Ask your Drift crew something…',
-    maxChars: 200,
-    defaultTags: ['#ask'],
-    hasImage: false,
-  },
-  {
-    type: 'poll',
-    label: 'Poll',
-    emoji: '📊',
-    color: '#0984E3',
-    placeholder: 'Ask a question for your poll…',
-    maxChars: 200,
-    defaultTags: [],
-    hasImage: false,
-  },
+const TABS: TabConfig[] = [
+  { id: 'text',   label: 'Text',   emoji: '📝', color: colors.secondary },
+  { id: 'image',  label: 'Photo',  emoji: '📷', color: '#0984E3' },
+  { id: 'thread', label: 'Waves',  emoji: '🧵', color: '#E17055' },
+  { id: 'poll',   label: 'Poll',   emoji: '📊', color: colors.success },
 ];
 
-// ─── Char counter ─────────────────────────────────────────────────────────────
+// ─── Poll duration options ─────────────────────────────────────────────────────
+
+const POLL_DURATIONS: { label: string; hours: number }[] = [
+  { label: '1h',  hours: 1 },
+  { label: '6h',  hours: 6 },
+  { label: '24h', hours: 24 },
+  { label: '7d',  hours: 168 },
+];
+
+// ─── Trending hashtags ─────────────────────────────────────────────────────────
+
+const TRENDING_TAGS = [
+  '#vibecheck', '#memories', '#goodvibes', '#drifters', '#connections',
+  '#mumbai', '#bangalore', '#foodie', '#travel', '#music', '#startup',
+];
+
+// ─── Char counter ──────────────────────────────────────────────────────────────
 
 function CharCounter({ count, max }: { count: number; max: number }) {
   const left = max - count;
   const color =
     left < 20 ? colors.error :
-    left < 50 ? colors.warning :
+    left < 60 ? colors.warning :
     colors.textSecondary;
-  return (
-    <Text style={[cc.text, { color }]}>
-      {left}
-    </Text>
-  );
+  return <Text style={[cc.text, { color }]}>{left}</Text>;
 }
 
 const cc = StyleSheet.create({
   text: { ...typography.small, fontWeight: '600', textAlign: 'right' },
 });
 
-// ─── Hashtag suggestion bar ───────────────────────────────────────────────────
+// ─── Hashtag suggestion bar ────────────────────────────────────────────────────
 
-function HashtagSuggestions({
-  query,
-  onSelect,
-}: {
-  query: string;
-  onSelect: (tag: string) => void;
-}) {
-  const q = query.toLowerCase();
-  const matches = TRENDING.filter((t) => t.includes(q)).slice(0, 8);
+function HashtagSuggestions({ query, onSelect }: { query: string; onSelect: (t: string) => void }) {
+  const q       = query.toLowerCase();
+  const matches = TRENDING_TAGS.filter((t) => t.includes(q)).slice(0, 8);
   if (matches.length === 0) return null;
 
   return (
@@ -161,11 +93,8 @@ function HashtagSuggestions({
 }
 
 const hs = StyleSheet.create({
-  wrap: {
-    borderTopWidth: 1, borderTopColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  row: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm },
+  wrap: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background },
+  row:  { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm },
   pill: {
     backgroundColor: colors.primary + '12', borderRadius: radius.full,
     paddingHorizontal: spacing.sm, paddingVertical: 4,
@@ -174,36 +103,32 @@ const hs = StyleSheet.create({
   text: { ...typography.small, color: colors.primary, fontWeight: '700' },
 });
 
-// ─── Poll builder ─────────────────────────────────────────────────────────────
-
-interface PollOption {
-  text: string;
-  votes: string[];
-}
+// ─── Poll builder ──────────────────────────────────────────────────────────────
 
 function PollBuilder({
+  question,
   options,
   duration,
+  accentColor,
+  onQuestionChange,
   onOptionsChange,
   onDurationChange,
-  accentColor,
 }: {
-  options: PollOption[];
+  question: string;
+  options: { text: string }[];
   duration: number;
-  onOptionsChange: (opts: PollOption[]) => void;
-  onDurationChange: (hours: number) => void;
   accentColor: string;
+  onQuestionChange: (q: string) => void;
+  onOptionsChange: (opts: { text: string }[]) => void;
+  onDurationChange: (h: number) => void;
 }) {
   function updateOption(idx: number, text: string) {
-    const next = options.map((o, i) => (i === idx ? { ...o, text } : o));
-    onOptionsChange(next);
+    onOptionsChange(options.map((o, i) => (i === idx ? { text } : o)));
   }
-
   function addOption() {
     if (options.length >= 4) return;
-    onOptionsChange([...options, { text: '', votes: [] }]);
+    onOptionsChange([...options, { text: '' }]);
   }
-
   function removeOption(idx: number) {
     if (options.length <= 2) return;
     onOptionsChange(options.filter((_, i) => i !== idx));
@@ -211,7 +136,19 @@ function PollBuilder({
 
   return (
     <View style={pb.container}>
-      <Text style={pb.label}>POLL OPTIONS</Text>
+      <Text style={pb.sectionLabel}>QUESTION</Text>
+      <View style={[pb.questionWrap, { borderColor: accentColor + '60' }]}>
+        <TextInput
+          style={pb.questionInput}
+          value={question}
+          onChangeText={onQuestionChange}
+          placeholder="Ask your question…"
+          placeholderTextColor={colors.textSecondary}
+          maxLength={200}
+          multiline
+        />
+      </View>
+      <Text style={pb.sectionLabel}>OPTIONS</Text>
       {options.map((opt, idx) => (
         <View key={idx} style={[pb.optionRow, { borderColor: accentColor + '50' }]}>
           <TextInput
@@ -230,17 +167,24 @@ function PollBuilder({
         </View>
       ))}
       {options.length < 4 && (
-        <TouchableOpacity style={[pb.addOptionBtn, { borderColor: accentColor }]} onPress={addOption} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[pb.addBtn, { borderColor: accentColor }]}
+          onPress={addOption}
+          activeOpacity={0.8}
+        >
           <Ionicons name="add" size={16} color={accentColor} />
-          <Text style={[pb.addOptionText, { color: accentColor }]}>Add option</Text>
+          <Text style={[pb.addBtnText, { color: accentColor }]}>Add option</Text>
         </TouchableOpacity>
       )}
-      <Text style={pb.durationLabel}>POLL DURATION</Text>
+      <Text style={pb.sectionLabel}>DURATION</Text>
       <View style={pb.durationRow}>
         {POLL_DURATIONS.map((d) => (
           <TouchableOpacity
             key={d.hours}
-            style={[pb.durationPill, duration === d.hours && { backgroundColor: accentColor, borderColor: accentColor }]}
+            style={[
+              pb.durationPill,
+              duration === d.hours && { backgroundColor: accentColor, borderColor: accentColor },
+            ]}
             onPress={() => onDurationChange(d.hours)}
             activeOpacity={0.8}
           >
@@ -255,72 +199,180 @@ function PollBuilder({
 }
 
 const pb = StyleSheet.create({
-  container: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
-  label: {
+  container: { paddingHorizontal: 0, paddingBottom: spacing.md },
+  sectionLabel: {
     ...typography.small, fontWeight: '800', color: colors.textSecondary,
-    letterSpacing: 1.1, marginBottom: spacing.sm, marginTop: spacing.sm,
+    letterSpacing: 1.1, marginTop: spacing.md, marginBottom: spacing.sm,
   },
+  questionWrap: {
+    borderWidth: 1.5, borderRadius: radius.md, backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 80,
+  },
+  questionInput: { ...typography.body, color: colors.text, lineHeight: 24, textAlignVertical: 'top' },
   optionRow: {
     flexDirection: 'row', alignItems: 'center',
     borderWidth: 1.5, borderRadius: radius.md,
     marginBottom: spacing.sm, paddingRight: spacing.sm,
     backgroundColor: colors.surface,
   },
-  optionInput: {
-    flex: 1, ...typography.body, color: colors.text,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-  },
-  removeBtn: { padding: spacing.xs },
-  addOptionBtn: {
+  optionInput: { flex: 1, ...typography.body, color: colors.text, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  removeBtn:  { padding: spacing.xs },
+  addBtn: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
     borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.md,
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     justifyContent: 'center', marginBottom: spacing.md,
   },
-  addOptionText: { ...typography.body, fontWeight: '600' },
-  durationLabel: {
-    ...typography.small, fontWeight: '800', color: colors.textSecondary,
-    letterSpacing: 1.1, marginBottom: spacing.sm,
-  },
-  durationRow: { flexDirection: 'row', gap: spacing.sm },
+  addBtnText:  { ...typography.body, fontWeight: '600' },
+  durationRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   durationPill: {
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  durationText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
+  durationText:       { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
   durationTextActive: { color: '#fff', fontWeight: '700' },
 });
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Thread / Waves builder ────────────────────────────────────────────────────
+
+function WavesBuilder({
+  lines,
+  accentColor,
+  onLinesChange,
+}: {
+  lines: string[];
+  accentColor: string;
+  onLinesChange: (l: string[]) => void;
+}) {
+  function updateLine(idx: number, text: string) {
+    onLinesChange(lines.map((l, i) => (i === idx ? text : l)));
+  }
+  function addSegment() {
+    if (lines.length >= 10) return;
+    onLinesChange([...lines, '']);
+  }
+  function removeSegment(idx: number) {
+    if (lines.length <= 1) return;
+    onLinesChange(lines.filter((_, i) => i !== idx));
+  }
+
+  return (
+    <View style={wv.container}>
+      <Text style={wv.hint}>Each card is a paragraph in your thread. Up to 10 waves.</Text>
+      {lines.map((line, idx) => (
+        <View key={idx} style={wv.cardRow}>
+          <View style={wv.connector}>
+            <View style={[wv.dot, { backgroundColor: accentColor }]} />
+            {idx < lines.length - 1 && (
+              <View style={[wv.vertLine, { backgroundColor: accentColor + '40' }]} />
+            )}
+          </View>
+          <View style={[wv.card, { borderColor: accentColor + '50' }]}>
+            <TextInput
+              style={wv.input}
+              value={line}
+              onChangeText={(t) => updateLine(idx, t)}
+              placeholder={idx === 0 ? 'Start your wave…' : `Continue wave ${idx + 1}…`}
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              maxLength={500}
+              textAlignVertical="top"
+            />
+            <View style={wv.cardFooter}>
+              <Text style={wv.charCount}>{500 - line.length}</Text>
+              {lines.length > 1 && (
+                <TouchableOpacity onPress={() => removeSegment(idx)}>
+                  <Ionicons name="trash-outline" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      ))}
+      {lines.length < 10 && (
+        <TouchableOpacity
+          style={[wv.addBtn, { borderColor: accentColor }]}
+          onPress={addSegment}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add-circle-outline" size={18} color={accentColor} />
+          <Text style={[wv.addBtnText, { color: accentColor }]}>
+            Add wave {lines.length + 1}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+const wv = StyleSheet.create({
+  container: { paddingHorizontal: 0, paddingBottom: spacing.md },
+  hint:      { ...typography.small, color: colors.textSecondary, marginBottom: spacing.md },
+  cardRow:   { flexDirection: 'row', marginBottom: spacing.sm },
+  connector: { alignItems: 'center', marginRight: spacing.sm, paddingTop: 6, width: 12 },
+  dot:       { width: 10, height: 10, borderRadius: 5 },
+  vertLine:  { flex: 1, width: 2, marginTop: 4 },
+  card: {
+    flex: 1, borderWidth: 1.5, borderRadius: radius.md,
+    backgroundColor: colors.surface, paddingHorizontal: spacing.md, paddingTop: spacing.sm,
+  },
+  input: {
+    ...typography.body, color: colors.text, lineHeight: 24,
+    minHeight: 72, textAlignVertical: 'top',
+  },
+  cardFooter: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  charCount:  { ...typography.small, color: colors.textSecondary },
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.md,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    justifyContent: 'center', marginTop: spacing.xs,
+  },
+  addBtnText: { ...typography.body, fontWeight: '600' },
+});
+
+// ─── Main screen ───────────────────────────────────────────────────────────────
 
 export default function CreatePostScreen() {
-  const navigation = useNavigation();
+  const navigation                    = useNavigation();
   const { firebaseUser, userProfile } = useAuthStore();
 
-  const [selectedTab, setSelectedTab]     = useState<PostTypeTab>(POST_TYPE_TABS[0]);
-  const [caption, setCaption]             = useState('');
-  const [imageUri, setImageUri]           = useState<string | null>(null);
-  const [loading, setLoading]             = useState(false);
-  const [hashtagQuery, setHashtagQuery]   = useState('');
-  const [pollOptions, setPollOptions]     = useState<PollOption[]>([
-    { text: '', votes: [] },
-    { text: '', votes: [] },
+  const [activeTab, setActiveTab]      = useState<TabId>('text');
+
+  // Text / image caption
+  const [caption, setCaption]          = useState('');
+  const [hashtagQuery, setHashtagQuery] = useState('');
+  const captionRef                     = useRef<TextInput>(null);
+
+  // Image
+  const [imageUri, setImageUri]        = useState<string | null>(null);
+  const [location, setLocation]        = useState('');
+
+  // Thread / Waves
+  const [threadLines, setThreadLines]  = useState<string[]>(['']);
+
+  // Poll
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions]   = useState<{ text: string }[]>([
+    { text: '' }, { text: '' },
   ]);
-  const [pollDuration, setPollDuration]   = useState(24);
+  const [pollDuration, setPollDuration] = useState(24);
 
-  const captionRef = useRef<TextInput>(null);
+  const [loading, setLoading] = useState(false);
 
-  // Track if user is typing a hashtag
+  const tabCfg = TABS.find((t) => t.id === activeTab) ?? TABS[0];
+  const accent = tabCfg.color;
+
+  // ── Caption hashtag tracking ──
   function handleCaptionChange(text: string) {
     setCaption(text);
     const words = text.split(/\s/);
     const last  = words[words.length - 1];
-    if (last.startsWith('#') && last.length > 1) {
-      setHashtagQuery(last);
-    } else {
-      setHashtagQuery('');
-    }
+    setHashtagQuery(last.startsWith('#') && last.length > 1 ? last : '');
   }
 
   function insertHashtag(tag: string) {
@@ -331,80 +383,101 @@ export default function CreatePostScreen() {
     captionRef.current?.focus();
   }
 
+  // ── Image picker ──
   async function pickImage() {
+    const ImagePicker = await import('expo-image-picker');
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow access to your photos.');
+      Alert.alert('Permission needed', 'Allow access to your photo library.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
+      aspect: [4, 5],
+      quality: 0.85,
     });
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
-    }
+    if (!result.canceled) setImageUri(result.assets[0].uri);
   }
 
-  function handleTabSelect(tab: PostTypeTab) {
-    setSelectedTab(tab);
+  // ── Tab switch ──
+  function switchTab(tab: TabId) {
+    setActiveTab(tab);
     setCaption('');
-    setImageUri(null);
     setHashtagQuery('');
-    if (tab.type === 'poll') {
-      setPollOptions([{ text: '', votes: [] }, { text: '', votes: [] }]);
-    }
+    setImageUri(null);
+    setLocation('');
+    setThreadLines(['']);
+    setPollQuestion('');
+    setPollOptions([{ text: '' }, { text: '' }]);
+    setPollDuration(24);
   }
 
-  // Validation
-  const isPoll = selectedTab.type === 'poll';
-  const pollValid = isPoll
-    ? pollOptions.filter((o) => o.text.trim().length > 0).length >= 2
-    : true;
-  const canPost = isPoll
-    ? caption.trim().length > 0 && pollValid
-    : (caption.trim().length > 0 || !!imageUri);
+  // ── Validation ──
+  const isValid = (() => {
+    if (activeTab === 'text')   return caption.trim().length > 0;
+    if (activeTab === 'image')  return !!imageUri;
+    if (activeTab === 'thread') return threadLines.some((l) => l.trim().length > 0);
+    // poll
+    return (
+      pollQuestion.trim().length > 0 &&
+      pollOptions.filter((o) => o.text.trim().length > 0).length >= 2
+    );
+  })();
 
+  // ── Post submission ──
   async function handlePost() {
-    if (!canPost) return;
-    if (!firebaseUser || !userProfile) return;
+    if (!isValid || !firebaseUser || !userProfile) return;
     setLoading(true);
     try {
       let mediaURL: string | undefined;
-      if (imageUri && selectedTab.hasImage) {
-        const response = await fetch(imageUri);
-        const blob     = await response.blob();
+      if (activeTab === 'image' && imageUri) {
+        const response   = await fetch(imageUri);
+        const blob       = await response.blob();
         const storageRef = ref(storage, `posts/${firebaseUser.uid}/${Date.now()}.jpg`);
         await uploadBytes(storageRef, blob);
         mediaURL = await getDownloadURL(storageRef);
       }
 
-      const captionFinal =
-        selectedTab.type === 'question'
-          ? caption.trim()
-          : caption.trim();
+      const now    = Date.now();
+      const postId = `post_${now}_${firebaseUser.uid}`;
+
+      const builtPollOptions: PollOption[] | undefined =
+        activeTab === 'poll'
+          ? pollOptions
+              .filter((o) => o.text.trim().length > 0)
+              .map((o, i) => ({ id: `opt_${i}`, text: o.text.trim(), votes: [] }))
+          : undefined;
 
       const post: Post = {
-        id:           `post_${Date.now()}_${firebaseUser.uid}`,
+        id:           postId,
         userId:       firebaseUser.uid,
         userName:     userProfile.name,
         userPhotoURL: userProfile.photoURL,
-        caption:      captionFinal,
+        type:         activeTab,
+        caption:
+          activeTab === 'poll'
+            ? pollQuestion.trim()
+            : activeTab === 'thread'
+            ? threadLines[0]?.trim() ?? ''
+            : caption.trim(),
         mediaURL,
-        mediaType:    imageUri && selectedTab.hasImage ? 'image' : undefined,
-        postType:     selectedTab.type,
-        tags:         selectedTab.defaultTags,
+        mediaType:    activeTab === 'image' ? 'image' : undefined,
+        threadLines:  activeTab === 'thread'
+          ? threadLines.filter((l) => l.trim().length > 0)
+          : undefined,
+        pollOptions:  builtPollOptions,
+        pollEndsAt:   activeTab === 'poll' ? now + pollDuration * 3_600_000 : undefined,
+        pollDuration: activeTab === 'poll' ? pollDuration : undefined,
         likes:        [],
-        reactions:    {},
-        savedBy:      [],
+        commentCount: 0,
         comments:     0,
-        createdAt:    Date.now(),
-        pollOptions:  isPoll ? pollOptions.filter((o) => o.text.trim().length > 0) : undefined,
-        pollDuration: isPoll ? pollDuration : undefined,
-        repostCount:  0,
+        shareCount:   0,
+        tags:         [],
+        location:     location.trim() || undefined,
+        createdAt:    now,
       };
+
       await createPost(post);
       navigation.goBack();
     } catch (err: unknown) {
@@ -415,153 +488,203 @@ export default function CreatePostScreen() {
     }
   }
 
-  const charsLeft = selectedTab.maxChars - caption.length;
-  const accentColor = selectedTab.color;
-
   return (
     <SafeAreaView style={styles.flex}>
-      {/* Header */}
+      {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
           <Ionicons name="close" size={26} color={colors.text} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>New Post</Text>
         <TouchableOpacity
-          style={[styles.postBtn, canPost && !loading ? { backgroundColor: accentColor } : styles.postBtnDisabled]}
+          style={[styles.postBtn, isValid && !loading ? { backgroundColor: accent } : styles.postBtnDisabled]}
           onPress={handlePost}
-          disabled={!canPost || loading}
+          disabled={!isValid || loading}
           activeOpacity={0.85}
         >
-          <Text style={[styles.postBtnText, !canPost && styles.postBtnTextDisabled]}>
-            {loading ? '…' : 'Post'}
-          </Text>
+          {loading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={[styles.postBtnText, !isValid && styles.postBtnTextDisabled]}>Post</Text>
+          )}
         </TouchableOpacity>
       </View>
 
-      {/* Post type tabs */}
+      {/* ── Tab selector ── */}
       <View style={styles.tabsWrap}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsRow}
-        >
-          {POST_TYPE_TABS.map((tab) => {
-            const active = selectedTab.type === tab.type;
-            return (
-              <TouchableOpacity
-                key={tab.type}
-                style={[
-                  styles.typeTab,
-                  active
-                    ? { backgroundColor: tab.color, borderColor: tab.color }
-                    : { borderColor: colors.border },
-                ]}
-                onPress={() => handleTabSelect(tab)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.typeTabEmoji}>{tab.emoji}</Text>
-                <Text style={[styles.typeTabLabel, active && styles.typeTabLabelActive]}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {TABS.map((tab) => {
+          const active = activeTab === tab.id;
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              style={[
+                styles.tab,
+                active
+                  ? { backgroundColor: tab.color, borderColor: tab.color }
+                  : { borderColor: colors.border },
+              ]}
+              onPress={() => switchTab(tab.id)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.tabEmoji}>{tab.emoji}</Text>
+              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Twitter-style compose row */}
-          <View style={styles.composeRow}>
-            <Avatar
-              name={userProfile?.name ?? ''}
-              photoURL={userProfile?.photoURL}
-              size={40}
-            />
-            <View style={styles.composeRight}>
-              <Text style={styles.displayName}>{userProfile?.name ?? ''}</Text>
-              <View style={[styles.textInputWrap, { borderColor: accentColor + '60' }]}>
-                {selectedTab.type === 'question' && (
-                  <Text style={[styles.questionCue, { color: accentColor }]}>🤔 </Text>
-                )}
+          {/* ── Text tab ── */}
+          {activeTab === 'text' && (
+            <View style={styles.composeRow}>
+              <Avatar name={userProfile?.name ?? ''} photoURL={userProfile?.photoURL} size={40} />
+              <View style={styles.composeRight}>
+                <Text style={styles.displayName}>{userProfile?.name ?? ''}</Text>
                 <TextInput
                   ref={captionRef}
-                  style={[
-                    styles.captionInput,
-                    selectedTab.type === 'thread' && styles.threadInput,
-                  ]}
+                  style={[styles.captionInput, { borderColor: accent + '60' }]}
                   value={caption}
                   onChangeText={handleCaptionChange}
-                  placeholder={selectedTab.placeholder}
+                  placeholder="What's on your mind?"
                   placeholderTextColor={colors.textSecondary}
                   multiline
-                  maxLength={selectedTab.maxChars}
+                  maxLength={500}
                   autoFocus
                   textAlignVertical="top"
                 />
-              </View>
-              <View style={styles.charRow}>
-                <CharCounter count={caption.length} max={selectedTab.maxChars} />
+                <View style={styles.charRow}>
+                  <CharCounter count={caption.length} max={500} />
+                </View>
               </View>
             </View>
-          </View>
-
-          {/* Image preview / add image (for image-capable types) */}
-          {selectedTab.hasImage && (
-            imageUri ? (
-              <View style={styles.imagePreviewWrap}>
-                <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
-                <TouchableOpacity style={styles.removeImageBtn} onPress={() => setImageUri(null)}>
-                  <View style={styles.removeImageBadge}>
-                    <Ionicons name="close" size={14} color="#fff" />
-                  </View>
-                </TouchableOpacity>
-              </View>
-            ) : null
           )}
 
-          {/* Poll builder */}
-          {isPoll && (
-            <PollBuilder
-              options={pollOptions}
-              duration={pollDuration}
-              onOptionsChange={setPollOptions}
-              onDurationChange={setPollDuration}
-              accentColor={accentColor}
-            />
+          {/* ── Photo tab ── */}
+          {activeTab === 'image' && (
+            <View>
+              {imageUri ? (
+                <View style={styles.imagePreviewWrap}>
+                  <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
+                  <TouchableOpacity style={styles.removeImageBtn} onPress={() => setImageUri(null)}>
+                    <View style={styles.removeBadge}>
+                      <Ionicons name="close" size={14} color="#fff" />
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.changeImageBtn} onPress={pickImage}>
+                    <Text style={styles.changeImageText}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.imagePicker, { borderColor: accent }]}
+                  onPress={pickImage}
+                >
+                  <Ionicons name="image-outline" size={40} color={accent} />
+                  <Text style={[styles.imagePickerText, { color: accent }]}>
+                    Tap to choose photo
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <View style={styles.composeRow}>
+                <Avatar name={userProfile?.name ?? ''} photoURL={userProfile?.photoURL} size={36} />
+                <View style={styles.composeRight}>
+                  <TextInput
+                    ref={captionRef}
+                    style={[styles.captionInput, { borderColor: accent + '60' }]}
+                    value={caption}
+                    onChangeText={handleCaptionChange}
+                    placeholder="Write a caption…"
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    maxLength={500}
+                    textAlignVertical="top"
+                  />
+                  <View style={styles.charRow}>
+                    <CharCounter count={caption.length} max={500} />
+                  </View>
+                </View>
+              </View>
+              <View style={[styles.locationRow, { borderColor: accent + '40' }]}>
+                <Ionicons name="location-outline" size={18} color={accent} />
+                <TextInput
+                  style={styles.locationInput}
+                  value={location}
+                  onChangeText={setLocation}
+                  placeholder="Add location…"
+                  placeholderTextColor={colors.textSecondary}
+                  maxLength={80}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* ── Thread / Waves tab ── */}
+          {activeTab === 'thread' && (
+            <View style={styles.composeRow}>
+              <Avatar name={userProfile?.name ?? ''} photoURL={userProfile?.photoURL} size={40} />
+              <View style={[styles.composeRight, { flex: 1 }]}>
+                <Text style={styles.displayName}>{userProfile?.name ?? ''}</Text>
+                <WavesBuilder
+                  lines={threadLines}
+                  accentColor={accent}
+                  onLinesChange={setThreadLines}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* ── Poll tab ── */}
+          {activeTab === 'poll' && (
+            <View style={styles.composeRow}>
+              <Avatar name={userProfile?.name ?? ''} photoURL={userProfile?.photoURL} size={40} />
+              <View style={[styles.composeRight, { flex: 1 }]}>
+                <Text style={styles.displayName}>{userProfile?.name ?? ''}</Text>
+                <PollBuilder
+                  question={pollQuestion}
+                  options={pollOptions}
+                  duration={pollDuration}
+                  accentColor={accent}
+                  onQuestionChange={setPollQuestion}
+                  onOptionsChange={setPollOptions}
+                  onDurationChange={setPollDuration}
+                />
+              </View>
+            </View>
           )}
         </ScrollView>
 
-        {/* Hashtag suggestions */}
-        {hashtagQuery.length > 1 && (
+        {/* ── Hashtag suggestions ── */}
+        {(activeTab === 'text' || activeTab === 'image') && hashtagQuery.length > 1 && (
           <HashtagSuggestions query={hashtagQuery} onSelect={insertHashtag} />
         )}
 
-        {/* Bottom toolbar (image-capable types) */}
-        {selectedTab.hasImage && (
-          <View style={[styles.toolbar, { borderTopColor: accentColor + '30' }]}>
-            <TouchableOpacity style={styles.toolbarBtn} onPress={pickImage} activeOpacity={0.75}>
-              <Ionicons name="image-outline" size={24} color={accentColor} />
-            </TouchableOpacity>
+        {/* ── Bottom toolbar ── */}
+        {(activeTab === 'text' || activeTab === 'image') && (
+          <View style={[styles.toolbar, { borderTopColor: accent + '30' }]}>
+            {activeTab === 'image' && (
+              <TouchableOpacity style={styles.toolbarBtn} onPress={pickImage} activeOpacity={0.75}>
+                <Ionicons name="image-outline" size={24} color={accent} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.toolbarBtn}
               onPress={() => {
-                setCaption((prev) => prev + ' #');
+                setCaption((prev) => prev + (prev.endsWith(' ') ? '#' : ' #'));
                 captionRef.current?.focus();
               }}
               activeOpacity={0.75}
             >
-              <Ionicons name="pricetag-outline" size={24} color={accentColor} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.toolbarBtn}
-              onPress={() => Alert.alert('Emoji', 'Emoji picker — coming soon!')}
-              activeOpacity={0.75}
-            >
-              <Ionicons name="happy-outline" size={24} color={accentColor} />
+              <Ionicons name="pricetag-outline" size={24} color={accent} />
             </TouchableOpacity>
           </View>
         )}
@@ -580,64 +703,76 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  closeBtn: { padding: spacing.xs },
+  closeBtn:            { padding: spacing.xs },
+  headerTitle:         { ...typography.body, fontWeight: '700', color: colors.text },
   postBtn: {
     paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-    borderRadius: radius.full,
+    borderRadius: radius.full, minWidth: 64, alignItems: 'center',
   },
-  postBtnDisabled: { backgroundColor: colors.border },
-  postBtnText: { ...typography.caption, fontWeight: '700', color: '#fff' },
+  postBtnDisabled:     { backgroundColor: colors.border },
+  postBtnText:         { ...typography.caption, fontWeight: '700', color: '#fff' },
   postBtnTextDisabled: { color: colors.textSecondary },
 
   tabsWrap: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    gap: spacing.sm,
     borderBottomWidth: 1, borderBottomColor: colors.border,
     backgroundColor: colors.background,
   },
-  tabsRow: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm },
-  typeTab: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: spacing.md, paddingVertical: 7,
-    borderRadius: radius.full, borderWidth: 1.5,
+  tab: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: 8, borderRadius: radius.md, borderWidth: 1.5,
     backgroundColor: colors.surface,
   },
-  typeTabEmoji: { fontSize: 14 },
-  typeTabLabel: { ...typography.small, fontWeight: '600', color: colors.textSecondary },
-  typeTabLabelActive: { color: '#fff', fontWeight: '700' },
+  tabEmoji:       { fontSize: 14 },
+  tabLabel:       { ...typography.small, fontWeight: '600', color: colors.textSecondary },
+  tabLabelActive: { color: '#fff', fontWeight: '700' },
 
   scroll: { padding: spacing.md, paddingBottom: spacing.xxl },
 
-  composeRow: {
-    flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start',
-  },
+  composeRow:  { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', marginBottom: spacing.md },
   composeRight: { flex: 1 },
-  displayName: { ...typography.caption, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
-  textInputWrap: {
-    borderWidth: 1.5, borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.sm, paddingVertical: spacing.sm,
-    minHeight: 100, flexDirection: 'row', alignItems: 'flex-start',
-  },
-  questionCue: { fontSize: 18, marginTop: 2, marginRight: 4 },
+  displayName:  { ...typography.caption, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
+
   captionInput: {
-    flex: 1, ...typography.body, color: colors.text,
-    lineHeight: 24, textAlignVertical: 'top',
-  },
-  threadInput: {
-    fontSize: 18, lineHeight: 26,
+    borderWidth: 1.5, borderRadius: radius.md, backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 120,
+    ...typography.body, color: colors.text, lineHeight: 24, textAlignVertical: 'top',
   },
   charRow: { alignItems: 'flex-end', marginTop: spacing.xs },
 
-  imagePreviewWrap: {
-    marginTop: spacing.md, borderRadius: radius.md, overflow: 'hidden',
-    position: 'relative',
+  imagePicker: {
+    height: 200, borderRadius: radius.lg, borderWidth: 2, borderStyle: 'dashed',
+    backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
+    gap: spacing.sm, marginBottom: spacing.md,
   },
-  imagePreview: { width: '100%', height: 200, borderRadius: radius.md },
+  imagePickerText: { ...typography.body, fontWeight: '600' },
+  imagePreviewWrap: {
+    height: 280, borderRadius: radius.lg, overflow: 'hidden',
+    marginBottom: spacing.md, position: 'relative',
+  },
+  imagePreview: { width: '100%', height: '100%' },
   removeImageBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm },
-  removeImageBadge: {
-    width: 24, height: 24, borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+  removeBadge: {
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: 'rgba(0,0,0,0.65)',
     alignItems: 'center', justifyContent: 'center',
   },
+  changeImageBtn: {
+    position: 'absolute', bottom: spacing.sm, right: spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: spacing.sm, paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  changeImageText: { ...typography.small, color: '#fff', fontWeight: '600' },
+
+  locationRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    borderWidth: 1, borderRadius: radius.md, backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm,
+  },
+  locationInput: { flex: 1, ...typography.body, color: colors.text },
 
   toolbar: {
     flexDirection: 'row', gap: spacing.md,

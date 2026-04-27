@@ -19,7 +19,8 @@ export interface UserStreak {
 
 export interface UserProfile {
   uid: string;
-  phoneNumber: string;
+  email?: string;
+  phoneNumber?: string;  // optional — email-only users have no phone number
   name: string;
   age: number;
   bio: string;
@@ -174,7 +175,16 @@ export type EventCategory = 'social' | 'professional' | 'sports' | 'food' | 'oth
 
 // ─── Post ─────────────────────────────────────────────────────────────────────
 
-export type PostType = 'moment' | 'memory' | 'vibe' | 'question' | 'achievement' | 'thread' | 'poll';
+/** Canonical post type for the new microblog feed */
+export type PostType = 'text' | 'image' | 'thread' | 'poll'
+  // Legacy types kept for backward-compat with existing Firestore documents
+  | 'moment' | 'memory' | 'vibe' | 'question' | 'achievement';
+
+export interface PollOption {
+  id: string;
+  text: string;
+  votes: string[]; // uids who voted
+}
 
 export interface PostComment {
   id: string;
@@ -190,20 +200,30 @@ export interface Post {
   userId: string;
   userName: string;
   userPhotoURL?: string;
+  // Canonical type field (new) — falls back to postType for legacy docs
+  type?: PostType;
   caption: string;
   mediaURL?: string;
   mediaType?: 'image' | 'video';
-  postType?: PostType;
-  tags?: string[];
+  // Thread (microblog)
+  threadLines?: string[];   // array of paragraphs for long-form "Waves"
+  // Poll
+  pollOptions?: PollOption[];
+  pollEndsAt?: number;      // epoch ms when poll closes
+  pollDuration?: number;    // hours (legacy compat)
+  // Engagement
   likes: string[];
+  commentCount?: number;    // new field name
+  comments?: number;        // legacy compat
+  shareCount?: number;
   reactions?: Record<string, string[]>; // emoji → uid[]
   savedBy?: string[];
-  comments: number;
+  // Meta
+  tags?: string[];
+  location?: string;
   createdAt: number;
-  // Poll fields
-  pollOptions?: { text: string; votes: string[] }[];
-  pollDuration?: number; // hours: 24, 72, 168
-  // Thread / repost fields
+  // Legacy fields for backward-compat
+  postType?: PostType;
   quotedPostId?: string;
   repostCount?: number;
 }
@@ -213,6 +233,8 @@ export interface Post {
 export type RootStackParamList = {
   Onboarding: undefined;
   PhoneLogin: undefined;
+  EmailAuth: undefined;
+  EmailVerify: undefined;
   ProfileSetup: undefined;
   Main: undefined;
 };
@@ -249,6 +271,7 @@ export type EventsStackParamList = {
 export type FeedStackParamList = {
   FeedMain: undefined;
   CreatePost: undefined;
+  PostDetail: { post: Post };
 };
 
 export type GamesStackParamList = {

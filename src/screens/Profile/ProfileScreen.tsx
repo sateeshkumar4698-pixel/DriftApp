@@ -25,8 +25,8 @@ const SCREEN_W = Dimensions.get('window').width;
 const GRID_CELL = (SCREEN_W - spacing.lg * 2 - spacing.xs * 2) / 3;
 
 const POST_TYPE_EMOJI: Record<PostType, string> = {
+  text: '✏️', image: '📸', thread: '🧵', poll: '📊',
   moment: '📸', memory: '🌟', vibe: '✨', question: '🤔', achievement: '🏆',
-  thread: '💭', poll: '📊',
 };
 
 type Nav = NativeStackNavigationProp<ProfileStackParamList>;
