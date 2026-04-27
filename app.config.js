@@ -1,13 +1,13 @@
 const { existsSync } = require('fs');
 const { resolve }    = require('path');
 
-// These files are only needed for native (EAS) builds — not for Expo Go.
-// Skip the reference when the file isn't present so Expo Go keeps working.
 const googleServicesFile  = resolve(__dirname, 'google-services.json');
 const hasGoogleServices   = existsSync(googleServicesFile);
 
 const googleServicesPlist = resolve(__dirname, 'ios/Drift/GoogleService-Info.plist');
 const hasGooglePlist      = existsSync(googleServicesPlist);
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 /** @type {import('@expo/config').ExpoConfig} */
 module.exports = {
@@ -15,6 +15,7 @@ module.exports = {
     name:                'Drift',
     slug:                'drift-app',
     version:             '1.0.0',
+    runtimeVersion:      { policy: 'appVersion' },
     orientation:         'portrait',
     icon:                './assets/icon.png',
     userInterfaceStyle:  'light',
@@ -26,19 +27,60 @@ module.exports = {
       backgroundColor: '#FF4B6E',
     },
 
+    // ── Permissions ────────────────────────────────────────────────────────────
+    plugins: [
+      [
+        'expo-camera',
+        {
+          cameraPermission: 'Drift needs camera access to scan QR codes and share profiles.',
+        },
+      ],
+      [
+        'expo-image-picker',
+        {
+          photosPermission: 'Drift needs photo access to let you add profile photos and post images.',
+          cameraPermission: 'Drift needs camera access to take profile photos.',
+        },
+      ],
+      [
+        'expo-notifications',
+        {
+          icon:  './assets/icon.png',
+          color: '#FF4B6E',
+          sounds: [],
+        },
+      ],
+    ],
+
     ios: {
       supportsTablet:   false,
       bundleIdentifier: 'com.drift.app',
-      // Only included when file exists — no error if not downloaded yet
+      buildNumber:      '1',
+      infoPlist: {
+        NSCameraUsageDescription:            'Drift uses the camera to scan QR codes and take profile photos.',
+        NSPhotoLibraryUsageDescription:      'Drift accesses your photos to let you set a profile picture and share images.',
+        NSPhotoLibraryAddUsageDescription:   'Drift saves shared profile cards to your photo library.',
+        NSMicrophoneUsageDescription:        'Drift uses the microphone for voice rooms with your connections.',
+      },
       ...(hasGooglePlist ? { googleServicesFile: './ios/Drift/GoogleService-Info.plist' } : {}),
     },
 
     android: {
-      package: 'com.drift.app',
+      package:     'com.drift.app',
+      versionCode: 1,
 
-      // Only include when file actually exists — prevents Expo config parse error
-      // in Expo Go where google-services.json isn't required.
-      ...(hasGoogleServices ? { googleServicesFile: './google-services.json' } : {}),
+      permissions: [
+        'CAMERA',
+        'READ_MEDIA_IMAGES',
+        'READ_EXTERNAL_STORAGE',
+        'WRITE_EXTERNAL_STORAGE',
+        'VIBRATE',
+        'RECEIVE_BOOT_COMPLETED',
+        'SCHEDULE_EXACT_ALARM',
+        'USE_EXACT_ALARM',
+        'INTERNET',
+        'ACCESS_NETWORK_STATE',
+      ],
 
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
@@ -46,6 +88,8 @@ module.exports = {
       },
       edgeToEdgeEnabled:            true,
       predictiveBackGestureEnabled: false,
+
+      ...(hasGoogleServices ? { googleServicesFile: './google-services.json' } : {}),
     },
 
     web: {
@@ -53,8 +97,8 @@ module.exports = {
     },
 
     extra: {
-      // Expose backend URL to app code (also readable via EXPO_PUBLIC_ prefix)
-      backendUrl: process.env.EXPO_PUBLIC_BACKEND_URL ?? '',
+      backendUrl: BACKEND_URL,
+      eas: { projectId: 'drift-app' },
     },
   },
 };
