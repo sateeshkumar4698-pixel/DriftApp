@@ -13,6 +13,7 @@ import {
   onSnapshot,
   arrayUnion,
   arrayRemove,
+  increment,
   Unsubscribe,
   QueryConstraint,
   startAfter,
@@ -437,15 +438,15 @@ export async function addPostComment(
   const clean = Object.fromEntries(
     Object.entries(comment).filter(([, v]) => v !== undefined),
   );
+  // Write comment to subcollection
   await setDoc(doc(db, 'posts', postId, 'comments', comment.id), clean);
-  await updateDoc(doc(db, 'posts', postId), { comments: arrayUnion(0) }).catch(() => {});
-  // increment comment count
-  const postRef = doc(db, 'posts', postId);
-  const snap = await getDoc(postRef);
-  if (snap.exists()) {
-    const cur = (snap.data().comments as number) ?? 0;
-    await updateDoc(postRef, { comments: cur + 1 });
-  }
+  // Atomically increment comment count using Firestore increment
+  await updateDoc(doc(db, 'posts', postId), {
+    commentCount: increment(1),
+  }).catch(() => {
+    // post might use legacy 'comments' field — update that too
+    return updateDoc(doc(db, 'posts', postId), { comments: increment(1) }).catch(() => {});
+  });
 }
 
 export async function getPostComments(

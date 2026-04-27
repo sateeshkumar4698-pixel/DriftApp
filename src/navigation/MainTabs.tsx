@@ -1,5 +1,6 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -141,9 +142,13 @@ function ProfileNavigator() {
 }
 
 // ─── Tab icon helper ──────────────────────────────────────────────────────────
-function TabIcon(emoji: string, focused: boolean) {
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+function TabIcon(icon: IoniconName, iconFilled: IoniconName, focused: boolean, color: string) {
   return (
-    <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.45 }}>{emoji}</Text>
+    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <Ionicons name={focused ? iconFilled : icon} size={24} color={color} />
+    </View>
   );
 }
 
@@ -177,7 +182,7 @@ export default function MainTabs() {
         name="Discover"
         component={DiscoverNavigator}
         options={{
-          tabBarIcon: ({ focused }) => TabIcon('🔥', focused),
+          tabBarIcon: ({ focused, color }) => TabIcon('compass-outline', 'compass', focused, color),
           tabBarLabel: 'Discover',
         }}
       />
@@ -185,7 +190,7 @@ export default function MainTabs() {
         name="Events"
         component={EventsNavigator}
         options={{
-          tabBarIcon: ({ focused }) => TabIcon('📅', focused),
+          tabBarIcon: ({ focused, color }) => TabIcon('calendar-outline', 'calendar', focused, color),
           tabBarLabel: 'Events',
         }}
       />
@@ -193,7 +198,7 @@ export default function MainTabs() {
         name="Feed"
         component={FeedNavigator}
         options={{
-          tabBarIcon: ({ focused }) => TabIcon('✨', focused),
+          tabBarIcon: ({ focused, color }) => TabIcon('layers-outline', 'layers', focused, color),
           tabBarLabel: 'Feed',
         }}
       />
@@ -201,7 +206,7 @@ export default function MainTabs() {
         name="Play"
         component={GamesNavigator}
         options={{
-          tabBarIcon: ({ focused }) => TabIcon('🎮', focused),
+          tabBarIcon: ({ focused, color }) => TabIcon('game-controller-outline', 'game-controller', focused, color),
           tabBarLabel: 'Play',
         }}
       />
@@ -209,7 +214,7 @@ export default function MainTabs() {
         name="Profile"
         component={ProfileNavigator}
         options={{
-          tabBarIcon: ({ focused }) => TabIcon('👤', focused),
+          tabBarIcon: ({ focused, color }) => TabIcon('person-circle-outline', 'person-circle', focused, color),
           tabBarLabel: 'Profile',
         }}
       />

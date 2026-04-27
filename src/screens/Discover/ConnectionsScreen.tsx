@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
 import {
   subscribeToPendingRequests,
@@ -99,7 +100,10 @@ function RequestCard({
           {loading ? (
             <ActivityIndicator color={colors.background} size="small" />
           ) : (
-            <Text style={styles.acceptBtnText}>🤝 Accept</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="checkmark-circle" size={18} color={colors.background} />
+              <Text style={styles.acceptBtnText}>Accept</Text>
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -151,7 +155,8 @@ function ConnectionRow({
         )}
         {!hasMeetupProposal && (
           <TouchableOpacity style={styles.meetupBtn} onPress={onMeetup}>
-            <Text style={styles.meetupBtnText}>📅 Meet</Text>
+            <Ionicons name="cafe-outline" size={14} color={colors.secondary} />
+            <Text style={styles.meetupBtnText}> Meet</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -266,11 +271,11 @@ export default function ConnectionsScreen() {
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backIcon}>←</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Connections</Text>
-        <View style={{ width: 32 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <TabBar
@@ -363,7 +368,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  backIcon: { fontSize: 22, color: colors.text },
+  headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...typography.heading, color: colors.text },
 
   tabBar: {
@@ -445,6 +450,8 @@ const styles = StyleSheet.create({
   connRight: { alignItems: 'flex-end', gap: spacing.xs },
   connTime: { ...typography.small, color: colors.textSecondary },
   meetupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: `${colors.secondary}15`,
     paddingHorizontal: spacing.sm, paddingVertical: 4,
     borderRadius: radius.full,

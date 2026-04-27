@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 
 import { initFirebase } from './firebase';
+import { setupSwagger } from './swagger';
 import authRoutes from './routes/auth';
 import notificationRoutes from './routes/notifications';
 import voiceRoutes from './routes/voice';
@@ -35,6 +36,9 @@ app.use('/auth', authRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/voice', voiceRoutes);
 app.use('/games', gameRoutes);
+
+// ── Swagger API docs ──────────────────────────────────────────────────────────
+setupSwagger(app);
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use(

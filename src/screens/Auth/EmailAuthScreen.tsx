@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -32,6 +33,8 @@ export default function EmailAuthScreen() {
   const [confirmPw, setConfirmPw]     = useState('');
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
+  const [showPw, setShowPw]           = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   function switchMode(m: 'signin' | 'signup') {
     setMode(m);
@@ -124,30 +127,40 @@ export default function EmailAuthScreen() {
           />
 
           <Text style={[styles.label, { marginTop: spacing.md }]}>Password</Text>
-          <TextInput
-            style={[styles.input, null]}
-            value={password}
-            onChangeText={(v) => { setPassword(v); setError(''); }}
-            placeholder={mode === 'signup' ? 'Min 6 characters' : 'Enter password'}
-            placeholderTextColor={colors.textSecondary}
-            secureTextEntry
-            returnKeyType={mode === 'signup' ? 'next' : 'done'}
-            onSubmitEditing={mode === 'signin' ? handleSubmit : undefined}
-          />
+          <View style={styles.inputWrap}>
+            <TextInput
+              style={styles.inputInner}
+              value={password}
+              onChangeText={(v) => { setPassword(v); setError(''); }}
+              placeholder={mode === 'signup' ? 'Min 6 characters' : 'Enter password'}
+              placeholderTextColor={colors.textSecondary}
+              secureTextEntry={!showPw}
+              returnKeyType={mode === 'signup' ? 'next' : 'done'}
+              onSubmitEditing={mode === 'signin' ? handleSubmit : undefined}
+            />
+            <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPw((p) => !p)}>
+              <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
 
           {mode === 'signup' && (
             <>
               <Text style={[styles.label, { marginTop: spacing.md }]}>Confirm Password</Text>
-              <TextInput
-                style={[styles.input, null]}
-                value={confirmPw}
-                onChangeText={(v) => { setConfirmPw(v); setError(''); }}
-                placeholder="Re-enter password"
-                placeholderTextColor={colors.textSecondary}
-                secureTextEntry
-                returnKeyType="done"
-                onSubmitEditing={handleSubmit}
-              />
+              <View style={styles.inputWrap}>
+                <TextInput
+                  style={styles.inputInner}
+                  value={confirmPw}
+                  onChangeText={(v) => { setConfirmPw(v); setError(''); }}
+                  placeholder="Re-enter password"
+                  placeholderTextColor={colors.textSecondary}
+                  secureTextEntry={!showConfirmPw}
+                  returnKeyType="done"
+                  onSubmitEditing={handleSubmit}
+                />
+                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPw((p) => !p)}>
+                  <Ionicons name={showConfirmPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
             </>
           )}
 
@@ -281,6 +294,29 @@ const styles = StyleSheet.create({
   },
   inputErr: {
     borderColor: colors.error,
+  },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    height: 56,
+    marginBottom: spacing.sm,
+  },
+  inputInner: {
+    flex: 1,
+    paddingHorizontal: spacing.md,
+    ...typography.body,
+    fontSize: 16,
+    color: colors.text,
+  },
+  eyeBtn: {
+    paddingHorizontal: spacing.md,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   errorText: {
