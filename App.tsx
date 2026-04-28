@@ -120,10 +120,10 @@ export default function App() {
           setUserProfile(profile);
 
           if (profile) {
-            // Daily login + streak
+            // Daily login + streak — safe defaults so processDailyLogin never crashes
             processDailyLogin(user.uid, {
-              coins:  profile.coins,
-              streak: profile.streak,
+              coins:  profile.coins  ?? 0,
+              streak: profile.streak ?? { current: 0, longest: 0, lastLoginDate: '' },
             })
               .then(({ coins, streak }) => setUserProfile({ ...profile, coins, streak }))
               .catch(() => {/* non-critical */});
