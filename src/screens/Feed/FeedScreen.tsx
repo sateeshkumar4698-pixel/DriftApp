@@ -28,12 +28,15 @@ import {
   toggleBookmark,
   addPostComment,
   getPostComments,
+  subscribeToConnections,
+  getUserProfile,
+  sendMessage,
 } from '../../utils/firestore-helpers';
 import { formatRelativeTime } from '../../utils/helpers';
 import Avatar from '../../components/Avatar';
 import EmptyState from '../../components/EmptyState';
 import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
-import { FeedStackParamList, Post, PostComment, PostType } from '../../types';
+import { Connection, FeedStackParamList, Message, Post, PostComment, PostType, UserProfile } from '../../types';
 
 type Nav = NativeStackNavigationProp<FeedStackParamList>;
 
@@ -359,10 +362,12 @@ function CommentsModal({
   onClose: () => void;
   onCommentAdded: () => void;
 }) {
-  const [comments, setComments] = useState<PostComment[]>([]);
-  const [text, setText]         = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [posting, setPosting]   = useState(false);
+  const [comments, setComments]       = useState<PostComment[]>([]);
+  const [text, setText]               = useState('');
+  const [loading, setLoading]         = useState(false);
+  const [posting, setPosting]         = useState(false);
+  const [replyingTo, setReplyingTo]   = useState<{ id: string; userName: string } | null>(null);
+  const inputRef                       = useRef<TextInput>(null);
 
   useEffect(() => {
     if (!visible) return;
@@ -372,6 +377,17 @@ function CommentsModal({
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [visible, post.id]);
+
+  function startReply(c: PostComment) {
+    setReplyingTo({ id: c.id, userName: c.userName });
+    setText(`@${c.userName} `);
+    inputRef.current?.focus();
+  }
+
+  function cancelReply() {
+    setReplyingTo(null);
+    setText('');
+  }
 
   async function handleSend() {
     if (!text.trim()) return;
@@ -383,11 +399,13 @@ function CommentsModal({
       userPhotoURL,
       text: text.trim(),
       createdAt: Date.now(),
+      ...(replyingTo ? { replyTo: replyingTo } : {}),
     };
     try {
       await addPostComment(post.id, comment);
-      setComments((prev) => [comment, ...prev]);
+      setComments((prev) => [...prev, comment]);
       setText('');
+      setReplyingTo(null);
       onCommentAdded();
     } catch {
       Alert.alert('Error', 'Could not post comment.');
@@ -396,42 +414,88 @@ function CommentsModal({
     }
   }
 
+  // Group top-level comments and their replies
+  const topLevel = comments.filter((c) => !c.replyTo);
+  const replies  = comments.filter((c) => !!c.replyTo);
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={cm.overlay}>
         <View style={cm.sheet}>
           <View style={cm.handle} />
           <View style={cm.header}>
-            <Text style={cm.title}>Comments</Text>
+            <Text style={cm.title}>Comments ({comments.length})</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
+
           {loading ? (
             <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.lg }} />
           ) : comments.length === 0 ? (
             <Text style={cm.empty}>No comments yet — be the first! 💬</Text>
           ) : (
             <ScrollView style={cm.list} showsVerticalScrollIndicator={false}>
-              {comments.map((c) => (
-                <View key={c.id} style={cm.row}>
-                  <Avatar name={c.userName} photoURL={c.userPhotoURL} size={34} />
-                  <View style={cm.bubble}>
-                    <Text style={cm.bubbleName}>{c.userName}</Text>
-                    <Text style={cm.bubbleText}>{c.text}</Text>
-                    <Text style={cm.bubbleTime}>{formatRelativeTime(c.createdAt)}</Text>
+              {topLevel.map((c) => {
+                const cReplies = replies.filter((r) => r.replyTo?.id === c.id);
+                return (
+                  <View key={c.id}>
+                    {/* Top-level comment */}
+                    <View style={cm.row}>
+                      <Avatar name={c.userName} photoURL={c.userPhotoURL} size={34} />
+                      <View style={cm.bubble}>
+                        <View style={cm.bubbleTop}>
+                          <Text style={cm.bubbleName}>{c.userName}</Text>
+                          <Text style={cm.bubbleTime}>{formatRelativeTime(c.createdAt)}</Text>
+                        </View>
+                        <Text style={cm.bubbleText}>{c.text}</Text>
+                        <TouchableOpacity onPress={() => startReply(c)} style={cm.replyBtn}>
+                          <Ionicons name="return-down-forward-outline" size={13} color={colors.primary} />
+                          <Text style={cm.replyBtnText}>Reply</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    {/* Replies */}
+                    {cReplies.map((r) => (
+                      <View key={r.id} style={cm.replyRow}>
+                        <View style={cm.replyLine} />
+                        <Avatar name={r.userName} photoURL={r.userPhotoURL} size={26} />
+                        <View style={[cm.bubble, { flex: 1 }]}>
+                          <View style={cm.bubbleTop}>
+                            <Text style={cm.bubbleName}>{r.userName}</Text>
+                            <Text style={cm.bubbleTime}>{formatRelativeTime(r.createdAt)}</Text>
+                          </View>
+                          <Text style={cm.replyTag}>↩ {r.replyTo!.userName}</Text>
+                          <Text style={cm.bubbleText}>{r.text}</Text>
+                        </View>
+                      </View>
+                    ))}
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </ScrollView>
           )}
+
+          {/* Reply banner */}
+          {replyingTo && (
+            <View style={cm.replyBanner}>
+              <Text style={cm.replyBannerText}>
+                Replying to <Text style={{ fontWeight: '700' }}>@{replyingTo.userName}</Text>
+              </Text>
+              <TouchableOpacity onPress={cancelReply}>
+                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={cm.inputRow}>
             <Avatar name={userName} photoURL={userPhotoURL} size={32} />
             <TextInput
+              ref={inputRef}
               style={cm.input}
               value={text}
               onChangeText={setText}
-              placeholder="Add a comment…"
+              placeholder={replyingTo ? `Reply to @${replyingTo.userName}…` : 'Add a comment…'}
               placeholderTextColor={colors.textSecondary}
               multiline
               maxLength={300}
@@ -441,7 +505,9 @@ function CommentsModal({
               onPress={handleSend}
               disabled={!text.trim() || posting}
             >
-              <Ionicons name="arrow-up" size={18} color="#fff" />
+              {posting
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Ionicons name="arrow-up" size={18} color="#fff" />}
             </TouchableOpacity>
           </View>
         </View>
@@ -455,7 +521,7 @@ const cm = StyleSheet.create({
   sheet: {
     backgroundColor: colors.background,
     borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg,
-    maxHeight: '80%', paddingBottom: 28,
+    maxHeight: '85%', paddingBottom: 28,
   },
   handle: {
     width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border,
@@ -466,17 +532,30 @@ const cm = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  title:      { ...typography.body, fontWeight: '700', color: colors.text },
-  empty:      { ...typography.body, color: colors.textSecondary, textAlign: 'center', padding: spacing.xl },
-  list:       { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, maxHeight: 360 },
-  row:        { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, alignItems: 'flex-start' },
-  bubble:     { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.sm },
-  bubbleName: { ...typography.small, fontWeight: '700', color: colors.text },
-  bubbleText: { ...typography.body, color: colors.text, marginTop: 2, lineHeight: 22 },
-  bubbleTime: { ...typography.small, color: colors.textSecondary, marginTop: 4 },
+  title:       { ...typography.body, fontWeight: '700', color: colors.text },
+  empty:       { ...typography.body, color: colors.textSecondary, textAlign: 'center', padding: spacing.xl },
+  list:        { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, maxHeight: 380 },
+  row:         { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm, alignItems: 'flex-start' },
+  replyRow:    { flexDirection: 'row', gap: spacing.xs, marginLeft: 44, marginBottom: spacing.sm, alignItems: 'flex-start' },
+  replyLine:   { width: 2, backgroundColor: colors.border, alignSelf: 'stretch', marginRight: 4, borderRadius: 1 },
+  bubble:      { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.sm },
+  bubbleTop:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  bubbleName:  { ...typography.small, fontWeight: '700', color: colors.text },
+  bubbleText:  { ...typography.body, color: colors.text, marginTop: 2, lineHeight: 22 },
+  bubbleTime:  { ...typography.small, color: colors.textSecondary },
+  replyBtn:    { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: spacing.xs },
+  replyBtnText:{ ...typography.small, color: colors.primary, fontWeight: '600' },
+  replyTag:    { ...typography.small, color: colors.primary, fontWeight: '600', marginBottom: 2 },
+  replyBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: `${colors.primary}10`,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+    borderTopWidth: 1, borderTopColor: `${colors.primary}20`,
+  },
+  replyBannerText: { ...typography.small, color: colors.textSecondary },
   inputRow: {
     flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm,
-    paddingHorizontal: spacing.md, paddingTop: spacing.md,
+    paddingHorizontal: spacing.md, paddingTop: spacing.sm,
     borderTopWidth: 1, borderTopColor: colors.border,
   },
   input: {
@@ -485,11 +564,138 @@ const cm = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     borderWidth: 1, borderColor: colors.border, maxHeight: 100,
   },
-  sendBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
-  },
+  sendBtn:         { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { opacity: 0.4 },
+});
+
+// ─── Share to connections modal ───────────────────────────────────────────────
+
+function ShareModal({
+  post,
+  visible,
+  uid,
+  userName,
+  onClose,
+}: {
+  post: Post;
+  visible: boolean;
+  uid: string;
+  userName: string;
+  onClose: () => void;
+}) {
+  const [connections, setConnections]   = useState<Connection[]>([]);
+  const [profiles, setProfiles]         = useState<Record<string, UserProfile>>({});
+  const [sending, setSending]           = useState<string | null>(null);
+  const [sent, setSent]                 = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!visible || !uid) return;
+    const unsub = subscribeToConnections(uid, setConnections);
+    return unsub;
+  }, [visible, uid]);
+
+  useEffect(() => {
+    if (connections.length === 0) return;
+    connections.forEach((c) => {
+      const otherUid = c.users.find((u) => u !== uid)!;
+      if (!profiles[otherUid]) {
+        getUserProfile(otherUid).then((p) => {
+          if (p) setProfiles((prev) => ({ ...prev, [otherUid]: p }));
+        });
+      }
+    });
+  }, [connections]);
+
+  async function handleSend(connection: Connection) {
+    const otherUid = connection.users.find((u) => u !== uid)!;
+    if (sent.has(otherUid) || sending) return;
+    setSending(otherUid);
+    const msg: Message = {
+      id: `msg_${Date.now()}_${uid}`,
+      senderId: uid,
+      text: `📝 Shared a post: "${post.caption.slice(0, 80)}${post.caption.length > 80 ? '…' : ''}"`,
+      createdAt: Date.now(),
+    };
+    try {
+      await sendMessage(connection.id, msg);
+      setSent((prev) => new Set([...prev, otherUid]));
+    } catch {
+      Alert.alert('Error', 'Could not send. Try again.');
+    } finally {
+      setSending(null);
+    }
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={sh.overlay}>
+        <View style={sh.sheet}>
+          <View style={sh.handle} />
+          <View style={sh.header}>
+            <Text style={sh.title}>Share to Connections</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={22} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          {connections.length === 0 ? (
+            <Text style={sh.empty}>No connections yet. Connect with people on Discover!</Text>
+          ) : (
+            <FlatList
+              data={connections}
+              keyExtractor={(c) => c.id}
+              contentContainerStyle={sh.list}
+              renderItem={({ item }) => {
+                const otherUid = item.users.find((u) => u !== uid)!;
+                const profile  = profiles[otherUid];
+                if (!profile) return null;
+                const isSent    = sent.has(otherUid);
+                const isSending = sending === otherUid;
+                return (
+                  <View style={sh.row}>
+                    <Avatar name={profile.name} photoURL={profile.photoURL} size={44} />
+                    <View style={sh.rowInfo}>
+                      <Text style={sh.rowName}>{profile.name}</Text>
+                      <Text style={sh.rowMeta}>{profile.city ?? ''}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[sh.sendBtn, isSent && sh.sendBtnSent]}
+                      onPress={() => handleSend(item)}
+                      disabled={isSent || !!isSending}
+                    >
+                      {isSending ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : isSent ? (
+                        <Ionicons name="checkmark" size={18} color="#fff" />
+                      ) : (
+                        <Ionicons name="paper-plane-outline" size={18} color="#fff" />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                );
+              }}
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const sh = StyleSheet.create({
+  overlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet:        { backgroundColor: colors.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, maxHeight: '70%', paddingBottom: 32 },
+  handle:       { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: spacing.sm },
+  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  title:        { ...typography.body, fontWeight: '700', color: colors.text },
+  empty:        { ...typography.body, color: colors.textSecondary, textAlign: 'center', padding: spacing.xl },
+  list:         { padding: spacing.md },
+  row:          { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
+  rowInfo:      { flex: 1 },
+  rowName:      { ...typography.body, fontWeight: '600', color: colors.text },
+  rowMeta:      { ...typography.small, color: colors.textSecondary },
+  sendBtn:      { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  sendBtnSent:  { backgroundColor: colors.success },
 });
 
 // ─── Post card ────────────────────────────────────────────────────────────────
@@ -500,12 +706,14 @@ function PostCard({
   onLike,
   onBookmark,
   onCommentOpen,
+  onShare,
 }: {
   post: Post;
   uid: string;
   onLike: () => void;
   onBookmark: () => void;
   onCommentOpen: () => void;
+  onShare: () => void;
 }) {
   const liked        = post.likes.includes(uid);
   const saved        = (post.savedBy ?? []).includes(uid);
@@ -677,10 +885,10 @@ function PostCard({
         {/* Share */}
         <TouchableOpacity
           style={card.actionBtn}
-          onPress={() => Alert.alert('Share', 'Share — coming soon!')}
+          onPress={onShare}
           activeOpacity={0.75}
         >
-          <Ionicons name="arrow-redo-outline" size={22} color={colors.textSecondary} />
+          <Ionicons name="paper-plane-outline" size={22} color={colors.textSecondary} />
           {(post.shareCount ?? 0) > 0 && (
             <Text style={card.actionCount}>{post.shareCount}</Text>
           )}
@@ -780,11 +988,12 @@ export default function FeedScreen() {
   const userName     = userProfile?.name ?? '';
   const userPhotoURL = userProfile?.photoURL;
 
-  const [posts, setPosts]           = useState<Post[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [posts, setPosts]             = useState<Post[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
   const [pageLoading, setPageLoading] = useState(false);
   const [commentPost, setCommentPost] = useState<Post | null>(null);
+  const [sharePost, setSharePost]     = useState<Post | null>(null);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
@@ -845,6 +1054,17 @@ export default function FeedScreen() {
 
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
+      {/* Share modal */}
+      {sharePost && (
+        <ShareModal
+          post={sharePost}
+          visible={!!sharePost}
+          uid={uid}
+          userName={userName}
+          onClose={() => setSharePost(null)}
+        />
+      )}
+
       {/* Comments modal */}
       {commentPost && (
         <CommentsModal
@@ -929,6 +1149,7 @@ export default function FeedScreen() {
             onLike={() => handleLike(item)}
             onBookmark={() => handleBookmark(item)}
             onCommentOpen={() => setCommentPost(item)}
+            onShare={() => setSharePost(item)}
           />
         )}
       />

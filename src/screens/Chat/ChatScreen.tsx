@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
   Alert,
@@ -296,7 +297,7 @@ export default function ChatScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backIcon}>←</Text>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.headerUser}
@@ -459,7 +460,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.sm,
   },
   backBtn: { padding: spacing.xs },
-  backIcon: { fontSize: 22, color: colors.text },
   headerUser: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerInfo: { flex: 1 },
   headerName: { ...typography.body, fontWeight: '600', color: colors.text },

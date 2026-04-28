@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   Animated,
   ScrollView,
@@ -259,7 +260,7 @@ export default function VibeQuizScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.stepCount}>{step + 1} / {total}</Text>
         <View style={{ width: 40 }} />
@@ -346,7 +347,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     backgroundColor: colors.surface,
   },
-  backText: { fontSize: 20, color: colors.text },
   stepCount: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
 
   container: {

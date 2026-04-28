@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
   Alert,
@@ -285,7 +286,7 @@ export default function ProfileDetailScreen() {
       {/* Back button */}
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backIcon}>←</Text>
+          <Ionicons name="chevron-back" size={26} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.reportBtn} onPress={handleMoreMenu}>
           <Text style={styles.reportIcon}>⋯</Text>
@@ -463,7 +464,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     ...shadows.card,
   },
-  backIcon: { fontSize: 20, color: colors.text },
   reportBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: colors.surface,

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
   Alert,
@@ -125,7 +126,7 @@ export default function MeetupSuggestionScreen() {
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backIcon}>←</Text>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Plan a Meetup</Text>
         <View style={{ width: 32 }} />
@@ -307,7 +308,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  backIcon: { fontSize: 22, color: colors.text },
   headerTitle: { ...typography.heading, color: colors.text },
 
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },

@@ -12,6 +12,7 @@
  */
 
 import React, { useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   Alert,
   Platform,
@@ -270,7 +271,7 @@ export default function ProfileShareScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
+          <Ionicons name="chevron-back" size={24} color={colors.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Share Profile</Text>
         <View style={{ width: 40 }} />
@@ -412,7 +413,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   backBtn:     { width: 40, alignItems: 'flex-start' },
-  backText:    { fontSize: 22, color: colors.primary },
   headerTitle: { ...typography.heading, color: colors.text },
 
   scroll: { alignItems: 'center', padding: spacing.lg, paddingBottom: 60, gap: spacing.lg },

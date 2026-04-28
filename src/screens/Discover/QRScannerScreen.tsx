@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
   Alert,
@@ -42,7 +43,7 @@ function PackageNotInstalled() {
     <SafeAreaView style={styles.root}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
+          <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Scan QR</Text>
         <View style={{ width: 40 }} />
@@ -206,7 +207,7 @@ function QRScannerInner() {
       <ScannerOverlay scanning={!scanned} />
       <SafeAreaView style={styles.uiLayer} pointerEvents="box-none">
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
+          <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
         <View style={styles.titleBox}>
           <Text style={styles.title}>Scan Drift QR</Text>
@@ -248,7 +249,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   backBtn:     { margin: spacing.lg, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
-  backText:    { fontSize: 22, color: '#fff' },
   headerTitle: { ...typography.heading, color: colors.text },
 
   uiLayer: { ...StyleSheet.absoluteFillObject, zIndex: 20 },

@@ -193,6 +193,7 @@ export interface PostComment {
   userPhotoURL?: string;
   text: string;
   createdAt: number;
+  replyTo?: { id: string; userName: string };
 }
 
 export interface Post {

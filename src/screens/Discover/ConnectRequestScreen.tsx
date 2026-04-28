@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -72,8 +73,8 @@ export default function ConnectRequestScreen() {
     <SafeAreaView style={styles.flex} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backIcon}>←</Text>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Connect</Text>
         <View style={{ width: 32 }} />
@@ -215,7 +216,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  backIcon: { fontSize: 22, color: colors.text },
+  headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...typography.heading, color: colors.text },
 
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },

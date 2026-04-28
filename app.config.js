@@ -88,6 +88,8 @@ module.exports = {
       },
       edgeToEdgeEnabled:            true,
       predictiveBackGestureEnabled: false,
+      enableProguardInReleaseBuilds: true,
+      enableShrinkResourcesInReleaseBuilds: true,
 
       ...(hasGoogleServices ? { googleServicesFile: './google-services.json' } : {}),
     },
@@ -98,7 +100,7 @@ module.exports = {
 
     extra: {
       backendUrl: BACKEND_URL,
-      eas: { projectId: 'drift-app' },
+      eas: { projectId: 'fc2e6166-1ac7-4be0-9ea0-3cf975f0ba64' },
     },
   },
 };

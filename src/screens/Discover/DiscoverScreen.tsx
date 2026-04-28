@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
   Animated,
@@ -703,7 +704,7 @@ export default function DiscoverScreen() {
             style={styles.headerIconBtn}
             onPress={() => navigation.navigate('ShakeShare')}
           >
-            <Text style={styles.headerIconText}>🤝</Text>
+            <Ionicons name="people-outline" size={22} color={colors.text} />
           </TouchableOpacity>
 
           {/* QR Scanner */}
@@ -711,7 +712,7 @@ export default function DiscoverScreen() {
             style={styles.headerIconBtn}
             onPress={() => navigation.navigate('QRScanner')}
           >
-            <Text style={styles.headerIconText}>📷</Text>
+            <Ionicons name="qr-code-outline" size={22} color={colors.text} />
           </TouchableOpacity>
 
           {/* Bell icon with unread badge */}
@@ -719,7 +720,7 @@ export default function DiscoverScreen() {
             style={styles.bellBtn}
             onPress={() => navigation.navigate('Notifications')}
           >
-            <Text style={styles.bellIcon}>🔔</Text>
+            <Ionicons name="notifications-outline" size={24} color={colors.text} />
             {unreadCount > 0 && (
               <View style={styles.bellBadge}>
                 <Text style={styles.bellBadgeText}>
@@ -729,10 +730,10 @@ export default function DiscoverScreen() {
             )}
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.connectionsBtn}
+            style={styles.headerIconBtn}
             onPress={() => navigation.navigate('Connections')}
           >
-            <Text style={styles.connectionsBtnText}>Connections 💫</Text>
+            <Ionicons name="git-network-outline" size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
       </View>
@@ -836,9 +837,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  headerIconText: { fontSize: 18 },
   bellBtn: { position: 'relative', padding: 6 },
-  bellIcon: { fontSize: 22 },
   bellBadge: {
     position: 'absolute', top: 0, right: 0,
     minWidth: 18, height: 18, borderRadius: 9,
@@ -848,12 +847,6 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: colors.background,
   },
   bellBadgeText: { fontSize: 10, color: '#fff', fontWeight: '800' },
-  connectionsBtn: {
-    backgroundColor: `${colors.secondary}15`,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: radius.lg,
-  },
-  connectionsBtnText: { ...typography.caption, color: colors.secondary, fontWeight: '600' },
 
   filterContainer: {
     backgroundColor: colors.background,
