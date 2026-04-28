@@ -354,8 +354,9 @@ export type ProfileStackParamList = {
   CoinHistory: undefined;
   PrivacySettings: undefined;
   Terms: undefined;
-  // ── Profile Share (Phase 1) ────────────────────────────────────────────────
   ProfileShare: undefined;
+  Settings: undefined;
+  Feedback: undefined;
 };
 
 // ─── Notifications ────────────────────────────────────────────────────────────

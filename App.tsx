@@ -35,6 +35,7 @@ import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './src/config/firebase';
 import { useAuthStore } from './src/store/authStore';
+import { useThemeStore } from './src/store/themeStore';
 import { getUserProfile } from './src/utils/firestore-helpers';
 import { processDailyLogin } from './src/services/coinService';
 import RootNavigator from './src/navigation/RootNavigator';
@@ -49,7 +50,11 @@ const MOCK_AUTH = false;
 
 export default function App() {
   const { setFirebaseUser, setUserProfile, setLoading } = useAuthStore();
+  const hydrateTheme = useThemeStore((s) => s.hydrate);
   const appState = useRef<AppStateStatus>(AppState.currentState);
+
+  // Hydrate persisted theme preference before first render
+  useEffect(() => { hydrateTheme(); }, []);
 
   // ─── Auth listener ─────────────────────────────────────────────────────────
 

@@ -458,22 +458,22 @@ export default function ProfileScreen() {
         {/* ── Settings ── */}
         <View style={styles.settingsCard}>
           <SettingsRow
+            icon="settings-outline"
+            label="Settings"
+            tint={colors.secondary}
+            onPress={() => navigation.navigate('Settings')}
+          />
+          <SettingsRow
             icon="time-outline"
             label="Coin History"
             tint="#FDCB6E"
             onPress={() => navigation.navigate('CoinHistory')}
           />
           <SettingsRow
-            icon="lock-closed-outline"
-            label="Privacy Settings"
-            tint="#6C5CE7"
-            onPress={() => navigation.navigate('PrivacySettings')}
-          />
-          <SettingsRow
-            icon="document-text-outline"
-            label="Terms & Privacy Policy"
-            tint={colors.textSecondary}
-            onPress={() => navigation.navigate('Terms')}
+            icon="chatbubble-ellipses-outline"
+            label="Send Feedback"
+            tint="#00E676"
+            onPress={() => navigation.navigate('Feedback')}
           />
           <SettingsRow
             icon="log-out-outline"

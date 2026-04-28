@@ -14,6 +14,8 @@ import {
   ProfileStackParamList,
 } from '../types';
 import { colors, typography } from '../utils/theme';
+import { useThemeStore } from '../store/themeStore';
+import { darkColors, lightColors } from '../utils/useTheme';
 
 // Discover stack
 import DiscoverScreen from '../screens/Discover/DiscoverScreen';
@@ -56,8 +58,9 @@ import StatusCreateScreen from '../screens/Profile/StatusCreateScreen';
 import CoinHistoryScreen from '../screens/Profile/CoinHistoryScreen';
 import PrivacySettingsScreen from '../screens/Profile/PrivacySettingsScreen';
 import TermsScreen from '../screens/Profile/TermsScreen';
-// Profile Share (Phase 1)
 import ProfileShareScreen from '../screens/Profile/ProfileShareScreen';
+import SettingsScreen from '../screens/Profile/SettingsScreen';
+import FeedbackScreen from '../screens/Profile/FeedbackScreen';
 // Discover extras (Phase 1)
 import QRScannerScreen from '../screens/Discover/QRScannerScreen';
 import ShakeToShareScreen from '../screens/Discover/ShakeToShareScreen';
@@ -129,14 +132,15 @@ function ProfileNavigator() {
     <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
       <ProfileStack.Screen name="ProfileMain"    component={ProfileScreen} />
       <ProfileStack.Screen name="EditProfile"    component={EditProfileScreen} />
-      <ProfileStack.Screen name="VibeQuiz"          component={VibeQuizScreen} />
-      <ProfileStack.Screen name="ViewMemories"      component={ViewMemoriesScreen} />
-      <ProfileStack.Screen name="StatusCreate"      component={StatusCreateScreen} />
-      <ProfileStack.Screen name="CoinHistory"       component={CoinHistoryScreen} />
-      <ProfileStack.Screen name="PrivacySettings"   component={PrivacySettingsScreen} />
-      <ProfileStack.Screen name="Terms"             component={TermsScreen} />
-      {/* Profile Share — Phase 1 */}
-      <ProfileStack.Screen name="ProfileShare"  component={ProfileShareScreen} />
+      <ProfileStack.Screen name="VibeQuiz"       component={VibeQuizScreen} />
+      <ProfileStack.Screen name="ViewMemories"   component={ViewMemoriesScreen} />
+      <ProfileStack.Screen name="StatusCreate"   component={StatusCreateScreen} />
+      <ProfileStack.Screen name="CoinHistory"    component={CoinHistoryScreen} />
+      <ProfileStack.Screen name="PrivacySettings"component={PrivacySettingsScreen} />
+      <ProfileStack.Screen name="Terms"          component={TermsScreen} />
+      <ProfileStack.Screen name="ProfileShare"   component={ProfileShareScreen} />
+      <ProfileStack.Screen name="Settings"       component={SettingsScreen} />
+      <ProfileStack.Screen name="Feedback"       component={FeedbackScreen} />
     </ProfileStack.Navigator>
   );
 }
@@ -154,11 +158,11 @@ function TabIcon(icon: IoniconName, iconFilled: IoniconName, focused: boolean, c
 
 // ─── Main Tab Bar ─────────────────────────────────────────────────────────────
 export default function MainTabs() {
-  // Dynamically account for device bottom inset (Android gesture nav, iPhone home bar).
-  // Without this, the tab bar sits behind the system navigation area.
-  const insets = useSafeAreaInsets();
-  const bottomPad  = Math.max(insets.bottom, 8);
-  const tabBarH    = 52 + bottomPad;
+  const insets   = useSafeAreaInsets();
+  const bottomPad = Math.max(insets.bottom, 8);
+  const tabBarH   = 52 + bottomPad;
+  const isDark    = useThemeStore((s) => s.isDark);
+  const C         = isDark ? darkColors : lightColors;
 
   return (
     <>
@@ -166,15 +170,15 @@ export default function MainTabs() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: colors.background,
-          borderTopColor:  colors.border,
+          backgroundColor: isDark ? '#0F0F1E' : colors.background,
+          borderTopColor:  C.border,
           borderTopWidth:  1,
           height:          tabBarH,
           paddingTop:      8,
           paddingBottom:   bottomPad,
         },
         tabBarActiveTintColor:   colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarInactiveTintColor: C.textSecondary,
         tabBarLabelStyle: { ...typography.small, marginTop: -2 },
       }}
     >
