@@ -11,7 +11,6 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -28,7 +27,6 @@ import { validateDriftId, generateUsername } from '../../utils/profileShare';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 
-const { width: SCREEN_W } = Dimensions.get('window');
 
 // ─── Design tokens (dark theme) ───────────────────────────────────────────────
 const D = {
@@ -520,8 +518,6 @@ function renderSlot(
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const PHOTO_SIZE = (SCREEN_W - spacing.lg * 2 - 16 * 2 - spacing.sm * 2) / 3;
-
 const sc = StyleSheet.create({
   root:      { flex: 1, backgroundColor: D.bg },
   safeArea:  { flex: 1 },
@@ -588,9 +584,9 @@ const sc = StyleSheet.create({
   inputText:       { fontSize: 14, color: D.text, fontWeight: '400' },
   inputTextMulti:  { height: 72 },
 
-  // Photos
-  photoGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  photoSlotWrap: { width: PHOTO_SIZE, aspectRatio: 4 / 5 },
+  // Photos — 3-column, percentage widths so no pixel math needed
+  photoGrid:     { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.sm },
+  photoSlotWrap: { width: '32%', aspectRatio: 4 / 5 },
   photoRing:     { width: '100%', height: '100%', borderRadius: radius.md + 2, padding: 2 },
   photoInner:    { flex: 1, borderRadius: radius.md, overflow: 'hidden', backgroundColor: D.bgInput, alignItems: 'center', justifyContent: 'center' },
   photoSlotPlain:{ width: '100%', height: '100%', borderRadius: radius.md, overflow: 'hidden', backgroundColor: D.bgInput, borderWidth: 1.5, borderColor: D.border, alignItems: 'center', justifyContent: 'center' },
@@ -620,11 +616,11 @@ const sc = StyleSheet.create({
   interestChipText:    { fontSize: 12, color: D.textSub, fontWeight: '500' },
   interestChipTextSel: { fontSize: 12, color: '#fff', fontWeight: '600' },
 
-  // Looking for
-  lfGrid:        { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  lfCardWrap:    { width: (SCREEN_W - spacing.lg * 2 - spacing.md * 2 - spacing.sm) / 2 },
-  lfCard:        { borderRadius: radius.lg, padding: spacing.md, alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 80, position: 'relative' },
-  lfCardUnsel:   { borderRadius: radius.lg, padding: spacing.md, alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 80, backgroundColor: D.bgInput, borderWidth: 1.5, borderColor: D.border },
+  // Looking for — 2-column, percentage widths so no pixel math needed
+  lfGrid:        { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.sm },
+  lfCardWrap:    { width: '48.5%' },
+  lfCard:        { width: '100%', borderRadius: radius.lg, padding: spacing.md, alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 90, position: 'relative' },
+  lfCardUnsel:   { width: '100%', borderRadius: radius.lg, padding: spacing.md, alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 90, backgroundColor: D.bgInput, borderWidth: 1.5, borderColor: D.border },
   lfLabelSel:    { fontSize: 13, fontWeight: '700', color: '#fff' },
   lfLabel:       { fontSize: 13, fontWeight: '600', color: D.textSub },
   lfCheck:       { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, backgroundColor: '#ffffff30', alignItems: 'center', justifyContent: 'center' },
