@@ -157,12 +157,34 @@ service cloud.firestore {
         && request.resource.data.caption is string
         && request.resource.data.caption.size() <= 1000;
 
+      // Any signed-in user can update social fields (likes, saves, comment count).
+      // Only the post owner can change anything else.
       allow update: if isSignedIn()
-        && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+        && (request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['likes', 'savedBy', 'commentCount', 'comments', 'shareCount'])
             || resource.data.userId == request.auth.uid);
 
       allow delete: if isSignedIn()
         && resource.data.userId == request.auth.uid;
+
+      // ─── Comments subcollection ────────────────────────────────────────────
+      match /comments/{commentId} {
+        // Any signed-in user can read comments on any post
+        allow read: if isSignedIn();
+
+        // Any signed-in user can create a comment (must be their own)
+        allow create: if isSignedIn()
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 300;
+
+        // Only comment author can delete their own comment
+        allow delete: if isSignedIn()
+          && resource.data.userId == request.auth.uid;
+
+        allow update: if false;
+      }
     }
 
     // ─── Game Rooms ───────────────────────────────────────────────────────────
