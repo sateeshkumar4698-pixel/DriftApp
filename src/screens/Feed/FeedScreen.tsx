@@ -407,8 +407,9 @@ function CommentsModal({
       setText('');
       setReplyingTo(null);
       onCommentAdded();
-    } catch {
-      Alert.alert('Error', 'Could not post comment.');
+    } catch (err) {
+      console.error('[CommentsModal] addPostComment failed:', err);
+      Alert.alert('Error', err instanceof Error ? err.message : 'Could not post comment. Check your connection.');
     } finally {
       setPosting(false);
     }
@@ -420,7 +421,9 @@ function CommentsModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={cm.overlay}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={cm.overlay}>
+          <TouchableWithoutFeedback onPress={() => {}}>
         <View style={cm.sheet}>
           <View style={cm.handle} />
           <View style={cm.header}>
@@ -511,7 +514,9 @@ function CommentsModal({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }
@@ -628,7 +633,9 @@ function ShareModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={sh.overlay}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={sh.overlay}>
+          <TouchableWithoutFeedback onPress={() => {}}>
         <View style={sh.sheet}>
           <View style={sh.handle} />
           <View style={sh.header}>
@@ -677,7 +684,9 @@ function ShareModal({
             />
           )}
         </View>
-      </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }

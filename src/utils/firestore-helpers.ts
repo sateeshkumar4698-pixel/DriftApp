@@ -435,18 +435,25 @@ export async function addPostComment(
   postId: string,
   comment: import('../types').PostComment,
 ): Promise<void> {
-  const clean = Object.fromEntries(
-    Object.entries(comment).filter(([, v]) => v !== undefined),
-  );
-  // Write comment to subcollection
+  // Strip undefined values so Firestore doesn't reject the document
+  const clean: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(comment)) {
+    if (v !== undefined && v !== null) clean[k] = v;
+  }
+
+  // Step 1: Write comment document — this is the critical step
   await setDoc(doc(db, 'posts', postId, 'comments', comment.id), clean);
-  // Atomically increment comment count using Firestore increment
-  await updateDoc(doc(db, 'posts', postId), {
-    commentCount: increment(1),
-  }).catch(() => {
-    // post might use legacy 'comments' field — update that too
-    return updateDoc(doc(db, 'posts', postId), { comments: increment(1) }).catch(() => {});
-  });
+
+  // Step 2: Increment comment count — best-effort, never blocks the UI
+  try {
+    await updateDoc(doc(db, 'posts', postId), { commentCount: increment(1) });
+  } catch {
+    try {
+      await updateDoc(doc(db, 'posts', postId), { comments: increment(1) });
+    } catch {
+      // Silently ignore — comment was already written, count is cosmetic
+    }
+  }
 }
 
 export async function getPostComments(
