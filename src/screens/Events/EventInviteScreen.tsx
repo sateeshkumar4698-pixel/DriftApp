@@ -5,17 +5,29 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
-import {
-  subscribeToConnections,
-  getUserProfile,
-  sendEventInvite,
-} from '../../utils/firestore-helpers';
+import { subscribeToConnections, getUserProfile, sendEventInvite } from '../../utils/firestore-helpers';
 import Avatar from '../../components/Avatar';
-import { colors, spacing, typography, radius } from '../../utils/theme';
+import { spacing, radius, shadows } from '../../utils/theme';
 import { Connection, EventsStackParamList, EventInvite, UserProfile } from '../../types';
 
 type RouteProps = RouteProp<EventsStackParamList, 'EventInvite'>;
+
+// ─── Dark tokens ──────────────────────────────────────────────────────────────
+const D = {
+  bg:     '#0D0D1A',
+  card:   '#15152A',
+  border: '#2A2A4A',
+  text:   '#FFFFFF',
+  sub:    '#8888BB',
+  muted:  '#555580',
+  pink:   '#FF4B6E',
+  purple: '#6C5CE7',
+  cyan:   '#00D2FF',
+  green:  '#00E676',
+};
 
 export default function EventInviteScreen() {
   const navigation = useNavigation();
@@ -25,9 +37,9 @@ export default function EventInviteScreen() {
   const uid = firebaseUser?.uid ?? '';
 
   const [connections, setConnections] = useState<UserProfile[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [sending, setSending]         = useState<Set<string>>(new Set());
-  const [sent, setSent]               = useState<Set<string>>(new Set());
+  const [loading,     setLoading]     = useState(true);
+  const [sending,     setSending]     = useState<Set<string>>(new Set());
+  const [sent,        setSent]        = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!uid) return;
@@ -58,7 +70,7 @@ export default function EventInviteScreen() {
         eventTitle: event.title,
         status:     'pending',
         createdAt:  now,
-        expiresAt:  now + 7 * 24 * 60 * 60 * 1000, // 7 days
+        expiresAt:  now + 7 * 24 * 60 * 60 * 1000,
       };
       await sendEventInvite(invite);
       setSent((prev) => new Set(prev).add(friend.uid));
@@ -70,114 +82,137 @@ export default function EventInviteScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.flex} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>Invite Friends</Text>
-          <Text style={styles.headerSub} numberOfLines={1}>{event.title}</Text>
-        </View>
-      </View>
+    <View style={sc.root}>
+      <LinearGradient colors={['#0D0D1A', '#0A0A1F', '#0D0D1A']} style={StyleSheet.absoluteFill} />
+      <SafeAreaView style={sc.flex} edges={['top']}>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} size="large" />
-        </View>
-      ) : connections.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.emptyEmoji}>🤝</Text>
-          <Text style={styles.emptyText}>No connections yet</Text>
-          <Text style={styles.emptySub}>Connect with people on Discover first!</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={connections}
-          keyExtractor={(item) => item.uid}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={styles.sep} />}
-          ListHeaderComponent={
-            <Text style={styles.listHeader}>
-              Select connections to invite to this event:
-            </Text>
-          }
-          renderItem={({ item }) => {
-            const isSending = sending.has(item.uid);
-            const isSent    = sent.has(item.uid);
-            return (
-              <View style={styles.row}>
-                <Avatar name={item.name} photoURL={item.photoURL} size={44} />
-                <View style={styles.rowInfo}>
-                  <Text style={styles.rowName}>{item.name}, {item.age}</Text>
-                  {item.city && <Text style={styles.rowCity}>📍 {item.city}</Text>}
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.inviteBtn,
-                    isSent    && styles.inviteBtnSent,
-                    isSending && styles.inviteBtnLoading,
-                  ]}
-                  onPress={() => !isSent && !isSending && handleInvite(item)}
-                  disabled={isSent || isSending}
-                >
-                  {isSending ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.inviteBtnText}>
-                      {isSent ? '✓ Invited' : 'Invite'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
+        {/* Header */}
+        <LinearGradient colors={['#1A0A2E', '#0D1744', '#0A1628']} style={sc.header} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <LinearGradient colors={['#ffffff18', '#ffffff0A']} style={sc.backBtn}>
+              <Ionicons name="chevron-back" size={22} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+          <View style={sc.headerCenter}>
+            <Text style={sc.headerTitle}>Invite Friends</Text>
+            <Text style={sc.headerSub} numberOfLines={1}>{event.title}</Text>
+          </View>
+          {/* Sent count bubble */}
+          {sent.size > 0 && (
+            <LinearGradient colors={['#00E676', '#00BCD4']} style={sc.sentBubble}>
+              <Text style={sc.sentBubbleText}>{sent.size} sent</Text>
+            </LinearGradient>
+          )}
+        </LinearGradient>
+
+        {loading ? (
+          <View style={sc.center}>
+            <ActivityIndicator color={D.pink} size="large" />
+            <Text style={sc.loadingText}>Loading connections...</Text>
+          </View>
+        ) : connections.length === 0 ? (
+          <View style={sc.center}>
+            <LinearGradient colors={['#FF4B6E22', '#6C5CE722']} style={sc.emptyIcon}>
+              <Ionicons name="people-outline" size={40} color={D.pink} />
+            </LinearGradient>
+            <Text style={sc.emptyTitle}>No connections yet</Text>
+            <Text style={sc.emptySub}>Connect with people on Discover first!</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={connections}
+            keyExtractor={(item) => item.uid}
+            contentContainerStyle={sc.list}
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={
+              <View style={sc.listHeader}>
+                <Ionicons name="paper-plane-outline" size={14} color={D.sub} />
+                <Text style={sc.listHeaderText}>
+                  {connections.length} connection{connections.length !== 1 ? 's' : ''} — tap to invite
+                </Text>
               </View>
-            );
-          }}
-        />
-      )}
-    </SafeAreaView>
+            }
+            ItemSeparatorComponent={() => <View style={sc.sep} />}
+            renderItem={({ item }) => {
+              const isSending = sending.has(item.uid);
+              const isSent    = sent.has(item.uid);
+              return (
+                <View style={sc.row}>
+                  <Avatar name={item.name} photoURL={item.photoURL} size={46} />
+                  <View style={sc.rowInfo}>
+                    <Text style={sc.rowName}>{item.name}{item.age ? `, ${item.age}` : ''}</Text>
+                    {item.city ? (
+                      <View style={sc.rowCity}>
+                        <Ionicons name="location-outline" size={11} color={D.muted} />
+                        <Text style={sc.rowCityText}>{item.city}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => !isSent && !isSending && handleInvite(item)}
+                    disabled={isSent || isSending}
+                    activeOpacity={0.8}
+                  >
+                    {isSent ? (
+                      <LinearGradient colors={['#00E676', '#00BCD4']} style={sc.inviteBtn}>
+                        <Ionicons name="checkmark" size={14} color="#fff" />
+                        <Text style={sc.inviteBtnText}>Invited</Text>
+                      </LinearGradient>
+                    ) : isSending ? (
+                      <View style={sc.inviteBtnLoading}>
+                        <ActivityIndicator size="small" color="#fff" />
+                      </View>
+                    ) : (
+                      <LinearGradient colors={['#FF4B6E', '#C2185B']} style={sc.inviteBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                        <Ionicons name="paper-plane-outline" size={14} color="#fff" />
+                        <Text style={sc.inviteBtnText}>Invite</Text>
+                      </LinearGradient>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              );
+            }}
+          />
+        )}
+      </SafeAreaView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+const sc = StyleSheet.create({
+  root: { flex: 1, backgroundColor: D.bg },
+  flex: { flex: 1 },
 
   header: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  backBtn: { padding: spacing.xs },
-  backIcon: { fontSize: 22, color: colors.text },
-  headerInfo: { flex: 1 },
-  headerTitle: { ...typography.heading, color: colors.text },
-  headerSub: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
-
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  emptyEmoji: { fontSize: 48 },
-  emptyText: { ...typography.body, fontWeight: '700', color: colors.text },
-  emptySub: { ...typography.caption, color: colors.textSecondary, textAlign: 'center' },
-
-  list: { padding: spacing.md, paddingBottom: spacing.xxl },
-  listHeader: {
-    ...typography.caption, color: colors.textSecondary, fontWeight: '600',
-    marginBottom: spacing.md, textTransform: 'uppercase', letterSpacing: 0.5,
-  },
-  sep: { height: 1, backgroundColor: colors.border, marginLeft: 60 + spacing.md },
-
-  row: {
     flexDirection: 'row', alignItems: 'center',
-    gap: spacing.md, paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: '#ffffff10', gap: spacing.sm,
   },
-  rowInfo: { flex: 1 },
-  rowName: { ...typography.body, fontWeight: '600', color: colors.text },
-  rowCity: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
+  backBtn:       { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ffffff20' },
+  headerCenter:  { flex: 1 },
+  headerTitle:   { fontSize: 18, fontWeight: '700', color: '#fff' },
+  headerSub:     { fontSize: 12, color: D.sub, marginTop: 1 },
+  sentBubble:    { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.full },
+  sentBubbleText:{ fontSize: 11, fontWeight: '800', color: '#fff' },
 
-  inviteBtn: {
-    paddingHorizontal: spacing.md, paddingVertical: 8,
-    backgroundColor: colors.primary, borderRadius: radius.full, minWidth: 72,
-    alignItems: 'center',
-  },
-  inviteBtnSent: { backgroundColor: colors.success },
-  inviteBtnLoading: { backgroundColor: colors.primary, opacity: 0.7 },
-  inviteBtnText: { ...typography.small, color: '#fff', fontWeight: '700' },
+  center:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  loadingText: { fontSize: 13, color: D.sub },
+  emptyIcon:   { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle:  { fontSize: 18, fontWeight: '700', color: D.text },
+  emptySub:    { fontSize: 13, color: D.sub, textAlign: 'center' },
+
+  list:       { padding: spacing.lg, paddingBottom: 80 },
+  listHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.md },
+  listHeaderText: { fontSize: 12, color: D.sub, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5 },
+  sep:        { height: 1, backgroundColor: D.border, marginLeft: 62 },
+
+  row:     { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm + 2 },
+  rowInfo: { flex: 1 },
+  rowName: { fontSize: 15, fontWeight: '600', color: D.text },
+  rowCity: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
+  rowCityText: { fontSize: 12, color: D.muted },
+
+  inviteBtn:       { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.full },
+  inviteBtnLoading:{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.full, backgroundColor: D.purple, opacity: 0.7 },
+  inviteBtnText:   { fontSize: 12, fontWeight: '700', color: '#fff' },
 });

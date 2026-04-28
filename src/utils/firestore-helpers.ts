@@ -681,14 +681,16 @@ export function subscribeToUnreadCount(
 
 export async function sendEventInvite(invite: EventInvite): Promise<void> {
   await setDoc(doc(db, 'eventInvites', invite.id), stripUndefined(invite));
-  // Write notification so it shows in-app
-  await pushNotification(
+  // Notification is best-effort — Firestore rules block writing to another
+  // user's notifications from the client, so we catch silently here.
+  // Cloud Functions will handle reliable delivery in the future.
+  pushNotification(
     invite.toUid,
     'event_invite',
     `📅 ${invite.fromName} invited you to an event!`,
     invite.eventTitle,
     { eventId: invite.eventId, inviteId: invite.id },
-  );
+  ).catch(() => {/* non-critical */});
 }
 
 export function subscribeToEventInvites(
