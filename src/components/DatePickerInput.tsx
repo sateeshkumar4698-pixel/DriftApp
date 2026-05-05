@@ -1,9 +1,9 @@
 /**
  * DatePickerInput
  *
- * Cross-platform date + time picker.
- * - iOS:     Inline picker inside a modal sheet.
- * - Android: Native date dialog followed by time dialog.
+ * Cross-platform date + time picker — premium two-row card design.
+ * - iOS:     Inline picker inside a bottom sheet modal.
+ * - Android: Native date dialog followed by time dialog (sequential).
  *
  * Usage:
  *   <DatePickerInput
@@ -27,7 +27,10 @@ import {
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
-import { useTheme, AppColors, spacing, typography, radius } from '../utils/useTheme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme, AppColors } from '../utils/useTheme';
+import { spacing, radius } from '../utils/theme';
 
 interface Props {
   label?:   string;
@@ -37,25 +40,43 @@ interface Props {
   minDate?: number;          // unix ms
 }
 
-function fmt(ms: number): string {
+// ─── Formatters ───────────────────────────────────────────────────────────────
+
+function fmtDate(ms: number): string {
   const d = new Date(ms);
-  const date = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-  const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-  return `${date}  ${time}`;
+  return d.toLocaleDateString('en-US', {
+    weekday: 'short',
+    day:     '2-digit',
+    month:   'short',
+    year:    'numeric',
+  });
+  // → "Tue, 15 May 2026"
 }
+
+function fmtTime(ms: number): string {
+  const d = new Date(ms);
+  return d.toLocaleTimeString('en-US', {
+    hour:   'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  // → "7:30 PM"
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function DatePickerInput({ label, value, onChange, error, minDate }: Props) {
   const { C } = useTheme();
   const styles = makeStyles(C);
 
-  const [showPicker, setShowPicker] = useState(false);
+  const [showPicker,   setShowPicker]   = useState(false);
   // Android needs two steps: date then time
-  const [androidStep, setAndroidStep] = useState<'date' | 'time'>('date');
-  const [pendingDate, setPendingDate]  = useState<Date | null>(null);
+  const [androidStep,  setAndroidStep]  = useState<'date' | 'time'>('date');
+  const [pendingDate,  setPendingDate]  = useState<Date | null>(null);
 
   const current = value ? new Date(value) : new Date();
 
-  // ─── Android ────────────────────────────────────────────────────────────────
+  // ── Android ──────────────────────────────────────────────────────────────────
   function handleAndroid(event: DateTimePickerEvent, selected?: Date) {
     if (event.type === 'dismissed') {
       setShowPicker(false);
@@ -68,7 +89,6 @@ export default function DatePickerInput({ label, value, onChange, error, minDate
       setPendingDate(selected);
       setAndroidStep('time');
     } else {
-      // Merge date from pendingDate with time from selected
       const base = pendingDate ?? current;
       const merged = new Date(
         base.getFullYear(), base.getMonth(), base.getDate(),
@@ -81,25 +101,48 @@ export default function DatePickerInput({ label, value, onChange, error, minDate
     }
   }
 
-  // ─── iOS ────────────────────────────────────────────────────────────────────
+  // ── iOS ──────────────────────────────────────────────────────────────────────
   function handleIos(_: DateTimePickerEvent, selected?: Date) {
     if (selected) onChange(selected.getTime());
+  }
+
+  function openPicker() {
+    setShowPicker(true);
+    setAndroidStep('date');
   }
 
   return (
     <View style={styles.wrapper}>
       {label && <Text style={styles.label}>{label}</Text>}
 
-      <TouchableOpacity
-        style={[styles.field, error ? styles.fieldErr : null]}
-        onPress={() => { setShowPicker(true); setAndroidStep('date'); }}
-        activeOpacity={0.75}
-      >
-        <Text style={styles.calIcon}>📅</Text>
-        <Text style={[styles.valueText, !value && styles.placeholder]}>
-          {value ? fmt(value) : 'Tap to pick date & time'}
-        </Text>
-      </TouchableOpacity>
+      {/* ── Two-row card ── */}
+      <View style={[styles.card, error ? styles.cardError : null]}>
+
+        {/* Date row */}
+        <TouchableOpacity style={styles.row} onPress={openPicker} activeOpacity={0.75}>
+          <LinearGradient colors={['#FF4B6E', '#C2185B']} style={styles.iconBg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            <Ionicons name="calendar-outline" size={15} color="#fff" />
+          </LinearGradient>
+          <Text style={styles.rowLabel}>Date</Text>
+          <Text style={[styles.rowValue, !value && styles.rowPlaceholder]} numberOfLines={1}>
+            {value ? fmtDate(value) : 'Select date →'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Divider */}
+        <View style={styles.divider} />
+
+        {/* Time row */}
+        <TouchableOpacity style={styles.row} onPress={openPicker} activeOpacity={0.75}>
+          <LinearGradient colors={['#6C5CE7', '#4834D4']} style={styles.iconBg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            <Ionicons name="time-outline" size={15} color="#fff" />
+          </LinearGradient>
+          <Text style={styles.rowLabel}>Time</Text>
+          <Text style={[styles.rowValue, !value && styles.rowPlaceholder]} numberOfLines={1}>
+            {value ? fmtTime(value) : 'Select time →'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -114,7 +157,7 @@ export default function DatePickerInput({ label, value, onChange, error, minDate
         />
       )}
 
-      {/* iOS — modal sheet with inline spinner */}
+      {/* iOS — bottom sheet modal with inline spinner */}
       {Platform.OS === 'ios' && (
         <Modal
           visible={showPicker}
@@ -125,7 +168,8 @@ export default function DatePickerInput({ label, value, onChange, error, minDate
           <View style={styles.iosOverlay}>
             <View style={styles.iosSheet}>
               <View style={styles.iosHeader}>
-                <TouchableOpacity onPress={() => setShowPicker(false)}>
+                <Text style={styles.iosTitle}>Date & Time</Text>
+                <TouchableOpacity onPress={() => setShowPicker(false)} style={styles.iosDoneBtn}>
                   <Text style={styles.iosDone}>Done</Text>
                 </TouchableOpacity>
               </View>
@@ -145,12 +189,14 @@ export default function DatePickerInput({ label, value, onChange, error, minDate
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 function makeStyles(C: AppColors) {
   return StyleSheet.create({
     wrapper: { marginBottom: spacing.md },
 
     label: {
-      ...typography.caption,
+      fontSize:      12,
       fontWeight:    '600',
       color:         C.textSecondary,
       marginBottom:  spacing.xs,
@@ -158,49 +204,98 @@ function makeStyles(C: AppColors) {
       letterSpacing: 0.5,
     },
 
-    field: {
-      flexDirection:   'row',
-      alignItems:      'center',
-      gap:             spacing.sm,
-      height:          52,
+    // ── Card container ──
+    card: {
+      backgroundColor: C.surface,
+      borderRadius:    14,
       borderWidth:     1.5,
       borderColor:     C.border,
-      borderRadius:    radius.md,
-      backgroundColor: C.surface,
-      paddingHorizontal: spacing.md,
+      overflow:        'hidden',
     },
-    fieldErr: { borderColor: C.error },
+    cardError: { borderColor: C.error },
 
-    calIcon:     { fontSize: 18 },
-    valueText:   { ...typography.body, color: C.text, flex: 1 },
-    placeholder: { color: C.textSecondary },
+    // ── Row ──
+    row: {
+      flexDirection:  'row',
+      alignItems:     'center',
+      gap:            12,
+      paddingHorizontal: spacing.md,
+      paddingVertical:   13,
+    },
+
+    iconBg: {
+      width:        30,
+      height:       30,
+      borderRadius: 8,
+      alignItems:   'center',
+      justifyContent: 'center',
+    },
+
+    rowLabel: {
+      fontSize:   13,
+      fontWeight: '600',
+      color:      C.textSecondary,
+      width:      38,
+    },
+
+    rowValue: {
+      flex:       1,
+      fontSize:   14,
+      fontWeight: '700',
+      color:      C.text,
+      textAlign:  'right',
+    },
+    rowPlaceholder: {
+      fontWeight: '400',
+      color:      C.textSecondary,
+    },
+
+    divider: {
+      height:          1,
+      backgroundColor: C.border,
+      marginHorizontal: spacing.md,
+    },
 
     errorText: {
-      ...typography.small,
-      color:      C.error,
-      marginTop:  spacing.xs,
+      fontSize:  12,
+      color:     C.error,
+      marginTop: spacing.xs,
     },
 
-    // iOS modal
+    // ── iOS modal ──
     iosOverlay: {
       flex:            1,
       justifyContent:  'flex-end',
-      backgroundColor: 'rgba(0,0,0,0.35)',
+      backgroundColor: 'rgba(0,0,0,0.4)',
     },
     iosSheet: {
-      backgroundColor: C.background,
-      borderTopLeftRadius:  16,
-      borderTopRightRadius: 16,
-      paddingBottom: 32,
+      backgroundColor:      C.background,
+      borderTopLeftRadius:  20,
+      borderTopRightRadius: 20,
+      paddingBottom:        36,
     },
     iosHeader: {
-      flexDirection:  'row',
-      justifyContent: 'flex-end',
-      padding:        spacing.md,
+      flexDirection:   'row',
+      alignItems:      'center',
+      justifyContent:  'space-between',
+      padding:         spacing.md,
       borderBottomWidth: 1,
       borderBottomColor: C.border,
     },
-    iosDone:   { ...typography.body, color: C.primary, fontWeight: '700' },
+    iosTitle: {
+      fontSize:   16,
+      fontWeight: '700',
+      color:      C.text,
+    },
+    iosDoneBtn: {
+      paddingHorizontal: 4,
+      paddingVertical:   2,
+    },
+    iosDone: {
+      fontSize:   15,
+      color:      C.primary,
+      fontWeight: '700',
+    },
     iosPicker: { height: 200 },
   });
 }

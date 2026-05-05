@@ -23,13 +23,13 @@ const CATEGORY_CONFIG: Record<string, {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   grad: readonly [string, string];
   label: string;
-  emoji: string;
+  dot: string;
 }> = {
-  social:       { icon: 'people-outline',     grad: ['#FF4B6E', '#C2185B'], label: 'Social',       emoji: '🎉' },
-  professional: { icon: 'briefcase-outline',  grad: ['#6C5CE7', '#4834D4'], label: 'Professional', emoji: '💼' },
-  sports:       { icon: 'football-outline',   grad: ['#00D2FF', '#0077FF'], label: 'Sports',       emoji: '⚽' },
-  food:         { icon: 'restaurant-outline', grad: ['#FFD700', '#FF8C00'], label: 'Food',         emoji: '🍽️' },
-  other:        { icon: 'bookmark-outline',   grad: ['#00E676', '#00BCD4'], label: 'Other',        emoji: '✨' },
+  social:       { icon: 'people-outline',     grad: ['#FF4B6E', '#C2185B'], label: 'Social',       dot: '#FF4B6E' },
+  professional: { icon: 'briefcase-outline',  grad: ['#6C5CE7', '#4834D4'], label: 'Professional', dot: '#6C5CE7' },
+  sports:       { icon: 'football-outline',   grad: ['#00D2FF', '#0077FF'], label: 'Sports',       dot: '#00D2FF' },
+  food:         { icon: 'restaurant-outline', grad: ['#FFD700', '#FF8C00'], label: 'Food',         dot: '#FFD700' },
+  other:        { icon: 'bookmark-outline',   grad: ['#00E676', '#00BCD4'], label: 'Other',        dot: '#00E676' },
 };
 
 const FILTERS = ['All', 'Social', 'Professional', 'Sports', 'Food', 'Other'] as const;
@@ -76,7 +76,7 @@ function EventCard({
             style={sc.catBadge}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           >
-            <Text style={sc.catEmoji}>{cfg.emoji}</Text>
+            <View style={[sc.catDot, { backgroundColor: item.cancelled ? '#9CA3AF' : cfg.dot }]} />
             <Text style={[sc.catLabel, item.cancelled && sc.mutedText]}>{cfg.label}</Text>
           </LinearGradient>
 
@@ -123,9 +123,14 @@ function EventCard({
         </Text>
         <Text style={sc.desc} numberOfLines={2}>{item.description}</Text>
 
-        {/* Tags */}
+        {/* Tags — pointerEvents none so it doesn't intercept card tap */}
         {(item.tags ?? []).length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={sc.tagsScroll}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={sc.tagsScroll}
+            pointerEvents="none"
+          >
             {(item.tags ?? []).map((tag) => (
               <View key={tag} style={sc.tag}>
                 <Text style={sc.tagText}>#{tag}</Text>
@@ -182,20 +187,21 @@ function makeCardStyles(C: AppColors) {
     card: {
       flexDirection: 'row',
       backgroundColor: C.card,
-      borderRadius: 16,
+      borderRadius: 14,
       borderWidth: 1,
       borderColor: C.border,
       overflow: 'hidden',
+      marginBottom: 0,
       ...shadows.card,
     },
     cardPast:      { opacity: 0.75 },
     cardCancelled: { opacity: 0.6 },
-    stripe:        { width: 4 },
+    stripe:        { width: 3 },
     body:          { flex: 1, padding: spacing.md },
 
     topRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-    catBadge:{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full },
-    catEmoji:{ fontSize: 12 },
+    catBadge:{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full },
+    catDot:  { width: 6, height: 6, borderRadius: 3 },
     catLabel:{ fontSize: 11, fontWeight: '700', color: C.text },
     mutedText:{ color: C.textSecondary },
 
@@ -238,10 +244,10 @@ function makeCardStyles(C: AppColors) {
 
 function SectionLabel({ title, count, C }: { title: string; count: number; C: AppColors }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: C.background }}>
-      <Text style={{ fontSize: 13, fontWeight: '700', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
-      <View style={{ backgroundColor: C.primary + '20', paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.full }}>
-        <Text style={{ fontSize: 11, fontWeight: '700', color: C.primary }}>{count}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: spacing.lg, paddingVertical: 6, backgroundColor: C.background }}>
+      <Text style={{ fontSize: 11, fontWeight: '700', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.6 }}>{title}</Text>
+      <View style={{ backgroundColor: C.primary + '20', paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.full }}>
+        <Text style={{ fontSize: 10, fontWeight: '700', color: C.primary }}>{count}</Text>
       </View>
     </View>
   );
@@ -296,7 +302,6 @@ export default function EventsScreen() {
         getMyAttendingEvents(uid),
       ]);
       setMyHosted(hosted);
-      // Attending includes hosted — remove duplicates
       setMyAttending(attending.filter((e) => e.hostId !== uid));
     } catch {
       // non-critical
@@ -332,8 +337,8 @@ export default function EventsScreen() {
   });
 
   // Sort: upcoming first, then past
-  const upcoming = filteredEvents.filter((e) => !e.cancelled && e.date >= now);
-  const past     = filteredEvents.filter((e) => !e.cancelled && e.date < now);
+  const upcoming  = filteredEvents.filter((e) => !e.cancelled && e.date >= now);
+  const past      = filteredEvents.filter((e) => !e.cancelled && e.date < now);
   const cancelled = filteredEvents.filter((e) => e.cancelled);
 
   const discoverSections = [
@@ -343,10 +348,10 @@ export default function EventsScreen() {
   ];
 
   // ── My events ──
-  const mineData = mineTab === 'hosting' ? myHosted : myAttending;
-  const mineUpcoming = mineData.filter((e) => !e.cancelled && e.date >= now);
-  const minePast     = mineData.filter((e) => !e.cancelled && e.date < now);
-  const mineCancelled= mineData.filter((e) => e.cancelled);
+  const mineData      = mineTab === 'hosting' ? myHosted : myAttending;
+  const mineUpcoming  = mineData.filter((e) => !e.cancelled && e.date >= now);
+  const minePast      = mineData.filter((e) => !e.cancelled && e.date < now);
+  const mineCancelled = mineData.filter((e) => e.cancelled);
 
   const mineSections = [
     ...(mineUpcoming.length > 0  ? [{ title: 'Upcoming', count: mineUpcoming.length,  data: mineUpcoming }]  : []),
@@ -362,44 +367,68 @@ export default function EventsScreen() {
       <SafeAreaView style={sc.flex} edges={['top']}>
 
         {/* ── Header ── */}
-        <View style={sc.header}>
-          <View>
-            <Text style={sc.headerTitle}>Events</Text>
-            <Text style={sc.headerSub}>
-              {mainTab === 'discover' ? `${upcoming.length} upcoming near you` : `${mineData.length} events`}
-            </Text>
-          </View>
-          <TouchableOpacity onPress={() => navigation.navigate('CreateEvent')} activeOpacity={0.8}>
-            <LinearGradient colors={['#FF4B6E', '#C2185B']} style={sc.hostBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-              <Ionicons name="add" size={16} color="#fff" />
-              <Text style={sc.hostBtnText}>Host</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Main tab switcher ── */}
-        <View style={sc.mainTabRow}>
-          {(['discover', 'mine'] as MainTab[]).map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[sc.mainTab, mainTab === tab && sc.mainTabActive]}
-              onPress={() => setMainTab(tab)}
-            >
-              <Ionicons
-                name={tab === 'discover' ? 'compass-outline' : 'person-outline'}
-                size={15}
-                color={mainTab === tab ? C.primary : C.textSecondary}
-              />
-              <Text style={[sc.mainTabText, mainTab === tab && sc.mainTabTextActive]}>
-                {tab === 'discover' ? 'Discover' : 'My Events'}
+        {isDark ? (
+          <LinearGradient
+            colors={[C.background, C.surface]}
+            style={sc.header}
+            start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+          >
+            <View>
+              <Text style={sc.headerTitle}>Events</Text>
+              <Text style={sc.headerSub}>
+                {mainTab === 'discover' ? `${upcoming.length} upcoming near you` : `${mineData.length} events`}
               </Text>
-              {tab === 'mine' && (myHosted.length + myAttending.length) > 0 && (
-                <View style={sc.tabBadge}>
-                  <Text style={sc.tabBadgeText}>{myHosted.length + myAttending.length}</Text>
-                </View>
-              )}
+            </View>
+            <TouchableOpacity onPress={() => navigation.navigate('CreateEvent')} activeOpacity={0.8}>
+              <LinearGradient colors={['#FF4B6E', '#C2185B']} style={sc.hostBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                <Ionicons name="add" size={15} color="#fff" />
+                <Text style={sc.hostBtnText}>Host</Text>
+              </LinearGradient>
             </TouchableOpacity>
-          ))}
+          </LinearGradient>
+        ) : (
+          <View style={sc.header}>
+            <View>
+              <Text style={sc.headerTitle}>Events</Text>
+              <Text style={sc.headerSub}>
+                {mainTab === 'discover' ? `${upcoming.length} upcoming near you` : `${mineData.length} events`}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => navigation.navigate('CreateEvent')} activeOpacity={0.8}>
+              <LinearGradient colors={['#FF4B6E', '#C2185B']} style={sc.hostBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                <Ionicons name="add" size={15} color="#fff" />
+                <Text style={sc.hostBtnText}>Host</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Main tab switcher — segmented pill ── */}
+        <View style={sc.mainTabContainer}>
+          <View style={sc.segmentedPill}>
+            {(['discover', 'mine'] as MainTab[]).map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                style={[sc.segmentTab, mainTab === tab && sc.segmentTabActive]}
+                onPress={() => setMainTab(tab)}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name={tab === 'discover' ? 'compass-outline' : 'person-outline'}
+                  size={14}
+                  color={mainTab === tab ? C.text : C.textSecondary}
+                />
+                <Text style={[sc.segmentTabText, mainTab === tab && sc.segmentTabTextActive]}>
+                  {tab === 'discover' ? 'Discover' : 'My Events'}
+                </Text>
+                {tab === 'mine' && (myHosted.length + myAttending.length) > 0 && (
+                  <View style={sc.tabBadge}>
+                    <Text style={sc.tabBadgeText}>{myHosted.length + myAttending.length}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         {mainTab === 'discover' ? (
@@ -433,19 +462,23 @@ export default function EventsScreen() {
               contentContainerStyle={sc.filterList}
               style={sc.filterBar}
             >
-              {FILTERS.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  onPress={() => setActiveFilter(cat)}
-                  activeOpacity={0.8}
-                  style={[sc.filterChip, activeFilter === cat && sc.filterChipActive]}
-                >
-                  {cat !== 'All' && (
-                    <Text style={sc.filterEmoji}>{CATEGORY_CONFIG[cat.toLowerCase()]?.emoji}</Text>
-                  )}
-                  <Text style={[sc.filterText, activeFilter === cat && sc.filterTextActive]}>{cat}</Text>
-                </TouchableOpacity>
-              ))}
+              {FILTERS.map((cat) => {
+                const isActive = activeFilter === cat;
+                const dot = cat !== 'All' ? CATEGORY_CONFIG[cat.toLowerCase()]?.dot : undefined;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    onPress={() => setActiveFilter(cat)}
+                    activeOpacity={0.8}
+                    style={[sc.filterChip, isActive && sc.filterChipActive]}
+                  >
+                    {isActive && dot && (
+                      <View style={[sc.filterDot, { backgroundColor: dot }]} />
+                    )}
+                    <Text style={[sc.filterText, isActive && sc.filterTextActive]}>{cat}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
 
             {/* ── Event list ── */}
@@ -463,7 +496,7 @@ export default function EventsScreen() {
                   {searchText ? 'No results found' : 'No events yet'}
                 </Text>
                 <Text style={sc.emptySub}>
-                  {searchText ? `Try a different search term` : 'Be the first to host one!'}
+                  {searchText ? 'Try a different search term' : 'Be the first to host one!'}
                 </Text>
                 {!searchText && (
                   <TouchableOpacity onPress={() => navigation.navigate('CreateEvent')} activeOpacity={0.8}>
@@ -507,13 +540,14 @@ export default function EventsScreen() {
           </>
         ) : (
           <>
-            {/* ── My Events sub-tab ── */}
+            {/* ── My Events underline sub-tabs ── */}
             <View style={sc.mineTabRow}>
               {(['hosting', 'attending'] as MineTab[]).map((tab) => (
                 <TouchableOpacity
                   key={tab}
                   style={[sc.mineTab, mineTab === tab && sc.mineTabActive]}
                   onPress={() => setMineTab(tab)}
+                  activeOpacity={0.8}
                 >
                   <Text style={[sc.mineTabText, mineTab === tab && sc.mineTabTextActive]}>
                     {tab === 'hosting' ? `Hosting (${myHosted.length})` : `Attending (${myAttending.length})`}
@@ -586,6 +620,7 @@ function makeStyles(C: AppColors) {
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
     loadingText: { fontSize: 13, color: C.textSecondary },
 
+    // ── Header ──
     header: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm,
@@ -594,29 +629,46 @@ function makeStyles(C: AppColors) {
     },
     headerTitle: { fontSize: 24, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
     headerSub:   { fontSize: 12, color: C.textSecondary, marginTop: 2 },
-    hostBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 16, paddingVertical: 9, borderRadius: radius.full },
-    hostBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+    hostBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.full },
+    hostBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 
-    mainTabRow: {
-      flexDirection: 'row',
-      paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-      gap: spacing.sm,
+    // ── Segmented pill tab switcher ──
+    mainTabContainer: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
       backgroundColor: C.background,
-      borderBottomWidth: 1, borderBottomColor: C.border,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
     },
-    mainTab: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      gap: 5, paddingVertical: 8, borderRadius: radius.lg,
-      backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    segmentedPill: {
+      flexDirection: 'row',
+      backgroundColor: C.surface,
+      borderRadius: 20,
+      padding: 3,
     },
-    mainTabActive: {
-      backgroundColor: C.primary + '15', borderColor: C.primary,
+    segmentTab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 5,
+      paddingVertical: 7,
+      borderRadius: 18,
     },
-    mainTabText:       { fontSize: 13, fontWeight: '600', color: C.textSecondary },
-    mainTabTextActive: { color: C.primary, fontWeight: '700' },
+    segmentTabActive: {
+      backgroundColor: C.background,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.08,
+      shadowRadius: 3,
+      elevation: 2,
+    },
+    segmentTabText:       { fontSize: 13, fontWeight: '600', color: C.textSecondary },
+    segmentTabTextActive: { color: C.text, fontWeight: '700' },
     tabBadge:     { backgroundColor: C.primary, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1, minWidth: 16, alignItems: 'center' },
     tabBadgeText: { fontSize: 10, fontWeight: '800', color: '#fff' },
 
+    // ── Search ──
     searchRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: C.background },
     searchBox: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
@@ -626,32 +678,51 @@ function makeStyles(C: AppColors) {
     },
     searchInput: { flex: 1, fontSize: 14, color: C.text },
 
+    // ── Filter chips ──
     filterBar:  { backgroundColor: C.background, borderBottomWidth: 1, borderBottomColor: C.border },
     filterList: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm },
     filterChip: {
-      flexDirection: 'row', alignItems: 'center', gap: 4,
-      paddingHorizontal: 12, paddingVertical: 7,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      height: 32,
+      minWidth: 52,
+      paddingHorizontal: 13,
       borderRadius: radius.full,
-      backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+      backgroundColor: C.surface,
+      borderWidth: 1,
+      borderColor: C.border,
+      justifyContent: 'center',
     },
     filterChipActive: { backgroundColor: C.primary + '15', borderColor: C.primary },
-    filterEmoji:      { fontSize: 12 },
+    filterDot:        { width: 6, height: 6, borderRadius: 3 },
     filterText:       { fontSize: 12, fontWeight: '600', color: C.textSecondary },
     filterTextActive: { color: C.primary },
 
+    // ── Mine underline sub-tabs ──
     mineTabRow: {
-      flexDirection: 'row', gap: spacing.sm,
-      paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-      backgroundColor: C.background, borderBottomWidth: 1, borderBottomColor: C.border,
+      flexDirection: 'row',
+      paddingHorizontal: spacing.lg,
+      backgroundColor: C.background,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
     },
-    mineTab:           { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: radius.md, backgroundColor: C.surface },
-    mineTabActive:     { backgroundColor: C.primary + '15' },
+    mineTab: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: 11,
+      borderBottomWidth: 2,
+      borderBottomColor: 'transparent',
+    },
+    mineTabActive:     { borderBottomColor: C.primary },
     mineTabText:       { fontSize: 13, fontWeight: '600', color: C.textSecondary },
     mineTabTextActive: { color: C.primary, fontWeight: '700' },
 
+    // ── List ──
     list:    { paddingTop: spacing.xs, paddingBottom: 100 },
     cardWrap:{ paddingHorizontal: spacing.lg },
 
+    // ── Empty state ──
     emptyWrap:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
     emptyIcon:  { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
     emptyTitle: { fontSize: 18, fontWeight: '700', color: C.text, textAlign: 'center' },
