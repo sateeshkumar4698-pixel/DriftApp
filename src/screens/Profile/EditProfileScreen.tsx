@@ -21,11 +21,12 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../../config/firebase';
 import { useAuthStore } from '../../store/authStore';
 import { setUserProfile } from '../../utils/firestore-helpers';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
 import { LookingForOption } from '../../types';
 import { validateDriftId, generateUsername } from '../../utils/profileShare';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { useTheme, AppColors } from '../../utils/useTheme';
 
 
 // ─── Design tokens (dark theme) ───────────────────────────────────────────────
@@ -93,14 +94,15 @@ function SectionHeader({ title, subtitle, icon, grad }: {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   grad: readonly [string, string];
 }) {
+  const { C, isDark } = useTheme();
   return (
     <View style={sc.sectionHeader}>
       <LinearGradient colors={grad} style={sc.sectionIconBox} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <Ionicons name={icon} size={14} color="#fff" />
       </LinearGradient>
       <View style={{ flex: 1 }}>
-        <Text style={sc.sectionTitle}>{title}</Text>
-        {subtitle ? <Text style={sc.sectionSubtitle}>{subtitle}</Text> : null}
+        <Text style={[sc.sectionTitle, { color: isDark ? D.text : C.text }]}>{title}</Text>
+        {subtitle ? <Text style={[sc.sectionSubtitle, { color: isDark ? D.textSub : C.textSecondary }]}>{subtitle}</Text> : null}
       </View>
     </View>
   );
@@ -118,19 +120,25 @@ function DarkInput({
   icon: React.ComponentProps<typeof Ionicons>['name'];
 }) {
   const [focused, setFocused] = useState(false);
+  const { C, isDark } = useTheme();
   return (
     <View style={sc.inputWrap}>
       <View style={sc.inputLabel}>
-        <Ionicons name={icon} size={13} color={D.textSub} style={{ marginRight: 4 }} />
-        <Text style={sc.inputLabelText}>{label}</Text>
+        <Ionicons name={icon} size={13} color={isDark ? D.textSub : C.textSecondary} style={{ marginRight: 4 }} />
+        <Text style={[sc.inputLabelText, { color: isDark ? D.textSub : C.textSecondary }]}>{label}</Text>
       </View>
-      <View style={[sc.inputBox, focused && sc.inputBoxFocused, multiline && sc.inputBoxMulti]}>
+      <View style={[
+        sc.inputBox,
+        { backgroundColor: isDark ? D.bgInput : C.background, borderColor: isDark ? D.border : C.border },
+        focused && [sc.inputBoxFocused, { borderColor: isDark ? D.purple : C.primary }],
+        multiline && sc.inputBoxMulti,
+      ]}>
         <TextInput
-          style={[sc.inputText, multiline && sc.inputTextMulti]}
+          style={[sc.inputText, { color: isDark ? D.text : C.text }, multiline && sc.inputTextMulti]}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor={D.textMuted}
+          placeholderTextColor={isDark ? D.textMuted : C.textSecondary}
           multiline={multiline}
           numberOfLines={multiline ? 3 : 1}
           textAlignVertical={multiline ? 'top' : 'center'}
@@ -146,6 +154,7 @@ function DarkInput({
 
 export default function EditProfileScreen() {
   const navigation = useNavigation();
+  const { C, isDark } = useTheme();
   const { firebaseUser, userProfile, setUserProfile: setStoreProfile } = useAuthStore();
 
   const [name,        setName]        = useState(userProfile?.name        ?? '');
@@ -255,22 +264,31 @@ export default function EditProfileScreen() {
   const PHOTO_SLOTS = 6;
 
   return (
-    <View style={sc.root}>
-      {/* ── Full-screen dark background ───────────────────────────────────── */}
-      <LinearGradient colors={['#0D0D1A', '#0A0A1F', '#0D0D1A']} style={StyleSheet.absoluteFill} />
+    <View style={[sc.root, { backgroundColor: C.background }]}>
+      {isDark
+        ? <LinearGradient colors={['#0D0D1A', '#0A0A1F', '#0D0D1A']} style={StyleSheet.absoluteFill} />
+        : <LinearGradient colors={['#F8F9FA', '#FFFFFF', '#F0F2F5']} style={StyleSheet.absoluteFill} />
+      }
 
       <SafeAreaView style={sc.safeArea}>
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
-        <LinearGradient colors={GRAD_HEADER} style={sc.header} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <LinearGradient
+          colors={isDark ? GRAD_HEADER : ['#F8F9FA', '#FFFFFF', '#F0F2F5'] as const}
+          style={[sc.header, !isDark && { borderBottomWidth: 1, borderBottomColor: C.border }]}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        >
           <TouchableOpacity style={sc.backBtn} onPress={() => navigation.goBack()}>
-            <LinearGradient colors={['#ffffff18', '#ffffff0A']} style={sc.backBtnGrad}>
-              <Ionicons name="chevron-back" size={22} color="#fff" />
+            <LinearGradient
+              colors={isDark ? ['#ffffff18', '#ffffff0A'] as const : ['#E5E7EB', '#D1D5DB'] as const}
+              style={sc.backBtnGrad}
+            >
+              <Ionicons name="chevron-back" size={22} color={isDark ? '#fff' : C.text} />
             </LinearGradient>
           </TouchableOpacity>
           <View style={sc.headerCenter}>
-            <Text style={sc.headerTitle}>Edit Profile</Text>
-            <Text style={sc.headerSub}>Make it shine ✨</Text>
+            <Text style={[sc.headerTitle, { color: isDark ? '#fff' : C.text }]}>Edit Profile</Text>
+            <Text style={[sc.headerSub, { color: isDark ? D.textSub : C.textSecondary }]}>Make it shine ✨</Text>
           </View>
           {/* Completeness badge */}
           <View style={sc.headerRight}>
@@ -293,22 +311,22 @@ export default function EditProfileScreen() {
           >
 
             {/* ── Completeness bar ──────────────────────────────────────── */}
-            <GlassCard style={sc.completeCard}>
+            <GlassCard style={[sc.completeCard, { backgroundColor: isDark ? D.bgCard : C.surface, borderColor: isDark ? D.border : C.border }]}>
               <View style={sc.completeRow}>
                 <Ionicons name="sparkles-outline" size={14} color={D.cyan} />
-                <Text style={sc.completeTitle}>Profile Strength</Text>
+                <Text style={[sc.completeTitle, { color: isDark ? D.text : C.text }]}>Profile Strength</Text>
                 <Text style={[sc.completePct, { color: completeness >= 80 ? D.cyan : completeness >= 50 ? D.purple : D.pink }]}>
                   {completeness}%
                 </Text>
               </View>
-              <View style={sc.barBg}>
+              <View style={[sc.barBg, { backgroundColor: isDark ? '#ffffff15' : '#00000010' }]}>
                 <LinearGradient
                   colors={completeness >= 80 ? GRAD_CYAN : completeness >= 50 ? GRAD_PURPLE : GRAD_PINK}
                   style={[sc.barFill, { width: `${completeness}%` as any }]}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 />
               </View>
-              <Text style={sc.completeHint}>
+              <Text style={[sc.completeHint, { color: isDark ? D.textSub : C.textSecondary }]}>
                 {completeness < 50  ? 'Add bio, city and interests to level up'
                 : completeness < 80 ? 'Add 3+ photos and complete your details'
                 :                     'Looking great! 🔥 Almost perfect'}
@@ -316,7 +334,7 @@ export default function EditProfileScreen() {
             </GlassCard>
 
             {/* ── Photos ────────────────────────────────────────────────── */}
-            <GlassCard>
+            <GlassCard style={{ backgroundColor: isDark ? D.bgCard : C.surface, borderColor: isDark ? D.border : C.border }}>
               <SectionHeader
                 title={`Photos  ${photos.length}/6`}
                 subtitle="First photo is your main pic. Add 3+ for better matches."
@@ -337,13 +355,13 @@ export default function EditProfileScreen() {
                       {/* gradient border ring for main slot */}
                       {isMain ? (
                         <LinearGradient colors={GRAD_SLOT} style={sc.photoRing} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                          <View style={sc.photoInner}>
-                            {renderSlot(i, photoUrl, uploadingIdx, pickPhoto, removePhoto, isMain)}
+                          <View style={[sc.photoInner, { backgroundColor: isDark ? D.bgInput : C.background }]}>
+                            {renderSlot(i, photoUrl, uploadingIdx, pickPhoto, removePhoto, isMain, isDark, C)}
                           </View>
                         </LinearGradient>
                       ) : (
-                        <View style={sc.photoSlotPlain}>
-                          {renderSlot(i, photoUrl, uploadingIdx, pickPhoto, removePhoto, isMain)}
+                        <View style={[sc.photoSlotPlain, { backgroundColor: isDark ? D.bgInput : C.background, borderColor: isDark ? D.border : C.border }]}>
+                          {renderSlot(i, photoUrl, uploadingIdx, pickPhoto, removePhoto, isMain, isDark, C)}
                         </View>
                       )}
                     </TouchableOpacity>
@@ -353,7 +371,7 @@ export default function EditProfileScreen() {
             </GlassCard>
 
             {/* ── Basic info ────────────────────────────────────────────── */}
-            <GlassCard>
+            <GlassCard style={{ backgroundColor: isDark ? D.bgCard : C.surface, borderColor: isDark ? D.border : C.border }}>
               <SectionHeader title="Basic Info" icon="person-outline" grad={GRAD_PURPLE} />
               <DarkInput label="Name"      icon="person-outline"    value={name}      onChangeText={setName}      placeholder="Your name" />
               <DarkInput label="Bio"       icon="create-outline"    value={bio}       onChangeText={setBio}       placeholder="A little about yourself..." multiline />
@@ -364,7 +382,7 @@ export default function EditProfileScreen() {
             </GlassCard>
 
             {/* ── Drift ID ──────────────────────────────────────────────── */}
-            <GlassCard>
+            <GlassCard style={{ backgroundColor: isDark ? D.bgCard : C.surface, borderColor: isDark ? D.border : C.border }}>
               <SectionHeader
                 title="Drift ID"
                 subtitle="Your unique @handle — others can find you with it."
@@ -376,11 +394,11 @@ export default function EditProfileScreen() {
                   <Text style={sc.driftAt}>@</Text>
                 </LinearGradient>
                 <TextInput
-                  style={[sc.driftIdInput, driftIdError ? sc.driftIdInputErr : null]}
+                  style={[sc.driftIdInput, driftIdError ? sc.driftIdInputErr : null, { backgroundColor: isDark ? D.bgInput : C.background, borderColor: isDark ? D.border : C.border, color: isDark ? D.text : C.text }]}
                   value={driftId}
                   onChangeText={(v) => { setDriftId(v.toLowerCase().replace(/[^a-z0-9_.]/g, '')); setDriftIdError(''); }}
                   placeholder="yourhandle"
-                  placeholderTextColor={D.textMuted}
+                  placeholderTextColor={isDark ? D.textMuted : C.textSecondary}
                   autoCapitalize="none"
                   autoCorrect={false}
                   maxLength={20}
@@ -388,18 +406,18 @@ export default function EditProfileScreen() {
               </View>
               {driftIdError ? (
                 <View style={sc.driftErrRow}>
-                  <Ionicons name="alert-circle-outline" size={12} color={colors.error} />
+                  <Ionicons name="alert-circle-outline" size={12} color={C.error} />
                   <Text style={sc.driftErrText}>{driftIdError}</Text>
                 </View>
               ) : (
-                <Text style={sc.driftIdHint}>
+                <Text style={[sc.driftIdHint, { color: isDark ? D.textMuted : C.textSecondary }]}>
                   {userProfile?.driftId ? 'Change anytime.' : 'Leave blank to auto-generate.'}
                 </Text>
               )}
             </GlassCard>
 
             {/* ── Interests ─────────────────────────────────────────────── */}
-            <GlassCard>
+            <GlassCard style={{ backgroundColor: isDark ? D.bgCard : C.surface, borderColor: isDark ? D.border : C.border }}>
               <SectionHeader
                 title={`Interests  ${interests.length} selected`}
                 subtitle="Pick at least 3 for better matches."
@@ -418,9 +436,9 @@ export default function EditProfileScreen() {
                           <Text style={sc.interestChipTextSel}>{item}</Text>
                         </LinearGradient>
                       ) : (
-                        <View style={sc.interestChipUnsel}>
-                          <Ionicons name={icon} size={13} color={D.textSub} />
-                          <Text style={sc.interestChipText}>{item}</Text>
+                        <View style={[sc.interestChipUnsel, { backgroundColor: isDark ? D.bgInput : C.background, borderColor: isDark ? D.border : C.border }]}>
+                          <Ionicons name={icon} size={13} color={isDark ? D.textSub : C.textSecondary} />
+                          <Text style={[sc.interestChipText, { color: isDark ? D.textSub : C.textSecondary }]}>{item}</Text>
                         </View>
                       )}
                     </TouchableOpacity>
@@ -430,7 +448,7 @@ export default function EditProfileScreen() {
             </GlassCard>
 
             {/* ── Looking For ───────────────────────────────────────────── */}
-            <GlassCard>
+            <GlassCard style={{ backgroundColor: isDark ? D.bgCard : C.surface, borderColor: isDark ? D.border : C.border }}>
               <SectionHeader title="Looking For" icon="search-outline" grad={GRAD_PURPLE} />
               <View style={sc.lfGrid}>
                 {LOOKING_FOR.map(({ label, value, icon, grad }) => {
@@ -446,9 +464,9 @@ export default function EditProfileScreen() {
                           </View>
                         </LinearGradient>
                       ) : (
-                        <View style={sc.lfCardUnsel}>
-                          <Ionicons name={icon} size={20} color={D.textSub} />
-                          <Text style={sc.lfLabel}>{label}</Text>
+                        <View style={[sc.lfCardUnsel, { backgroundColor: isDark ? D.bgInput : C.background, borderColor: isDark ? D.border : C.border }]}>
+                          <Ionicons name={icon} size={20} color={isDark ? D.textSub : C.textSecondary} />
+                          <Text style={[sc.lfLabel, { color: isDark ? D.textSub : C.textSecondary }]}>{label}</Text>
                         </View>
                       )}
                     </TouchableOpacity>
@@ -487,9 +505,11 @@ function renderSlot(
   pickPhoto: (i: number) => void,
   removePhoto: (i: number) => void,
   isMain: boolean,
+  isDark: boolean,
+  C: any
 ) {
   if (uploadingIdx === i) {
-    return <ActivityIndicator color={D.pink} />;
+    return <ActivityIndicator color={isDark ? D.pink : C.primary} />;
   }
   if (photoUrl) {
     return (
@@ -508,9 +528,9 @@ function renderSlot(
   }
   return (
     <TouchableOpacity style={sc.photoAddBtn} onPress={() => pickPhoto(i)} activeOpacity={0.7}>
-      <LinearGradient colors={['#ffffff0F', '#ffffff05']} style={sc.photoAddGrad}>
-        <Ionicons name="add" size={24} color={isMain ? D.pink : D.textMuted} />
-        {isMain && <Text style={sc.photoAddLabel}>Add Photo</Text>}
+      <LinearGradient colors={isDark ? ['#ffffff0F', '#ffffff05'] : ['#00000005', '#00000002']} style={sc.photoAddGrad}>
+        <Ionicons name="add" size={24} color={isMain ? (isDark ? D.pink : C.primary) : (isDark ? D.textMuted : C.textSecondary)} />
+        {isMain && <Text style={[sc.photoAddLabel, { color: isDark ? D.pink : C.primary }]}>Add Photo</Text>}
       </LinearGradient>
     </TouchableOpacity>
   );
@@ -519,7 +539,7 @@ function renderSlot(
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const sc = StyleSheet.create({
-  root:      { flex: 1, backgroundColor: D.bg },
+  root:      { flex: 1 },
   safeArea:  { flex: 1 },
   flex:      { flex: 1 },
 
@@ -562,26 +582,27 @@ const sc = StyleSheet.create({
   // Completeness card
   completeCard: { paddingVertical: spacing.sm + 4 },
   completeRow:  { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 },
-  completeTitle: { flex: 1, fontSize: 13, fontWeight: '600', color: D.text },
+  completeTitle: { flex: 1, fontSize: 13, fontWeight: '600' },
   completePct:   { fontSize: 13, fontWeight: '800' },
-  barBg:  { height: 6, backgroundColor: '#ffffff15', borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
+  barBg:  { height: 6, borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
   barFill:{ height: 6, borderRadius: 3 },
-  completeHint: { fontSize: 11, color: D.textSub },
+  completeHint: { fontSize: 11 },
 
   // Section header
   sectionHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.md, gap: 10 },
   sectionIconBox: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  sectionTitle:    { fontSize: 14, fontWeight: '700', color: D.text },
-  sectionSubtitle: { fontSize: 11, color: D.textSub, marginTop: 2, lineHeight: 15 },
+  // Note: sectionTitle / sectionSubtitle colors are now injected dynamically via inline style props
+  sectionTitle:    { fontSize: 14, fontWeight: '700' },
+  sectionSubtitle: { fontSize: 11, marginTop: 2, lineHeight: 15 },
 
   // Input
   inputWrap:       { marginBottom: spacing.sm + 2 },
   inputLabel:      { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
-  inputLabelText:  { fontSize: 12, fontWeight: '600', color: D.textSub, textTransform: 'uppercase', letterSpacing: 0.5 },
-  inputBox:        { backgroundColor: D.bgInput, borderRadius: radius.md, borderWidth: 1.5, borderColor: D.border, paddingHorizontal: spacing.md, height: 48, justifyContent: 'center' },
+  inputLabelText:  { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  inputBox:        { borderRadius: radius.md, borderWidth: 1.5, paddingHorizontal: spacing.md, height: 48, justifyContent: 'center' },
   inputBoxFocused: { borderColor: D.purple },
   inputBoxMulti:   { height: 88, paddingVertical: spacing.sm },
-  inputText:       { fontSize: 14, color: D.text, fontWeight: '400' },
+  inputText:       { fontSize: 14, fontWeight: '400' },
   inputTextMulti:  { height: 72 },
 
   // Photos — 3-column, percentage widths so no pixel math needed
@@ -603,9 +624,9 @@ const sc = StyleSheet.create({
   driftAtBox:    { width: 40, height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   driftAt:       { fontSize: 18, fontWeight: '800', color: '#fff' },
   driftIdInput:  { flex: 1, height: 46, backgroundColor: D.bgInput, borderRadius: radius.md, borderWidth: 1.5, borderColor: D.border, paddingHorizontal: spacing.md, fontSize: 15, color: D.text, fontWeight: '500' },
-  driftIdInputErr:{ borderColor: colors.error },
+  driftIdInputErr:{ borderColor: '#EF4444' },
   driftErrRow:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  driftErrText:  { fontSize: 12, color: colors.error },
+  driftErrText:  { fontSize: 12, color: '#EF4444' },
   driftIdHint:   { fontSize: 12, color: D.textMuted },
 
   // Interests

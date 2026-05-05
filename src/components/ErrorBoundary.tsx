@@ -1,6 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors, spacing, typography, radius } from '../utils/theme';
+import { lightColors, spacing, typography, radius } from '../utils/useTheme';
+
+// ErrorBoundary is a class component — hooks are unavailable.
+// We fall back to lightColors for the error UI (acceptable for a rare fallback screen).
+const colors = lightColors;
 
 interface Props {
   children: React.ReactNode;

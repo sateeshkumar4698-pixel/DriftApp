@@ -30,7 +30,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAuthStore } from '../../store/authStore';
 import Avatar from '../../components/Avatar';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { ProfileStackParamList } from '../../types';
 import {
   CARD_THEMES,
@@ -205,6 +206,8 @@ const cardStyles = StyleSheet.create({
 export default function ProfileShareScreen() {
   const navigation  = useNavigation<Nav>();
   const { userProfile } = useAuthStore();
+  const { C } = useTheme();
+  const styles = makeStyles(C);
 
   const autoTheme = pickThemeForVibe(userProfile?.vibeProfile);
   const [theme,   setTheme]   = useState<CardTheme>(autoTheme);
@@ -271,7 +274,7 @@ export default function ProfileShareScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.primary} />
+          <Ionicons name="chevron-back" size={24} color={C.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Share Profile</Text>
         <View style={{ width: 40 }} />
@@ -345,7 +348,7 @@ export default function ProfileShareScreen() {
             activeOpacity={0.85}
           >
             <Text style={styles.actionEmoji}>{copied ? '✅' : '🔗'}</Text>
-            <Text style={[styles.actionSecondaryText, copied && { color: colors.success }]}>
+            <Text style={[styles.actionSecondaryText, copied && { color: C.success }]}>
               {copied ? 'Copied!' : 'Copy Link'}
             </Text>
             <Text style={styles.actionSubSecondary}>Profile URL</Text>
@@ -404,21 +407,22 @@ export default function ProfileShareScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+  root: { flex: 1, backgroundColor: C.background },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
+    borderBottomWidth: 1, borderBottomColor: C.border,
   },
   backBtn:     { width: 40, alignItems: 'flex-start' },
-  headerTitle: { ...typography.heading, color: colors.text },
+  headerTitle: { ...typography.heading, color: C.text },
 
   scroll: { alignItems: 'center', padding: spacing.lg, paddingBottom: 60, gap: spacing.lg },
 
   section:      { width: '100%', gap: spacing.sm },
-  sectionLabel: { ...typography.caption, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 },
+  sectionLabel: { ...typography.caption, fontWeight: '700', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 },
 
   themesRow:       { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   themeBtn:        { paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radius.md, borderWidth: 1.5, position: 'relative', alignItems: 'center' },
@@ -426,36 +430,37 @@ const styles = StyleSheet.create({
   themeBtnLabel:   { fontSize: 12, fontWeight: '600', color: '#FFFFFF' },
   themeCheck:      { position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   themeCheckText:  { fontSize: 10, color: '#fff', fontWeight: '700' },
-  themeHint:       { ...typography.small, color: colors.textSecondary, fontStyle: 'italic' },
+  themeHint:       { ...typography.small, color: C.textSecondary, fontStyle: 'italic' },
 
   actionsGrid:     { flexDirection: 'row', gap: spacing.md, width: '100%' },
   actionBtn:       { flex: 1, borderRadius: radius.lg, paddingVertical: spacing.lg, alignItems: 'center', gap: 4, ...shadows.card },
-  actionPrimary:   { backgroundColor: colors.primary },
-  actionSecondary: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border },
-  actionCopied:    { borderColor: colors.success },
+  actionPrimary:   { backgroundColor: C.primary },
+  actionSecondary: { backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.border },
+  actionCopied:    { borderColor: C.success },
   actionEmoji:         { fontSize: 24 },
   actionPrimaryText:   { ...typography.body, fontWeight: '700', color: '#fff' },
-  actionSecondaryText: { ...typography.body, fontWeight: '700', color: colors.text },
+  actionSecondaryText: { ...typography.body, fontWeight: '700', color: C.text },
   actionSubPrimary:    { ...typography.small, color: 'rgba(255,255,255,0.65)' },
-  actionSubSecondary:  { ...typography.small, color: colors.textSecondary },
+  actionSubSecondary:  { ...typography.small, color: C.textSecondary },
 
-  msgRow:  { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, ...shadows.card },
-  msgIcon: { width: 52, height: 52, borderRadius: 14, backgroundColor: `${colors.primary}12`, alignItems: 'center', justifyContent: 'center' },
+  msgRow:  { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: C.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: C.border, padding: spacing.md, ...shadows.card },
+  msgIcon: { width: 52, height: 52, borderRadius: 14, backgroundColor: `${C.primary}12`, alignItems: 'center', justifyContent: 'center' },
   msgText: { flex: 1 },
-  msgTitle:{ ...typography.body, fontWeight: '700', color: colors.text },
-  msgSub:  { ...typography.small, color: colors.textSecondary, lineHeight: 18, marginTop: 2 },
-  msgArrow:{ fontSize: 22, color: colors.textSecondary },
+  msgTitle:{ ...typography.body, fontWeight: '700', color: C.text },
+  msgSub:  { ...typography.small, color: C.textSecondary, lineHeight: 18, marginTop: 2 },
+  msgArrow:{ fontSize: 22, color: C.textSecondary },
 
-  driftIdCard:      { width: '100%', backgroundColor: `${colors.primary}08`, borderRadius: radius.lg, borderWidth: 1, borderColor: `${colors.primary}25`, padding: spacing.md, gap: spacing.sm },
+  driftIdCard:      { width: '100%', backgroundColor: `${C.primary}08`, borderRadius: radius.lg, borderWidth: 1, borderColor: `${C.primary}25`, padding: spacing.md, gap: spacing.sm },
   driftIdRow:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  driftIdLabel:     { ...typography.body, fontWeight: '700', color: colors.text },
-  driftIdBadge:     { backgroundColor: `${colors.primary}18`, paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.full },
-  driftIdBadgeText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
-  driftIdDesc:      { ...typography.small, color: colors.textSecondary, lineHeight: 18 },
-  driftIdBtn:       { alignSelf: 'flex-start', backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.md },
+  driftIdLabel:     { ...typography.body, fontWeight: '700', color: C.text },
+  driftIdBadge:     { backgroundColor: `${C.primary}18`, paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.full },
+  driftIdBadgeText: { ...typography.caption, color: C.primary, fontWeight: '700' },
+  driftIdDesc:      { ...typography.small, color: C.textSecondary, lineHeight: 18 },
+  driftIdBtn:       { alignSelf: 'flex-start', backgroundColor: C.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.md },
   driftIdBtnText:   { ...typography.caption, color: '#fff', fontWeight: '700' },
 
-  tips:      { width: '100%', backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.sm },
-  tipsTitle: { ...typography.body, fontWeight: '700', color: colors.text },
-  tip:       { ...typography.small, color: colors.textSecondary, lineHeight: 20 },
-});
+  tips:      { width: '100%', backgroundColor: C.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: C.border, padding: spacing.md, gap: spacing.sm },
+  tipsTitle: { ...typography.body, fontWeight: '700', color: C.text },
+  tip:       { ...typography.small, color: C.textSecondary, lineHeight: 20 },
+  });
+}

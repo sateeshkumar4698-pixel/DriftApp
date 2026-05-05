@@ -3,9 +3,11 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -23,7 +25,10 @@ import {
 import { formatRelativeTime } from '../../utils/helpers';
 import Avatar from '../../components/Avatar';
 import EmptyState from '../../components/EmptyState';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
+import { dynamicVibeMatch, matchBadgeColor } from '../../utils/vibeMatch';
+import { useMoodStore } from '../../store/moodStore';
 import {
   Connection,
   ConnectionRequest,
@@ -47,6 +52,8 @@ function RequestCard({
   onDecline: () => void;
   loading: boolean;
 }) {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const navigation = useNavigation<Nav>();
   return (
     <View style={styles.requestCard}>
@@ -98,10 +105,10 @@ function RequestCard({
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color={colors.background} size="small" />
+            <ActivityIndicator color={C.background} size="small" />
           ) : (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="checkmark-circle" size={18} color={colors.background} />
+              <Ionicons name="checkmark-circle" size={18} color={C.background} />
               <Text style={styles.acceptBtnText}>Accept</Text>
             </View>
           )}
@@ -115,16 +122,27 @@ function RequestCard({
 function ConnectionRow({
   connection,
   otherUser,
+  myProfile,
+  mood,
+  moodIntensity,
   onPress,
   onMeetup,
 }: {
   connection: Connection;
   otherUser: UserProfile;
+  myProfile?: UserProfile | null;
+  mood: import('../../store/moodStore').MoodPreset;
+  moodIntensity: 1 | 2 | 3;
   onPress: () => void;
   onMeetup: () => void;
 }) {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const hasMeetupProposal = !!connection.meetupProposal;
   const meetupStatus = connection.meetupProposal?.status;
+  const matchResult = myProfile ? dynamicVibeMatch(myProfile, otherUser, mood, moodIntensity) : null;
+  const matchScore  = matchResult?.score ?? 0;
+  const badgeColors = matchScore >= 50 ? matchBadgeColor(matchScore) : null;
 
   return (
     <TouchableOpacity style={styles.connRow} onPress={onPress}>
@@ -148,6 +166,13 @@ function ConnectionRow({
         )}
       </View>
       <View style={styles.connRight}>
+        {/* Vibe match score badge */}
+        {matchScore >= 50 && badgeColors && (
+          <View style={[styles.vibeScoreBadge, { backgroundColor: badgeColors.bg }]}>
+            <Text style={{ fontSize: 9 }}>{badgeColors.emoji}</Text>
+            <Text style={styles.vibeScoreText}>{matchScore}%</Text>
+          </View>
+        )}
         {connection.lastMessageAt && (
           <Text style={styles.connTime}>
             {formatRelativeTime(connection.lastMessageAt)}
@@ -155,8 +180,7 @@ function ConnectionRow({
         )}
         {!hasMeetupProposal && (
           <TouchableOpacity style={styles.meetupBtn} onPress={onMeetup}>
-            <Ionicons name="cafe-outline" size={14} color={colors.secondary} />
-            <Text style={styles.meetupBtnText}> Meet</Text>
+            <Text style={styles.meetupBtnText}>Meet</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -174,6 +198,8 @@ function TabBar({
   onSelect: (t: 'requests' | 'connected') => void;
   pendingCount: number;
 }) {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   return (
     <View style={styles.tabBar}>
       {(['requests', 'connected'] as const).map((tab) => (
@@ -196,12 +222,18 @@ function TabBar({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function ConnectionsScreen() {
+  const { C, isDark } = useTheme();
+  const styles = makeStyles(C);
   const navigation = useNavigation<Nav>();
-  const { firebaseUser } = useAuthStore();
+  const { firebaseUser, userProfile } = useAuthStore();
+  const moodPreset    = useMoodStore((s) => s.moodPreset);
+  const moodIntensity = useMoodStore((s) => s.moodIntensity);
 
   const [activeTab, setActiveTab] = useState<'requests' | 'connected'>('requests');
   const [pendingRequests, setPendingRequests] = useState<ConnectionRequest[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [search, setSearch] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   // user profiles fetched for each request/connection
   const [senderProfiles, setSenderProfiles] = useState<Record<string, UserProfile>>({});
@@ -268,11 +300,27 @@ export default function ConnectionsScreen() {
     }
   }
 
+  // Filter connections by search
+  const filteredConnections = connections.filter((c) => {
+    if (!search) return true;
+    const otherUid = c.users.find((u) => u !== firebaseUser?.uid) ?? '';
+    const otherUser = connectedProfiles[otherUid];
+    if (!otherUser) return false;
+    return otherUser.name.toLowerCase().includes(search.toLowerCase()) ||
+      (otherUser.city ?? '').toLowerCase().includes(search.toLowerCase());
+  });
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await new Promise((res) => setTimeout(res, 800));
+    setRefreshing(false);
+  }
+
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
+          <Ionicons name="chevron-back" size={24} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Connections</Text>
         <View style={{ width: 40 }} />
@@ -283,6 +331,27 @@ export default function ConnectionsScreen() {
         onSelect={setActiveTab}
         pendingCount={pendingRequests.length}
       />
+
+      {/* Search bar (Connected tab) */}
+      {activeTab === 'connected' && (
+        <View style={styles.searchRow}>
+          <View style={styles.searchBox}>
+            <Text style={{ fontSize: 14 }}>🔍</Text>
+            <TextInput
+              style={[styles.searchInput, { color: C.text }]}
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search connections..."
+              placeholderTextColor={C.textSecondary}
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')}>
+                <Text style={{ color: C.textSecondary, fontSize: 14 }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
 
       {activeTab === 'requests' ? (
         <FlatList
@@ -300,7 +369,7 @@ export default function ConnectionsScreen() {
             const sender = senderProfiles[item.fromUid];
             if (!sender) return (
               <View style={styles.skeletonCard}>
-                <ActivityIndicator color={colors.primary} />
+                <ActivityIndicator color={C.primary} />
               </View>
             );
             return (
@@ -317,14 +386,21 @@ export default function ConnectionsScreen() {
         />
       ) : (
         <FlatList
-          data={connections}
+          data={filteredConnections}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={C.primary}
+            />
+          }
           ListEmptyComponent={
             <EmptyState
               emoji="🌱"
-              title="No connections yet"
-              subtitle="Browse people on Discover and send a genuine connect request."
+              title={search ? 'No results' : 'No connections yet'}
+              subtitle={search ? `No connections named "${search}"` : 'Browse people on Discover and send a genuine connect request.'}
             />
           }
           renderItem={({ item }) => {
@@ -335,6 +411,9 @@ export default function ConnectionsScreen() {
               <ConnectionRow
                 connection={item}
                 otherUser={otherUser}
+                myProfile={userProfile}
+                mood={moodPreset}
+                moodIntensity={moodIntensity}
                 onPress={() =>
                   navigation.navigate('Chat', {
                     connectionId: item.id,
@@ -360,107 +439,129 @@ export default function ConnectionsScreen() {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { ...typography.heading, color: colors.text },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { ...typography.heading, color: C.text },
 
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  tab: {
-    flex: 1, paddingVertical: spacing.md, alignItems: 'center',
-    borderBottomWidth: 2, borderBottomColor: 'transparent',
-  },
-  tabActive: { borderBottomColor: colors.primary },
-  tabText: { ...typography.body, color: colors.textSecondary, fontWeight: '500' },
-  tabTextActive: { color: colors.primary, fontWeight: '700' },
-  badge: { color: colors.primary, fontWeight: '700' },
+    tabBar: {
+      flexDirection: 'row',
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+      backgroundColor: C.background,
+    },
+    tab: {
+      flex: 1, paddingVertical: spacing.md, alignItems: 'center',
+      borderBottomWidth: 2, borderBottomColor: 'transparent',
+    },
+    tabActive: { borderBottomColor: C.primary },
+    tabText: { ...typography.body, color: C.textSecondary, fontWeight: '500' },
+    tabTextActive: { color: C.primary, fontWeight: '700' },
+    badge: { color: C.primary, fontWeight: '700' },
 
-  list: { padding: spacing.lg, paddingBottom: spacing.xxl, flexGrow: 1 },
+    list: { padding: spacing.lg, paddingBottom: spacing.xxl, flexGrow: 1 },
 
-  // Request card
-  requestCard: {
-    backgroundColor: colors.background,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    ...shadows.card,
-  },
-  requestTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
-  requestInfo: { flex: 1 },
-  requestNameRow: { flexDirection: 'row', alignItems: 'baseline' },
-  requestName: { ...typography.body, fontWeight: '700', color: colors.text },
-  requestCity: { ...typography.caption, color: colors.textSecondary },
-  requestTime: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
-  noteBox: {
-    backgroundColor: `${colors.primary}08`,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.primary,
-  },
-  noteLabel: { ...typography.small, color: colors.primary, fontWeight: '600', marginBottom: 4 },
-  noteText: { ...typography.body, color: colors.text, lineHeight: 22, fontStyle: 'italic' },
-  sharedRow: { flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.sm, flexWrap: 'wrap' },
-  sharedChip: {
-    paddingHorizontal: spacing.sm, paddingVertical: 3,
-    borderRadius: radius.full, backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  sharedChipText: { ...typography.small, color: colors.textSecondary },
-  requestActions: { flexDirection: 'row', gap: spacing.sm },
-  declineBtn: {
-    flex: 1, paddingVertical: spacing.sm, borderRadius: radius.lg,
-    backgroundColor: colors.surface, alignItems: 'center',
-    borderWidth: 1, borderColor: colors.border,
-  },
-  declineBtnText: { ...typography.body, color: colors.textSecondary, fontWeight: '600' },
-  acceptBtn: {
-    flex: 2, paddingVertical: spacing.sm, borderRadius: radius.lg,
-    backgroundColor: colors.primary, alignItems: 'center',
-  },
-  acceptBtnText: { ...typography.body, color: colors.background, fontWeight: '700' },
+    // Request card
+    requestCard: {
+      backgroundColor: C.background,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      ...shadows.card,
+    },
+    requestTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
+    requestInfo: { flex: 1 },
+    requestNameRow: { flexDirection: 'row', alignItems: 'baseline' },
+    requestName: { ...typography.body, fontWeight: '700', color: C.text },
+    requestCity: { ...typography.caption, color: C.textSecondary },
+    requestTime: { ...typography.small, color: C.textSecondary, marginTop: 2 },
+    noteBox: {
+      backgroundColor: `${C.primary}08`,
+      borderRadius: radius.sm,
+      padding: spacing.sm,
+      marginBottom: spacing.sm,
+      borderLeftWidth: 3,
+      borderLeftColor: C.primary,
+    },
+    noteLabel: { ...typography.small, color: C.primary, fontWeight: '600', marginBottom: 4 },
+    noteText: { ...typography.body, color: C.text, lineHeight: 22, fontStyle: 'italic' },
+    sharedRow: { flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.sm, flexWrap: 'wrap' },
+    sharedChip: {
+      paddingHorizontal: spacing.sm, paddingVertical: 3,
+      borderRadius: radius.full, backgroundColor: C.surface,
+      borderWidth: 1, borderColor: C.border,
+    },
+    sharedChipText: { ...typography.small, color: C.textSecondary },
+    requestActions: { flexDirection: 'row', gap: spacing.sm },
+    declineBtn: {
+      flex: 1, paddingVertical: spacing.sm, borderRadius: radius.lg,
+      backgroundColor: C.surface, alignItems: 'center',
+      borderWidth: 1, borderColor: C.border,
+    },
+    declineBtnText: { ...typography.body, color: C.textSecondary, fontWeight: '600' },
+    acceptBtn: {
+      flex: 2, paddingVertical: spacing.sm, borderRadius: radius.lg,
+      backgroundColor: C.primary, alignItems: 'center',
+    },
+    acceptBtnText: { ...typography.body, color: C.background, fontWeight: '700' },
 
-  // Connection row
-  connRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: spacing.md, gap: spacing.md,
-  },
-  connInfo: { flex: 1 },
-  connName: { ...typography.body, fontWeight: '600', color: colors.text },
-  connMeta: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-  meetupBadge: {
-    marginTop: 4, alignSelf: 'flex-start',
-    backgroundColor: `${colors.warning}20`,
-    paddingHorizontal: spacing.sm, paddingVertical: 2,
-    borderRadius: radius.full,
-  },
-  meetupBadgeAccepted: { backgroundColor: `${colors.success}20` },
-  meetupBadgeText: { ...typography.small, color: colors.warning, fontWeight: '600' },
-  connRight: { alignItems: 'flex-end', gap: spacing.xs },
-  connTime: { ...typography.small, color: colors.textSecondary },
-  meetupBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: `${colors.secondary}15`,
-    paddingHorizontal: spacing.sm, paddingVertical: 4,
-    borderRadius: radius.full,
-  },
-  meetupBtnText: { ...typography.small, color: colors.secondary, fontWeight: '600' },
+    // Connection row
+    connRow: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingVertical: spacing.md, gap: spacing.md,
+    },
+    connInfo: { flex: 1 },
+    connName: { ...typography.body, fontWeight: '600', color: C.text },
+    connMeta: { ...typography.caption, color: C.textSecondary, marginTop: 2 },
+    meetupBadge: {
+      marginTop: 4, alignSelf: 'flex-start',
+      backgroundColor: `${C.warning}20`,
+      paddingHorizontal: spacing.sm, paddingVertical: 2,
+      borderRadius: radius.full,
+    },
+    meetupBadgeAccepted: { backgroundColor: `${C.success}20` },
+    meetupBadgeText: { ...typography.small, color: C.warning, fontWeight: '600' },
+    connRight: { alignItems: 'flex-end', gap: spacing.xs },
+    connTime: { ...typography.small, color: C.textSecondary },
+    vibeScoreBadge: {
+      flexDirection: 'row', alignItems: 'center', gap: 2,
+      paddingHorizontal: 6, paddingVertical: 2,
+      borderRadius: radius.full,
+    },
+    vibeScoreText: { fontSize: 10, fontWeight: '800', color: '#fff' },
+    meetupBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: `${C.secondary}15`,
+      paddingHorizontal: spacing.sm, paddingVertical: 4,
+      borderRadius: radius.full,
+    },
+    meetupBtnText: { ...typography.small, color: C.secondary, fontWeight: '600' },
 
-  separator: { height: 1, backgroundColor: colors.border, marginLeft: 68 },
-  skeletonCard: {
-    height: 80, backgroundColor: colors.surface, borderRadius: radius.md,
-    alignItems: 'center', justifyContent: 'center',
-  },
-});
+    separator: { height: 1, backgroundColor: C.border, marginLeft: 68 },
+    skeletonCard: {
+      height: 80, backgroundColor: C.surface, borderRadius: radius.md,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    searchRow: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+      backgroundColor: C.background,
+    },
+    searchBox: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+      backgroundColor: C.surface, borderRadius: radius.lg,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderWidth: 1, borderColor: C.border,
+    },
+    searchInput: { flex: 1, ...typography.body },
+  });
+}

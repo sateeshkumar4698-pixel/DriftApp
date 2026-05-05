@@ -1,9 +1,3 @@
-/**
- * QRScannerScreen — Scan another user's Drift profile QR code.
- *
- * Install:  npx expo install expo-camera
- */
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -23,10 +17,9 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { getUserProfile } from '../../utils/firestore-helpers';
-import { colors, spacing, typography, radius } from '../../utils/theme';
+import { useTheme, AppColors, spacing, typography, radius } from '../../utils/useTheme';
 import { DiscoverStackParamList } from '../../types';
 
-// ─── Lazy-load expo-camera ────────────────────────────────────────────────────
 let CameraModule: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -38,6 +31,8 @@ type Nav = NativeStackNavigationProp<DiscoverStackParamList>;
 // ─── Not-installed screen ─────────────────────────────────────────────────────
 
 function PackageNotInstalled() {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const navigation = useNavigation();
   return (
     <SafeAreaView style={styles.root}>
@@ -72,8 +67,13 @@ function extractUid(raw: string): string | null {
 
 // ─── Viewfinder overlay ───────────────────────────────────────────────────────
 
+const WINDOW_SIZE = 240;
+const CORNER = 22;
+
 function ScannerOverlay({ scanning }: { scanning: boolean }) {
+  const { C } = useTheme();
   const scanLine = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     if (!scanning) return;
     const loop = Animated.loop(
@@ -86,54 +86,40 @@ function ScannerOverlay({ scanning }: { scanning: boolean }) {
     return () => loop.stop();
   }, [scanning]);
 
-  const translateY = scanLine.interpolate({ inputRange: [0, 1], outputRange: [0, WINDOW] });
+  const translateY = scanLine.interpolate({ inputRange: [0, 1], outputRange: [0, WINDOW_SIZE] });
+  const cornerStyle = { position: 'absolute' as const, width: CORNER, height: CORNER, borderColor: C.primary, borderWidth: 3 };
 
   return (
-    <View style={overlay.root} pointerEvents="none">
-      <View style={overlay.topDark} />
-      <View style={overlay.middleRow}>
-        <View style={overlay.sideDark} />
-        <View style={overlay.window}>
-          <View style={[overlay.corner, overlay.tl]} />
-          <View style={[overlay.corner, overlay.tr]} />
-          <View style={[overlay.corner, overlay.bl]} />
-          <View style={[overlay.corner, overlay.br]} />
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' }} />
+      <View style={{ flexDirection: 'row', height: WINDOW_SIZE }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' }} />
+        <View style={{ width: WINDOW_SIZE, height: WINDOW_SIZE, overflow: 'hidden' }}>
+          <View style={[cornerStyle, { top: 0, left: 0,  borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 6 }]} />
+          <View style={[cornerStyle, { top: 0, right: 0, borderLeftWidth: 0,  borderBottomWidth: 0, borderTopRightRadius: 6 }]} />
+          <View style={[cornerStyle, { bottom: 0, left: 0,  borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 6 }]} />
+          <View style={[cornerStyle, { bottom: 0, right: 0, borderLeftWidth: 0,  borderTopWidth: 0, borderBottomRightRadius: 6 }]} />
           {scanning && (
-            <Animated.View style={[overlay.scanLine, { transform: [{ translateY }] }]} />
+            <Animated.View style={{
+              height: 2, width: WINDOW_SIZE, backgroundColor: C.primary,
+              shadowColor: C.primary, shadowRadius: 4, shadowOpacity: 0.9,
+              shadowOffset: { width: 0, height: 0 },
+              transform: [{ translateY }],
+            }} />
           )}
         </View>
-        <View style={overlay.sideDark} />
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' }} />
       </View>
-      <View style={overlay.bottomDark} />
+      <View style={{ flex: 1.5, backgroundColor: 'rgba(0,0,0,0.55)' }} />
     </View>
   );
 }
 
-const WINDOW = 240;
-const CORNER = 22;
-
-const overlay = StyleSheet.create({
-  root:       { ...StyleSheet.absoluteFillObject, zIndex: 10 },
-  topDark:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
-  middleRow:  { flexDirection: 'row', height: WINDOW },
-  sideDark:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
-  bottomDark: { flex: 1.5, backgroundColor: 'rgba(0,0,0,0.55)' },
-  window:     { width: WINDOW, height: WINDOW, overflow: 'hidden' },
-  corner:     { position: 'absolute', width: CORNER, height: CORNER, borderColor: colors.primary, borderWidth: 3 },
-  tl: { top: 0, left: 0,  borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 6 },
-  tr: { top: 0, right: 0, borderLeftWidth: 0,  borderBottomWidth: 0, borderTopRightRadius: 6 },
-  bl: { bottom: 0, left: 0,  borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 6 },
-  br: { bottom: 0, right: 0, borderLeftWidth: 0,  borderTopWidth: 0, borderBottomRightRadius: 6 },
-  scanLine: {
-    height: 2, width: WINDOW, backgroundColor: colors.primary,
-    shadowColor: colors.primary, shadowRadius: 4, shadowOpacity: 0.9,
-    shadowOffset: { width: 0, height: 0 },
-  },
-});
-
-// ─── Inner component (only rendered when expo-camera is installed) ─────────────
+// ─── Inner component ──────────────────────────────────────────────────────────
 
 function QRScannerInner() {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const navigation = useNavigation<Nav>();
   const { CameraView, useCameraPermissions } = CameraModule;
 
@@ -176,7 +162,7 @@ function QRScannerInner() {
   if (!permission) {
     return (
       <SafeAreaView style={styles.center}>
-        <ActivityIndicator color={colors.primary} />
+        <ActivityIndicator color={C.primary} />
       </SafeAreaView>
     );
   }
@@ -205,7 +191,7 @@ function QRScannerInner() {
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
       />
       <ScannerOverlay scanning={!scanned} />
-      <SafeAreaView style={styles.uiLayer} pointerEvents="box-none">
+      <SafeAreaView style={[StyleSheet.absoluteFill, { zIndex: 20 }]} pointerEvents="box-none">
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -214,7 +200,7 @@ function QRScannerInner() {
           <Text style={styles.subtitle}>Point at a Drift profile card or screen</Text>
         </View>
         <View style={styles.statusBox}>
-          {loading && <ActivityIndicator color={colors.primary} style={{ marginBottom: spacing.sm }} />}
+          {loading && <ActivityIndicator color={C.primary} style={{ marginBottom: spacing.sm }} />}
           {!!statusMsg && (
             <View style={styles.statusPill}>
               <Text style={styles.statusText}>{statusMsg}</Text>
@@ -240,35 +226,30 @@ export default function QRScannerScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  root:   { flex: 1, backgroundColor: '#000' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, padding: spacing.lg },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  backBtn:     { margin: spacing.lg, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { ...typography.heading, color: colors.text },
-
-  uiLayer: { ...StyleSheet.absoluteFillObject, zIndex: 20 },
-
-  titleBox: { alignItems: 'center', marginTop: spacing.md },
-  title:    { ...typography.heading, color: '#fff', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
-  subtitle: { ...typography.caption, color: 'rgba(255,255,255,0.75)', marginTop: 4 },
-
-  statusBox:  { flex: 1, alignItems: 'center', justifyContent: 'flex-end', marginBottom: 180 },
-  statusPill: { backgroundColor: 'rgba(0,0,0,0.75)', borderRadius: radius.full, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  statusText: { ...typography.body, color: '#fff', fontWeight: '600' },
-
-  bottomBox: { marginHorizontal: spacing.lg, marginBottom: spacing.lg, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
-  bottomTip: { ...typography.small, color: 'rgba(255,255,255,0.8)', textAlign: 'center', lineHeight: 20 },
-
-  permTitle:   { ...typography.title, color: colors.text, marginBottom: spacing.sm, textAlign: 'center', fontWeight: '700' },
-  permSub:     { ...typography.body, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg, lineHeight: 24 },
-  permBtn:     { backgroundColor: colors.primary, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.lg },
-  permBtnText: { ...typography.body, color: '#fff', fontWeight: '700' },
-
-  codeBox:  { backgroundColor: '#1E1E2E', borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, width: '100%', marginTop: spacing.sm },
-  codeText: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: '#50FA7B', fontSize: 13 },
-});
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    root:   { flex: 1, backgroundColor: '#000' },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.background, padding: spacing.lg },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    backBtn:     { margin: spacing.lg, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { ...typography.h3, color: C.text },
+    titleBox:  { alignItems: 'center', marginTop: spacing.md },
+    title:     { ...typography.h2, color: '#fff', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
+    subtitle:  { ...typography.caption, color: 'rgba(255,255,255,0.75)', marginTop: 4 },
+    statusBox:  { flex: 1, alignItems: 'center', justifyContent: 'flex-end', marginBottom: 180 },
+    statusPill: { backgroundColor: 'rgba(0,0,0,0.75)', borderRadius: radius.full, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+    statusText: { ...typography.body, color: '#fff', fontWeight: '600' },
+    bottomBox: { marginHorizontal: spacing.lg, marginBottom: spacing.lg, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
+    bottomTip: { ...typography.small, color: 'rgba(255,255,255,0.8)', textAlign: 'center', lineHeight: 20 },
+    permTitle:   { ...typography.h1, color: C.text, marginBottom: spacing.sm, textAlign: 'center', fontWeight: '700' },
+    permSub:     { ...typography.body, color: C.textSecondary, textAlign: 'center', marginBottom: spacing.lg, lineHeight: 24 },
+    permBtn:     { backgroundColor: C.primary, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.lg },
+    permBtnText: { ...typography.body, color: '#fff', fontWeight: '700' },
+    codeBox:  { backgroundColor: '#1E1E2E', borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, width: '100%', marginTop: spacing.sm },
+    codeText: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: '#50FA7B', fontSize: 13 },
+  });
+}

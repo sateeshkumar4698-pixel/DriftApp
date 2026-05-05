@@ -27,75 +27,58 @@ import {
   blockUser,
 } from '../../utils/firestore-helpers';
 import Avatar from '../../components/Avatar';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors, spacing, typography, radius, shadows } from '../../utils/useTheme';
 import {
   DiscoverStackParamList,
   Memory,
   UserProfile,
-  VibeProfile,
 } from '../../types';
+import { dynamicVibeMatch, MatchBreakdown } from '../../utils/vibeMatch';
+import { useMoodStore, MOOD_META } from '../../store/moodStore';
 
 type RouteProps = RouteProp<DiscoverStackParamList, 'ProfileDetail'>;
 
 // ─── Vibe Bar ──────────────────────────────────────────────────────────────────
 function VibeBar({ label, value, color }: { label: string; value: number; color: string }) {
-  // Guard against undefined/NaN values — vibeProfile fields are optional
+  const { C } = useTheme();
   const safe = (typeof value === 'number' && isFinite(value)) ? Math.max(0, Math.min(1, value)) : 0;
   const pct  = Math.round(safe * 100);
   const width = `${pct}%` as `${number}%`;
   return (
-    <View style={vibeBarStyles.row}>
-      <Text style={vibeBarStyles.label}>{label}</Text>
-      <View style={vibeBarStyles.track}>
-        <View style={[vibeBarStyles.fill, { width, backgroundColor: color }]} />
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }}>
+      <Text style={{ ...typography.caption, color: C.textSecondary, width: 72 }}>{label}</Text>
+      <View style={{
+        flex: 1, height: 8,
+        backgroundColor: C.surface,
+        borderRadius: radius.full,
+        overflow: 'hidden',
+        marginHorizontal: spacing.sm,
+      }}>
+        <View style={{ height: '100%', borderRadius: radius.full, width, backgroundColor: color }} />
       </View>
-      <Text style={vibeBarStyles.value}>{pct}</Text>
+      <Text style={{ ...typography.small, color: C.textSecondary, width: 28, textAlign: 'right' }}>{pct}</Text>
     </View>
   );
 }
-const vibeBarStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
-  label: { ...typography.caption, color: colors.textSecondary, width: 72 },
-  track: {
-    flex: 1,
-    height: 8,
-    backgroundColor: colors.surface,
-    borderRadius: radius.full,
-    overflow: 'hidden',
-    marginHorizontal: spacing.sm,
-  },
-  fill: { height: '100%', borderRadius: radius.full },
-  value: { ...typography.small, color: colors.textSecondary, width: 28, textAlign: 'right' },
-});
 
 // ─── Memory Pill ──────────────────────────────────────────────────────────────
 function MemoryPill({ memory }: { memory: Memory }) {
+  const { C } = useTheme();
   if (memory.isPrivate) return null;
   return (
-    <View style={memStyles.pill}>
-      <Text style={memStyles.emoji}>{memory.emoji}</Text>
-      <View style={memStyles.info}>
-        <Text style={memStyles.title} numberOfLines={1}>{memory.title}</Text>
-        <Text style={memStyles.desc} numberOfLines={1}>{memory.description}</Text>
+    <View style={{
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: C.surface, borderRadius: radius.md,
+      padding: spacing.sm, marginBottom: spacing.sm, gap: spacing.sm,
+    }}>
+      <Text style={{ fontSize: 22 }}>{memory.emoji}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={{ ...typography.caption, color: C.text, fontWeight: '600' }} numberOfLines={1}>{memory.title}</Text>
+        <Text style={{ ...typography.small, color: C.textSecondary }} numberOfLines={1}>{memory.description}</Text>
       </View>
     </View>
   );
 }
-const memStyles = StyleSheet.create({
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-    gap: spacing.sm,
-  },
-  emoji: { fontSize: 22 },
-  info: { flex: 1 },
-  title: { ...typography.caption, color: colors.text, fontWeight: '600' },
-  desc: { ...typography.small, color: colors.textSecondary },
-});
 
 // ─── Photo Carousel ───────────────────────────────────────────────────────────
 function PhotoCarousel({ photos, name, photoURL }: { photos?: string[]; name: string; photoURL?: string }) {
@@ -105,8 +88,8 @@ function PhotoCarousel({ photos, name, photoURL }: { photos?: string[]; name: st
   if (allPhotos.length === 0) return null;
   if (allPhotos.length === 1) {
     return (
-      <View style={carouselStyles.singleContainer}>
-        <Image source={{ uri: allPhotos[0] }} style={carouselStyles.singleImage} />
+      <View style={{ borderRadius: radius.md, overflow: 'hidden', marginBottom: spacing.sm }}>
+        <Image source={{ uri: allPhotos[0] }} style={{ width: '100%', height: 240 }} />
       </View>
     );
   }
@@ -125,43 +108,42 @@ function PhotoCarousel({ photos, name, photoURL }: { photos?: string[]; name: st
         renderItem={({ item }) => (
           <Image
             source={{ uri: item }}
-            style={[carouselStyles.carouselImage, { width: SCREEN_WIDTH - 48 }]}
+            style={{ height: 240, borderRadius: radius.md, marginRight: spacing.sm, width: SCREEN_WIDTH - 48 }}
           />
         )}
       />
-      <View style={carouselStyles.dots}>
-        {allPhotos.map((_, i) => (
-          <View key={i} style={[carouselStyles.dot, i === activeIdx && carouselStyles.dotActive]} />
-        ))}
-      </View>
+      <PhotoDots count={allPhotos.length} activeIdx={activeIdx} />
     </View>
   );
 }
 
-const carouselStyles = StyleSheet.create({
-  singleContainer: { borderRadius: radius.md, overflow: 'hidden', marginBottom: spacing.sm },
-  singleImage: { width: '100%', height: 240 },
-  carouselImage: { height: 240, borderRadius: radius.md, marginRight: spacing.sm },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: spacing.sm },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border },
-  dotActive: { backgroundColor: colors.primary, width: 18 },
-});
+function PhotoDots({ count, activeIdx }: { count: number; activeIdx: number }) {
+  const { C } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: spacing.sm }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <View key={i} style={{
+          width: i === activeIdx ? 18 : 6, height: 6, borderRadius: 3,
+          backgroundColor: i === activeIdx ? C.primary : C.border,
+        }} />
+      ))}
+    </View>
+  );
+}
 
 // ─── Section Header ───────────────────────────────────────────────────────────
 function SectionHeader({ title }: { title: string }) {
-  return <Text style={sectionStyles.title}>{title}</Text>;
+  const { C } = useTheme();
+  return (
+    <Text style={{
+      ...typography.label,
+      color: C.textSecondary,
+      textTransform: 'uppercase',
+      marginBottom: spacing.sm,
+      marginTop: spacing.md,
+    }}>{title}</Text>
+  );
 }
-const sectionStyles = StyleSheet.create({
-  title: {
-    ...typography.caption,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: spacing.sm,
-    marginTop: spacing.md,
-  },
-});
 
 const LOOKING_FOR_LABELS: Record<string, string> = {
   friends: '👫 Friends',
@@ -170,14 +152,122 @@ const LOOKING_FOR_LABELS: Record<string, string> = {
   events: '🎉 Events',
 };
 
-const VIBE_COLORS = [colors.primary, colors.secondary, colors.success, colors.warning];
+// ─── Match Breakdown Card ─────────────────────────────────────────────────────────────
+function MatchBreakdownCard({
+  score,
+  breakdown,
+  mood,
+}: {
+  score: number;
+  breakdown: MatchBreakdown;
+  mood: import('../../store/moodStore').MoodPreset;
+}) {
+  const { C } = useTheme();
+  const moodMeta = MOOD_META[mood];
+
+  // Badge appearance
+  const badgeBg   = score >= 85 ? '#FF4B6E' : score >= 70 ? '#6C5CE7' : score >= 50 ? '#0984E3' : C.border;
+  const badgeEmoji = score >= 85 ? '🔥' : score >= 70 ? '💜' : score >= 50 ? '💙' : '';
+
+  if (score === 0) return null;
+
+  return (
+    <View style={[mbc.card, { backgroundColor: C.surface, borderColor: badgeBg + '40' }]}>
+      {/* Header */}
+      <View style={mbc.header}>
+        <View style={[mbc.scorePill, { backgroundColor: badgeBg }]}>
+          {badgeEmoji ? <Text style={mbc.badgeEmoji}>{badgeEmoji}</Text> : null}
+          <Text style={mbc.scoreText}>{score}% Vibe Match</Text>
+        </View>
+        <View style={[mbc.moodPill, { backgroundColor: moodMeta.color + '20' }]}>
+          <Text style={{ fontSize: 11 }}>{moodMeta.icon}</Text>
+          <Text style={[mbc.moodLabel, { color: moodMeta.color }]}>{moodMeta.label} mode</Text>
+        </View>
+      </View>
+
+      {/* Breakdown rows */}
+      {breakdown.sharedVibes.length > 0 && (
+        <View style={mbc.row}>
+          <Text style={mbc.rowEmoji}>✨</Text>
+          <Text style={[mbc.rowLabel, { color: C.textSecondary }]}>Same vibe: </Text>
+          <Text style={[mbc.rowValue, { color: C.text }]}>{breakdown.sharedVibes.slice(0, 3).join(', ')}</Text>
+        </View>
+      )}
+      {breakdown.sharedMusic.length > 0 && (
+        <View style={mbc.row}>
+          <Text style={mbc.rowEmoji}>🎵</Text>
+          <Text style={[mbc.rowLabel, { color: C.textSecondary }]}>Music: </Text>
+          <Text style={[mbc.rowValue, { color: C.text }]}>{breakdown.sharedMusic.slice(0, 3).join(', ')}</Text>
+        </View>
+      )}
+      {breakdown.sharedInterests.length > 0 && (
+        <View style={mbc.row}>
+          <Text style={mbc.rowEmoji}>🎯</Text>
+          <Text style={[mbc.rowLabel, { color: C.textSecondary }]}>Interests: </Text>
+          <Text style={[mbc.rowValue, { color: C.text }]}>{breakdown.sharedInterests.slice(0, 4).join(', ')}</Text>
+        </View>
+      )}
+      {breakdown.sameCity && (
+        <View style={mbc.row}>
+          <Text style={mbc.rowEmoji}>📍</Text>
+          <Text style={[mbc.rowValue, { color: C.text }]}>Same city</Text>
+        </View>
+      )}
+      {breakdown.sharedIntent.length > 0 && (
+        <View style={mbc.row}>
+          <Text style={mbc.rowEmoji}>👫</Text>
+          <Text style={[mbc.rowLabel, { color: C.textSecondary }]}>Both looking for: </Text>
+          <Text style={[mbc.rowValue, { color: C.text }]}>
+            {breakdown.sharedIntent.map((i) => LOOKING_FOR_LABELS[i] ?? i).join(', ')}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const mbc = StyleSheet.create({
+  card: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: 8,
+  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap', marginBottom: 4 },
+  scorePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.sm + 2, paddingVertical: 5,
+    borderRadius: radius.full,
+  },
+  badgeEmoji: { fontSize: 12 },
+  scoreText:  { fontSize: 13, fontWeight: '800', color: '#fff' },
+  moodPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.sm, paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  moodLabel: { fontSize: 11, fontWeight: '600' },
+  row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+  rowEmoji: { fontSize: 13, marginRight: 5 },
+  rowLabel: { ...typography.small },
+  rowValue: { ...typography.small, fontWeight: '600', flex: 1 },
+});
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function ProfileDetailScreen() {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const navigation = useNavigation<NativeStackNavigationProp<DiscoverStackParamList>>();
   const route = useRoute<RouteProps>();
   const { user } = route.params;
-  const { firebaseUser } = useAuthStore();
+  const { firebaseUser, userProfile: myProfile } = useAuthStore();
+  const firebaseUser_ = firebaseUser; // alias for inner fns
+  const moodPreset    = useMoodStore((s) => s.moodPreset);
+  const moodIntensity = useMoodStore((s) => s.moodIntensity);
+
+  // Compute match score against current user's profile
+  const matchResult = myProfile ? dynamicVibeMatch(myProfile, user, moodPreset, moodIntensity) : null;
 
   const [memories, setMemories] = useState<Memory[]>([]);
   const [connectionState, setConnectionState] = useState<
@@ -186,17 +276,19 @@ export default function ProfileDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
+  const VIBE_COLORS = [C.primary, C.secondary, C.success, C.warning];
+
   function handleMoreMenu() {
-    const myUid = firebaseUser?.uid ?? '';
+    const myUid = firebaseUser_?.uid ?? '';
     Alert.alert(user.name, 'What would you like to do?', [
       {
         text: '🚩 Report',
         onPress: () =>
           Alert.alert('Report User', 'Why are you reporting this profile?', [
-            { text: 'Fake profile',      onPress: () => { reportUser(myUid, user.uid, 'Fake profile'); Alert.alert('Reported', 'Thanks — we\'ll review this profile.'); } },
+            { text: 'Fake profile',          onPress: () => { reportUser(myUid, user.uid, 'Fake profile'); Alert.alert('Reported', 'Thanks — we\'ll review this profile.'); } },
             { text: 'Inappropriate content', onPress: () => { reportUser(myUid, user.uid, 'Inappropriate content'); Alert.alert('Reported', 'Thanks — we\'ll review this profile.'); } },
-            { text: 'Spam',             onPress: () => { reportUser(myUid, user.uid, 'Spam'); Alert.alert('Reported', 'Thanks — we\'ll review this profile.'); } },
-            { text: 'Harassment',       onPress: () => { reportUser(myUid, user.uid, 'Harassment'); Alert.alert('Reported', 'Thanks — we\'ll review this profile.'); } },
+            { text: 'Spam',                  onPress: () => { reportUser(myUid, user.uid, 'Spam'); Alert.alert('Reported', 'Thanks — we\'ll review this profile.'); } },
+            { text: 'Harassment',            onPress: () => { reportUser(myUid, user.uid, 'Harassment'); Alert.alert('Reported', 'Thanks — we\'ll review this profile.'); } },
             { text: 'Cancel', style: 'cancel' },
           ]),
       },
@@ -220,7 +312,8 @@ export default function ProfileDetailScreen() {
       { text: 'Cancel', style: 'cancel' },
     ]);
   }
-  const scrollY = new Animated.Value(0);
+
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const avatarScale = scrollY.interpolate({
     inputRange: [-60, 0, 80],
@@ -230,15 +323,15 @@ export default function ProfileDetailScreen() {
 
   useEffect(() => {
     async function load() {
-      if (!firebaseUser) return;
+      if (!firebaseUser_) return;
       setLoading(true);
       try {
         const [publicMemories, connectedAlready, sentRequest, receivedRequest] =
           await Promise.all([
             getMemories(user.uid),
-            areConnected(firebaseUser.uid, user.uid),
-            getConnectionRequestStatus(firebaseUser.uid, user.uid),
-            getConnectionRequestStatus(user.uid, firebaseUser.uid),
+            areConnected(firebaseUser_.uid, user.uid),
+            getConnectionRequestStatus(firebaseUser_.uid, user.uid),
+            getConnectionRequestStatus(user.uid, firebaseUser_.uid),
           ]);
 
         setMemories(publicMemories.filter((m) => !m.isPrivate).slice(0, 6));
@@ -257,12 +350,11 @@ export default function ProfileDetailScreen() {
       }
     }
     load();
-  }, [user.uid, firebaseUser]);
+  }, [user.uid, firebaseUser_]);
 
   function handleConnectPress() {
     if (connectionState === 'connected') {
-      // Open chat
-      const connectionId = [firebaseUser!.uid, user.uid].sort().join('_');
+      const connectionId = [firebaseUser_!.uid, user.uid].sort().join('_');
       navigation.navigate('Chat', { connectionId, connectedUser: user });
       return;
     }
@@ -274,19 +366,18 @@ export default function ProfileDetailScreen() {
   const vibe = user.vibeProfile;
   const vibeAxes = vibe
     ? [
-        { label: 'Energy', value: vibe.energy, color: VIBE_COLORS[0] },
-        { label: 'Social', value: vibe.social, color: VIBE_COLORS[1] },
-        { label: 'Adventure', value: vibe.adventure, color: VIBE_COLORS[2] },
-        { label: 'Aesthetic', value: vibe.aesthetic, color: VIBE_COLORS[3] },
+        { label: 'Energy',     value: vibe.energy,     color: VIBE_COLORS[0] },
+        { label: 'Social',     value: vibe.social,     color: VIBE_COLORS[1] },
+        { label: 'Adventure',  value: vibe.adventure,  color: VIBE_COLORS[2] },
+        { label: 'Aesthetic',  value: vibe.aesthetic,  color: VIBE_COLORS[3] },
       ]
     : [];
 
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
-      {/* Back button */}
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={26} color="#fff" />
+          <Ionicons name="chevron-back" size={26} color={C.text} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.reportBtn} onPress={handleMoreMenu}>
           <Text style={styles.reportIcon}>⋯</Text>
@@ -301,7 +392,6 @@ export default function ProfileDetailScreen() {
         })}
         scrollEventThrottle={16}
       >
-        {/* Hero — photo carousel or avatar */}
         {(user.photos?.length ?? 0) > 0 ? (
           <View style={styles.carouselWrapper}>
             <PhotoCarousel photos={user.photos} name={user.name} photoURL={user.photoURL} />
@@ -322,21 +412,15 @@ export default function ProfileDetailScreen() {
           </Animated.View>
         )}
 
-        {/* Name + meta */}
         <View style={styles.nameSection}>
-          <Text style={styles.name}>{user.name}, {user.age}</Text>
+          <Text style={styles.name}>{user.name}{user.age ? `, ${user.age}` : ''}</Text>
           {user.city && <Text style={styles.city}>📍 {user.city}</Text>}
           <View style={styles.metaRow}>
-            {user.college && (
-              <Text style={styles.metaTag}>🎓 {user.college}</Text>
-            )}
-            {user.work && (
-              <Text style={styles.metaTag}>💼 {user.work}</Text>
-            )}
+            {user.college && <Text style={styles.metaTag}>🎓 {user.college}</Text>}
+            {user.work    && <Text style={styles.metaTag}>💼 {user.work}</Text>}
           </View>
         </View>
 
-        {/* Looking For */}
         <View style={styles.section}>
           <View style={styles.lookingForRow}>
             {(user.lookingFor ?? []).map((item) => (
@@ -347,13 +431,11 @@ export default function ProfileDetailScreen() {
           </View>
         </View>
 
-        {/* Bio */}
         <View style={styles.section}>
           <SectionHeader title="About" />
           <Text style={styles.bio}>{user.bio}</Text>
         </View>
 
-        {/* Interests */}
         <View style={styles.section}>
           <SectionHeader title="Interests" />
           <View style={styles.chipsRow}>
@@ -365,7 +447,6 @@ export default function ProfileDetailScreen() {
           </View>
         </View>
 
-        {/* Vibe Profile */}
         {vibe && vibeAxes.length > 0 && (
           <View style={styles.section}>
             <SectionHeader title="Vibe" />
@@ -389,23 +470,32 @@ export default function ProfileDetailScreen() {
           </View>
         )}
 
-        {/* Memories timeline */}
+        {/* Match Breakdown Card */}
+        {matchResult && matchResult.score > 0 && (
+          <View style={styles.section}>
+            <SectionHeader title="Your Match" />
+            <MatchBreakdownCard
+              score={matchResult.score}
+              breakdown={matchResult.breakdown}
+              mood={moodPreset}
+            />
+          </View>
+        )}
+
         {memories.length > 0 && (
           <View style={styles.section}>
             <SectionHeader title="Memories & Moments" />
             {loading ? (
-              <ActivityIndicator color={colors.primary} />
+              <ActivityIndicator color={C.primary} />
             ) : (
               memories.map((m) => <MemoryPill key={m.id} memory={m} />)
             )}
           </View>
         )}
 
-        {/* Spacer for sticky footer */}
         <View style={{ height: 100 }} />
       </Animated.ScrollView>
 
-      {/* Sticky connect footer */}
       <View style={styles.footer}>
         {connectionState === 'pending_sent' ? (
           <View style={styles.pendingRow}>
@@ -419,15 +509,12 @@ export default function ProfileDetailScreen() {
           </View>
         ) : (
           <TouchableOpacity
-            style={[
-              styles.connectBtn,
-              connectionState === 'connected' && styles.connectedBtn,
-            ]}
+            style={[styles.connectBtn, connectionState === 'connected' && styles.connectedBtn]}
             onPress={handleConnectPress}
             disabled={actionLoading}
           >
             {actionLoading ? (
-              <ActivityIndicator color={colors.background} />
+              <ActivityIndicator color="#fff" />
             ) : (
               <>
                 <Text style={styles.connectBtnIcon}>
@@ -447,110 +534,94 @@ export default function ProfileDetailScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: colors.surface,
-    alignItems: 'center', justifyContent: 'center',
-    ...shadows.card,
-  },
-  reportBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: colors.surface,
-    alignItems: 'center', justifyContent: 'center',
-    ...shadows.card,
-  },
-  reportIcon: { fontSize: 20, color: colors.textSecondary },
-
-  scroll: { paddingHorizontal: spacing.lg },
-
-  carouselWrapper: { marginBottom: spacing.sm, position: 'relative' },
-  verifiedBadgeOverlay: {
-    position: 'absolute', top: spacing.sm, right: spacing.sm,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: spacing.sm, paddingVertical: 3,
-    borderRadius: radius.full,
-  },
-  verifiedOverlayText: { ...typography.small, color: '#fff', fontWeight: '700' },
-  heroSection: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.sm },
-  verifiedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.xs,
-  },
-  verifiedText: { ...typography.small, color: colors.success, fontWeight: '700' },
-
-  nameSection: { alignItems: 'center', marginBottom: spacing.sm },
-  name: { ...typography.title, color: colors.text, textAlign: 'center' },
-  city: { ...typography.body, color: colors.textSecondary, marginTop: spacing.xs },
-  metaRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs, flexWrap: 'wrap', justifyContent: 'center' },
-  metaTag: { ...typography.caption, color: colors.textSecondary },
-
-  section: { marginBottom: spacing.md },
-
-  lookingForRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'center' },
-  lookingForChip: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-    borderRadius: radius.lg, backgroundColor: `${colors.primary}12`,
-  },
-  lookingForText: { ...typography.caption, color: colors.primary, fontWeight: '600' },
-
-  bio: { ...typography.body, color: colors.textSecondary, lineHeight: 26 },
-
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  interestChip: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-    borderRadius: radius.full, backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  interestChipText: { ...typography.caption, color: colors.textSecondary },
-
-  card: { backgroundColor: colors.surface, borderRadius: radius.md, ...shadows.card },
-  primaryVibesRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },
-  primaryVibeChip: {
-    paddingHorizontal: spacing.md, paddingVertical: 4,
-    borderRadius: radius.full, backgroundColor: `${colors.secondary}20`,
-  },
-  primaryVibeText: { ...typography.small, color: colors.secondary, fontWeight: '600' },
-  nightlifeText: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.sm },
-
-  footer: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    backgroundColor: colors.background,
-    padding: spacing.lg,
-    paddingBottom: spacing.xl,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  connectBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    ...shadows.card,
-  },
-  connectedBtn: { backgroundColor: colors.secondary },
-  connectBtnIcon: { fontSize: 20 },
-  connectBtnText: { ...typography.body, color: colors.background, fontWeight: '700' },
-  pendingRow: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    alignItems: 'center',
-  },
-  pendingText: { ...typography.caption, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-});
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
+    topBar: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xs,
+    },
+    backBtn: {
+      width: 40, height: 40, borderRadius: 20,
+      backgroundColor: C.surface,
+      alignItems: 'center', justifyContent: 'center',
+      ...shadows.card,
+    },
+    reportBtn: {
+      width: 40, height: 40, borderRadius: 20,
+      backgroundColor: C.surface,
+      alignItems: 'center', justifyContent: 'center',
+      ...shadows.card,
+    },
+    reportIcon: { fontSize: 20, color: C.textSecondary },
+    scroll: { paddingHorizontal: spacing.lg },
+    carouselWrapper: { marginBottom: spacing.sm, position: 'relative' },
+    verifiedBadgeOverlay: {
+      position: 'absolute', top: spacing.sm, right: spacing.sm,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      paddingHorizontal: spacing.sm, paddingVertical: 3,
+      borderRadius: radius.full,
+    },
+    verifiedOverlayText: { ...typography.small, color: '#fff', fontWeight: '700' },
+    heroSection: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.sm },
+    verifiedRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs },
+    verifiedText: { ...typography.small, color: C.success, fontWeight: '700' },
+    nameSection: { alignItems: 'center', marginBottom: spacing.sm },
+    name: { ...typography.h1, color: C.text, textAlign: 'center' },
+    city: { ...typography.body, color: C.textSecondary, marginTop: spacing.xs },
+    metaRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs, flexWrap: 'wrap', justifyContent: 'center' },
+    metaTag: { ...typography.caption, color: C.textSecondary },
+    section: { marginBottom: spacing.md },
+    lookingForRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'center' },
+    lookingForChip: {
+      paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+      borderRadius: radius.lg, backgroundColor: C.primary + '12',
+    },
+    lookingForText: { ...typography.caption, color: C.primary, fontWeight: '600' },
+    bio: { ...typography.body, color: C.textSecondary, lineHeight: 26 },
+    chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    interestChip: {
+      paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+      borderRadius: radius.full, backgroundColor: C.surface,
+      borderWidth: 1, borderColor: C.border,
+    },
+    interestChipText: { ...typography.caption, color: C.textSecondary },
+    card: { backgroundColor: C.surface, borderRadius: radius.md, ...shadows.card },
+    primaryVibesRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },
+    primaryVibeChip: {
+      paddingHorizontal: spacing.md, paddingVertical: 4,
+      borderRadius: radius.full, backgroundColor: C.secondary + '20',
+    },
+    primaryVibeText: { ...typography.small, color: C.secondary, fontWeight: '600' },
+    nightlifeText: { ...typography.caption, color: C.textSecondary, marginTop: spacing.sm },
+    footer: {
+      position: 'absolute',
+      bottom: 0, left: 0, right: 0,
+      backgroundColor: C.background,
+      padding: spacing.lg,
+      paddingBottom: spacing.xl,
+      borderTopWidth: 1,
+      borderTopColor: C.border,
+    },
+    connectBtn: {
+      backgroundColor: C.primary,
+      borderRadius: radius.lg,
+      paddingVertical: spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.sm,
+      ...shadows.card,
+    },
+    connectedBtn: { backgroundColor: C.secondary },
+    connectBtnIcon: { fontSize: 20 },
+    connectBtnText: { ...typography.body, color: '#fff', fontWeight: '700' },
+    pendingRow: {
+      backgroundColor: C.surface,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      alignItems: 'center',
+    },
+    pendingText: { ...typography.caption, color: C.textSecondary, textAlign: 'center', lineHeight: 20 },
+  });
+}

@@ -202,6 +202,19 @@ service cloud.firestore {
 
       allow delete: if isSignedIn()
         && resource.data.hostUid == request.auth.uid;
+
+      // ─── In-game chat subcollection ─────────────────────────────────────────
+      // Any authenticated participant can read and write chat messages.
+      match /chat/{msgId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 300
+          && request.resource.data.createdAt is number;
+        allow update, delete: if false;
+      }
     }
 
     // ─── Game Invites ─────────────────────────────────────────────────────────

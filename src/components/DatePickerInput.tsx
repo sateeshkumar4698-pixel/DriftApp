@@ -27,7 +27,7 @@ import {
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
-import { colors, spacing, typography, radius } from '../utils/theme';
+import { useTheme, AppColors, spacing, typography, radius } from '../utils/useTheme';
 
 interface Props {
   label?:   string;
@@ -45,6 +45,9 @@ function fmt(ms: number): string {
 }
 
 export default function DatePickerInput({ label, value, onChange, error, minDate }: Props) {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
+
   const [showPicker, setShowPicker] = useState(false);
   // Android needs two steps: date then time
   const [androidStep, setAndroidStep] = useState<'date' | 'time'>('date');
@@ -142,60 +145,62 @@ export default function DatePickerInput({ label, value, onChange, error, minDate
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: { marginBottom: spacing.md },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    wrapper: { marginBottom: spacing.md },
 
-  label: {
-    ...typography.caption,
-    fontWeight:    '600',
-    color:         colors.textSecondary,
-    marginBottom:  spacing.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    label: {
+      ...typography.caption,
+      fontWeight:    '600',
+      color:         C.textSecondary,
+      marginBottom:  spacing.xs,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
 
-  field: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             spacing.sm,
-    height:          52,
-    borderWidth:     1.5,
-    borderColor:     colors.border,
-    borderRadius:    radius.md,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-  },
-  fieldErr: { borderColor: colors.error },
+    field: {
+      flexDirection:   'row',
+      alignItems:      'center',
+      gap:             spacing.sm,
+      height:          52,
+      borderWidth:     1.5,
+      borderColor:     C.border,
+      borderRadius:    radius.md,
+      backgroundColor: C.surface,
+      paddingHorizontal: spacing.md,
+    },
+    fieldErr: { borderColor: C.error },
 
-  calIcon:     { fontSize: 18 },
-  valueText:   { ...typography.body, color: colors.text, flex: 1 },
-  placeholder: { color: colors.textSecondary },
+    calIcon:     { fontSize: 18 },
+    valueText:   { ...typography.body, color: C.text, flex: 1 },
+    placeholder: { color: C.textSecondary },
 
-  errorText: {
-    ...typography.small,
-    color:      colors.error,
-    marginTop:  spacing.xs,
-  },
+    errorText: {
+      ...typography.small,
+      color:      C.error,
+      marginTop:  spacing.xs,
+    },
 
-  // iOS modal
-  iosOverlay: {
-    flex:            1,
-    justifyContent:  'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  iosSheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius:  16,
-    borderTopRightRadius: 16,
-    paddingBottom: 32,
-  },
-  iosHeader: {
-    flexDirection:  'row',
-    justifyContent: 'flex-end',
-    padding:        spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  iosDone:   { ...typography.body, color: colors.primary, fontWeight: '700' },
-  iosPicker: { height: 200 },
-});
+    // iOS modal
+    iosOverlay: {
+      flex:            1,
+      justifyContent:  'flex-end',
+      backgroundColor: 'rgba(0,0,0,0.35)',
+    },
+    iosSheet: {
+      backgroundColor: C.background,
+      borderTopLeftRadius:  16,
+      borderTopRightRadius: 16,
+      paddingBottom: 32,
+    },
+    iosHeader: {
+      flexDirection:  'row',
+      justifyContent: 'flex-end',
+      padding:        spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+    },
+    iosDone:   { ...typography.body, color: C.primary, fontWeight: '700' },
+    iosPicker: { height: 200 },
+  });
+}

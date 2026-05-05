@@ -15,7 +15,8 @@ import {
 import { db } from '../../config/firebase';
 import { useAuthStore } from '../../store/authStore';
 import EmptyState from '../../components/EmptyState';
-import { colors, spacing, typography, radius } from '../../utils/theme';
+import { spacing, typography, radius } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { CoinTransaction } from '../../types';
 
 const REASON_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
@@ -37,7 +38,8 @@ function formatDate(ts: number): string {
   });
 }
 
-function TxRow({ tx }: { tx: CoinTransaction }) {
+function TxRow({ tx, C }: { tx: CoinTransaction; C: AppColors }) {
+  const styles = makeStyles(C);
   const config = REASON_CONFIG[tx.reason] ?? { emoji: '💰', label: tx.reason, color: '#FDCB6E' };
   const isEarn = tx.amount > 0;
   return (
@@ -49,7 +51,7 @@ function TxRow({ tx }: { tx: CoinTransaction }) {
         <Text style={styles.txLabel}>{config.label}</Text>
         <Text style={styles.txDate}>{formatDate(tx.createdAt)}</Text>
       </View>
-      <Text style={[styles.txAmount, { color: isEarn ? colors.success : colors.error }]}>
+      <Text style={[styles.txAmount, { color: isEarn ? C.success : C.error }]}>
         {isEarn ? '+' : ''}{tx.amount}
       </Text>
     </View>
@@ -59,6 +61,8 @@ function TxRow({ tx }: { tx: CoinTransaction }) {
 export default function CoinHistoryScreen() {
   const navigation = useNavigation();
   const { firebaseUser, userProfile } = useAuthStore();
+  const { C, isDark } = useTheme();
+  const styles = makeStyles(C);
   const [transactions, setTransactions] = useState<CoinTransaction[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -108,7 +112,7 @@ export default function CoinHistoryScreen() {
 
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={C.primary} />
         </View>
       ) : (
         <FlatList
@@ -123,56 +127,58 @@ export default function CoinHistoryScreen() {
               subtitle="Login daily and connect with people to start earning Drift Coins."
             />
           }
-          renderItem={({ item }) => <TxRow tx={item} />}
+          renderItem={({ item }) => <TxRow tx={item} C={C} />}
         />
       )}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: radius.full,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  backText: { fontSize: 20, color: colors.text },
-  headerTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },
-  headerSub: { ...typography.caption, color: colors.textSecondary, textAlign: 'center' },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    backBtn: {
+      width: 40, height: 40, borderRadius: radius.full,
+      alignItems: 'center', justifyContent: 'center',
+      backgroundColor: C.surface,
+    },
+    backText: { fontSize: 20, color: C.text },
+    headerTitle: { ...typography.heading, color: C.text, textAlign: 'center' },
+    headerSub: { ...typography.caption, color: C.textSecondary, textAlign: 'center' },
 
-  earnCard: {
-    margin: spacing.lg,
-    padding: spacing.md,
-    backgroundColor: '#FDCB6E10',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: '#FDCB6E30',
-  },
-  earnTitle: { ...typography.caption, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
-  earnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  earnItem: { ...typography.small, color: colors.textSecondary },
+    earnCard: {
+      margin: spacing.lg,
+      padding: spacing.md,
+      backgroundColor: '#FDCB6E10',
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: '#FDCB6E30',
+    },
+    earnTitle: { ...typography.caption, fontWeight: '700', color: C.text, marginBottom: spacing.sm },
+    earnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    earnItem: { ...typography.small, color: C.textSecondary },
 
-  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+    list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
 
-  txRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  txIcon: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  txEmoji: { fontSize: 20 },
-  txInfo: { flex: 1 },
-  txLabel: { ...typography.body, fontWeight: '600', color: colors.text },
-  txDate: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
-  txAmount: { ...typography.body, fontWeight: '700', fontSize: 16 },
-});
+    txRow: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    txIcon: {
+      width: 44, height: 44, borderRadius: 22,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    txEmoji: { fontSize: 20 },
+    txInfo: { flex: 1 },
+    txLabel: { ...typography.body, fontWeight: '600', color: C.text },
+    txDate: { ...typography.small, color: C.textSecondary, marginTop: 2 },
+    txAmount: { ...typography.body, fontWeight: '700', fontSize: 16 },
+  });
+}

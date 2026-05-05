@@ -16,7 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GamesStackParamList } from '../../types';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { gameSounds } from '../../services/gameSounds';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -258,6 +259,8 @@ function UnoCard({ card, playable = true, onPress, size = 'normal', faceDown = f
 
 export default function UnoGame() {
   const navigation = useNavigation<UnoNavProp>();
+  const { C } = useTheme();
+  const styles = makeStyles(C);
 
   // ── Setup State ──
   const [numPlayers, setNumPlayers] = useState<2 | 3 | 4>(2);
@@ -739,7 +742,7 @@ export default function UnoGame() {
                 </Text>
                 <View style={[
                   styles.scoreChip,
-                  { backgroundColor: p.hand.length === 0 ? colors.success : colors.error },
+                  { backgroundColor: p.hand.length === 0 ? C.success : C.error },
                 ]}>
                   <Text style={styles.scoreChipText}>
                     {p.hand.length === 0 ? '🏆 Winner!' : `${p.hand.length} cards`}
@@ -958,7 +961,8 @@ export default function UnoGame() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
 
   // ── Card Component ──
 
@@ -1039,7 +1043,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xl,
     letterSpacing: 4,
-    textShadowColor: colors.primary,
+    textShadowColor: C.primary,
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 20,
   },
@@ -1078,8 +1082,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   playerCountBtnActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
+    borderColor: C.primary,
+    backgroundColor: C.primary,
   },
   playerCountBtnText: {
     fontSize: 26,
@@ -1111,7 +1115,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   dealBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: C.primary,
     borderRadius: radius.md,
     paddingVertical: spacing.md + 2,
     alignItems: 'center',
@@ -1163,13 +1167,13 @@ const styles = StyleSheet.create({
   },
   passMessage: {
     ...typography.body,
-    color: colors.warning,
+    color: C.warning,
     textAlign: 'center',
     marginBottom: spacing.md,
     fontWeight: '600',
   },
   passRevealBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: C.primary,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
@@ -1324,7 +1328,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   playAgainBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: C.primary,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
@@ -1447,7 +1451,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   playerChipCountUno: {
-    backgroundColor: colors.error,
+    backgroundColor: C.error,
   },
   playerChipCountText: {
     fontSize: 11,
@@ -1542,11 +1546,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderWidth: 2,
-    borderColor: colors.primary,
+    borderColor: C.primary,
   },
   unoCallBtnActive: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
+    backgroundColor: C.success,
+    borderColor: C.success,
   },
   unoCallBtnText: {
     ...typography.body,
@@ -1594,4 +1598,5 @@ const styles = StyleSheet.create({
     color: '#FFD700',
     fontWeight: '700',
   },
-});
+  });
+}

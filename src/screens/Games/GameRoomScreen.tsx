@@ -2,9 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EmptyState from '../../components/EmptyState';
-import { colors } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 
 export default function GameRoomScreen() {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
+
   return (
     <SafeAreaView style={styles.flex}>
       <EmptyState
@@ -16,6 +19,8 @@ export default function GameRoomScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-});
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
+  });
+}

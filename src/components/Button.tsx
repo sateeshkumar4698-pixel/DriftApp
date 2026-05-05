@@ -7,7 +7,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { colors, spacing, radius, typography } from '../utils/theme';
+import { useTheme, AppColors, spacing, radius, typography } from '../utils/useTheme';
 
 interface ButtonProps {
   title: string;
@@ -28,6 +28,8 @@ export default function Button({
   style,
   textStyle,
 }: ButtonProps) {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const isDisabled = disabled || loading;
 
   return (
@@ -39,48 +41,50 @@ export default function Button({
     >
       {loading ? (
         <ActivityIndicator
-          color={variant === 'outline' || variant === 'ghost' ? colors.primary : colors.background}
+          color={variant === 'outline' || variant === 'ghost' ? C.primary : '#fff'}
           size="small"
         />
       ) : (
-        <Text style={[styles.text, styles[`${variant}Text`], textStyle]}>{title}</Text>
+        <Text style={[styles.text, styles[`${variant}Text` as const], textStyle]}>{title}</Text>
       )}
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 52,
-  },
-  primary: {
-    backgroundColor: colors.primary,
-  },
-  secondary: {
-    backgroundColor: colors.secondary,
-  },
-  outline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  text: {
-    ...typography.body,
-    fontWeight: '600',
-  },
-  primaryText: { color: colors.background },
-  secondaryText: { color: colors.background },
-  outlineText: { color: colors.primary },
-  ghostText: { color: colors.primary },
-});
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    base: {
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.xl,
+      borderRadius: radius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 52,
+    },
+    primary: {
+      backgroundColor: C.primary,
+    },
+    secondary: {
+      backgroundColor: C.secondary,
+    },
+    outline: {
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      borderColor: C.primary,
+    },
+    ghost: {
+      backgroundColor: 'transparent',
+    },
+    disabled: {
+      opacity: 0.5,
+    },
+    text: {
+      ...typography.body,
+      fontWeight: '600',
+    },
+    primaryText:   { color: '#fff' },
+    secondaryText: { color: '#fff' },
+    outlineText:   { color: C.primary },
+    ghostText:     { color: C.primary },
+  });
+}

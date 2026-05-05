@@ -168,7 +168,10 @@ export interface Event {
   maxAttendees?: number;
   category: EventCategory;
   imageURL?: string;
+  tags?: string[];
+  cancelled?: boolean;
   createdAt: number;
+  updatedAt?: number;
 }
 
 export type EventCategory = 'social' | 'professional' | 'sports' | 'food' | 'other';
@@ -257,6 +260,7 @@ export type DiscoverStackParamList = {
   MeetupSuggest: { connectionId: string; connectedUser: UserProfile };
   Notifications: undefined;
   StatusCreate: { initialStatus?: DriftStatus } | undefined;
+  ViewStatus: { status: DriftStatus; name: string; photoURL?: string; isMine: boolean };
   // ── Profile Share (Phase 1) ────────────────────────────────────────────────
   QRScanner: undefined;
   ShakeShare: undefined;
@@ -348,9 +352,11 @@ export interface VoiceRoomToken {
 export type ProfileStackParamList = {
   ProfileMain: undefined;
   EditProfile: undefined;
+  DriftId: undefined;
   ViewMemories: undefined;
   VibeQuiz: undefined;
   StatusCreate: { initialStatus?: DriftStatus } | undefined;
+  ViewStatus: { status: DriftStatus; name: string; photoURL?: string; isMine: boolean };
   CoinHistory: undefined;
   PrivacySettings: undefined;
   Terms: undefined;

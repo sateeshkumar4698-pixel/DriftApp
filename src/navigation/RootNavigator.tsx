@@ -4,7 +4,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../store/authStore';
 import { RootStackParamList } from '../types';
-import { colors } from '../utils/theme';
+import { useTheme } from '../utils/useTheme';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 import OnboardingScreen, { ONBOARDING_KEY } from '../screens/Auth/OnboardingScreen';
@@ -18,6 +18,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
   const { firebaseUser, userProfile, isLoading, onboardingDone, setOnboardingDone } = useAuthStore();
+  const { C } = useTheme();
 
   // Read onboarding flag once on mount — stored in authStore so any screen can update it
   useEffect(() => {
@@ -42,8 +43,8 @@ export default function RootNavigator() {
   // Show spinner until auth state AND onboarding flag are both known
   if (isLoading || onboardingDone === null) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={[styles.loading, { backgroundColor: C.background }]}>
+        <ActivityIndicator size="large" color={C.primary} />
       </View>
     );
   }
@@ -79,7 +80,6 @@ export default function RootNavigator() {
 const styles = StyleSheet.create({
   loading: {
     flex: 1,
-    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },

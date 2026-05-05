@@ -7,7 +7,7 @@ import {
   TextInputProps,
   ViewStyle,
 } from 'react-native';
-import { colors, spacing, radius, typography } from '../utils/theme';
+import { useTheme, AppColors, spacing, radius, typography } from '../utils/useTheme';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -16,6 +16,8 @@ interface InputProps extends TextInputProps {
 }
 
 export default function Input({ label, error, containerStyle, style, ...props }: InputProps) {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const [focused, setFocused] = useState(false);
 
   return (
@@ -28,7 +30,7 @@ export default function Input({ label, error, containerStyle, style, ...props }:
           error ? styles.error : null,
           style,
         ]}
-        placeholderTextColor={colors.textSecondary}
+        placeholderTextColor={C.textSecondary}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         {...props}
@@ -38,36 +40,38 @@ export default function Input({ label, error, containerStyle, style, ...props }:
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-    fontWeight: '500',
-  },
-  input: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    ...typography.body,
-    color: colors.text,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-  },
-  focused: {
-    borderColor: colors.primary,
-    backgroundColor: colors.background,
-  },
-  error: {
-    borderColor: colors.error,
-  },
-  errorText: {
-    ...typography.small,
-    color: colors.error,
-    marginTop: spacing.xs,
-  },
-});
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    container: {
+      marginBottom: spacing.md,
+    },
+    label: {
+      ...typography.caption,
+      color: C.textSecondary,
+      marginBottom: spacing.xs,
+      fontWeight: '500',
+    },
+    input: {
+      backgroundColor: C.surface,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      ...typography.body,
+      color: C.text,
+      borderWidth: 1.5,
+      borderColor: C.border,
+    },
+    focused: {
+      borderColor: C.primary,
+      backgroundColor: C.background,
+    },
+    error: {
+      borderColor: C.error,
+    },
+    errorText: {
+      ...typography.small,
+      color: C.error,
+      marginTop: spacing.xs,
+    },
+  });
+}

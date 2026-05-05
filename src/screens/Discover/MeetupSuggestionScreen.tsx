@@ -17,7 +17,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { proposeMeetup } from '../../utils/firestore-helpers';
 import Avatar from '../../components/Avatar';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { DiscoverStackParamList, MeetupProposal, MeetupType } from '../../types';
 
 type RouteProps = RouteProp<DiscoverStackParamList, 'MeetupSuggest'>;
@@ -83,6 +84,8 @@ const MEETUP_OPTIONS: MeetupOption[] = [
 ];
 
 export default function MeetupSuggestionScreen() {
+  const { C, isDark } = useTheme();
+  const styles = makeStyles(C);
   const navigation = useNavigation();
   const route = useRoute<RouteProps>();
   const { connectionId, connectedUser } = route.params;
@@ -126,7 +129,7 @@ export default function MeetupSuggestionScreen() {
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
+          <Ionicons name="chevron-back" size={24} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Plan a Meetup</Text>
         <View style={{ width: 32 }} />
@@ -193,7 +196,7 @@ export default function MeetupSuggestionScreen() {
                   value={place}
                   onChangeText={setPlace}
                   placeholder={selected?.placeholderSuggestion ?? ''}
-                  placeholderTextColor={colors.textSecondary}
+                  placeholderTextColor={C.textSecondary}
                 />
               </View>
 
@@ -207,7 +210,7 @@ export default function MeetupSuggestionScreen() {
                   value={note}
                   onChangeText={setNote}
                   placeholder={`Hey ${connectedUser.name}, I was thinking we could...`}
-                  placeholderTextColor={colors.textSecondary}
+                  placeholderTextColor={C.textSecondary}
                   multiline
                   maxLength={300}
                   textAlignVertical="top"
@@ -244,7 +247,7 @@ export default function MeetupSuggestionScreen() {
             disabled={!canSend || loading}
           >
             {loading ? (
-              <ActivityIndicator color={colors.background} />
+              <ActivityIndicator color={C.background} />
             ) : (
               <>
                 <Text style={styles.sendBtnIcon}>
@@ -300,99 +303,101 @@ function getQuickStarters(type: MeetupType, name: string): string[] {
   return starters[type] ?? [];
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  headerTitle: { ...typography.heading, color: colors.text },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    headerTitle: { ...typography.heading, color: C.text },
 
-  scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
+    scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
 
-  withCard: {
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    padding: spacing.md, marginBottom: spacing.lg, ...shadows.card,
-  },
-  withLabel: { ...typography.small, color: colors.textSecondary, marginBottom: spacing.sm },
-  withRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  withName: { ...typography.body, fontWeight: '700', color: colors.text },
-  withCity: { ...typography.caption, color: colors.textSecondary },
+    withCard: {
+      backgroundColor: C.surface, borderRadius: radius.md,
+      padding: spacing.md, marginBottom: spacing.lg, ...shadows.card,
+    },
+    withLabel: { ...typography.small, color: C.textSecondary, marginBottom: spacing.sm },
+    withRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    withName: { ...typography.body, fontWeight: '700', color: C.text },
+    withCity: { ...typography.caption, color: C.textSecondary },
 
-  sectionTitle: {
-    ...typography.body, fontWeight: '700', color: colors.text,
-    marginBottom: spacing.md, marginTop: spacing.md,
-  },
+    sectionTitle: {
+      ...typography.body, fontWeight: '700', color: C.text,
+      marginBottom: spacing.md, marginTop: spacing.md,
+    },
 
-  optionsGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm,
-  },
-  optionCard: {
-    width: '47%', backgroundColor: colors.surface, borderRadius: radius.md,
-    padding: spacing.md, borderWidth: 1.5, borderColor: colors.border,
-    alignItems: 'center', position: 'relative',
-  },
-  optionCardSelected: {
-    borderColor: colors.primary, backgroundColor: `${colors.primary}08`,
-  },
-  optionEmoji: { fontSize: 28, marginBottom: spacing.xs },
-  optionLabel: { ...typography.caption, fontWeight: '700', color: colors.text, textAlign: 'center' },
-  optionLabelSelected: { color: colors.primary },
-  optionDesc: { ...typography.small, color: colors.textSecondary, textAlign: 'center', marginTop: 2 },
-  optionDescSelected: { color: colors.primary },
-  selectedCheck: {
-    position: 'absolute', top: 8, right: 8,
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
-  },
-  selectedCheckText: { ...typography.small, color: colors.background, fontWeight: '700' },
+    optionsGrid: {
+      flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm,
+    },
+    optionCard: {
+      width: '47%', backgroundColor: C.surface, borderRadius: radius.md,
+      padding: spacing.md, borderWidth: 1.5, borderColor: C.border,
+      alignItems: 'center', position: 'relative',
+    },
+    optionCardSelected: {
+      borderColor: C.primary, backgroundColor: `${C.primary}08`,
+    },
+    optionEmoji: { fontSize: 28, marginBottom: spacing.xs },
+    optionLabel: { ...typography.caption, fontWeight: '700', color: C.text, textAlign: 'center' },
+    optionLabelSelected: { color: C.primary },
+    optionDesc: { ...typography.small, color: C.textSecondary, textAlign: 'center', marginTop: 2 },
+    optionDescSelected: { color: C.primary },
+    selectedCheck: {
+      position: 'absolute', top: 8, right: 8,
+      width: 20, height: 20, borderRadius: 10,
+      backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center',
+    },
+    selectedCheckText: { ...typography.small, color: C.background, fontWeight: '700' },
 
-  inputBox: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-  },
-  inputIcon: { fontSize: 16, marginRight: spacing.sm },
-  placeInput: { flex: 1, ...typography.body, color: colors.text },
+    inputBox: {
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: C.surface, borderRadius: radius.md,
+      borderWidth: 1, borderColor: C.border,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    },
+    inputIcon: { fontSize: 16, marginRight: spacing.sm },
+    placeInput: { flex: 1, ...typography.body, color: C.text },
 
-  noteWrapper: {
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
-  },
-  noteInput: {
-    padding: spacing.md, ...typography.body, color: colors.text,
-    minHeight: 100, lineHeight: 24,
-  },
-  charCount: {
-    ...typography.small, color: colors.textSecondary,
-    textAlign: 'right', padding: spacing.sm,
-  },
+    noteWrapper: {
+      backgroundColor: C.surface, borderRadius: radius.md,
+      borderWidth: 1, borderColor: C.border, overflow: 'hidden',
+    },
+    noteInput: {
+      padding: spacing.md, ...typography.body, color: C.text,
+      minHeight: 100, lineHeight: 24,
+    },
+    charCount: {
+      ...typography.small, color: C.textSecondary,
+      textAlign: 'right', padding: spacing.sm,
+    },
 
-  quickSection: { marginTop: spacing.md },
-  quickLabel: { ...typography.small, color: colors.textSecondary, marginBottom: spacing.sm },
-  quickRow: { flexDirection: 'row', gap: spacing.sm },
-  quickChip: {
-    maxWidth: 220, backgroundColor: `${colors.secondary}10`,
-    borderRadius: radius.md, padding: spacing.sm,
-    borderWidth: 1, borderColor: `${colors.secondary}30`,
-  },
-  quickChipText: { ...typography.small, color: colors.secondary, lineHeight: 18 },
+    quickSection: { marginTop: spacing.md },
+    quickLabel: { ...typography.small, color: C.textSecondary, marginBottom: spacing.sm },
+    quickRow: { flexDirection: 'row', gap: spacing.sm },
+    quickChip: {
+      maxWidth: 220, backgroundColor: `${C.secondary}10`,
+      borderRadius: radius.md, padding: spacing.sm,
+      borderWidth: 1, borderColor: `${C.secondary}30`,
+    },
+    quickChipText: { ...typography.small, color: C.secondary, lineHeight: 18 },
 
-  footer: {
-    padding: spacing.lg, paddingBottom: spacing.xl,
-    borderTopWidth: 1, borderTopColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  sendBtn: {
-    backgroundColor: colors.primary, borderRadius: radius.lg,
-    paddingVertical: spacing.md, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center',
-    gap: spacing.sm, ...shadows.card,
-  },
-  sendBtnDisabled: { opacity: 0.5 },
-  sendBtnIcon: { fontSize: 20 },
-  sendBtnText: { ...typography.body, color: colors.background, fontWeight: '700' },
-});
+    footer: {
+      padding: spacing.lg, paddingBottom: spacing.xl,
+      borderTopWidth: 1, borderTopColor: C.border,
+      backgroundColor: C.background,
+    },
+    sendBtn: {
+      backgroundColor: C.primary, borderRadius: radius.lg,
+      paddingVertical: spacing.md, flexDirection: 'row',
+      alignItems: 'center', justifyContent: 'center',
+      gap: spacing.sm, ...shadows.card,
+    },
+    sendBtnDisabled: { opacity: 0.5 },
+    sendBtnIcon: { fontSize: 20 },
+    sendBtnText: { ...typography.body, color: C.background, fontWeight: '700' },
+  });
+}

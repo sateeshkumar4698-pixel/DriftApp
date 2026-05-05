@@ -37,6 +37,8 @@ import {
   NotifType,
   EventInvite,
 } from '../types';
+import { dynamicVibeMatch } from './vibeMatch';
+import type { MoodPreset } from '../store/moodStore';
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
@@ -98,28 +100,49 @@ export async function checkDailyLoginAndUpdateStreak(
 /**
  * Paginated discovery feed — 20 users per page, excludes current user
  * and users already sent/received connections from.
+ *
+ * When `currentUser` and `mood` are provided the results are re-sorted
+ * by dynamic vibe match score (client-side, since Firestore can't order by
+ * computed fields).  Falls back to profileCompleteness order otherwise.
  */
 export async function getDiscoverFeed(
   currentUid: string,
   excludeUids: string[],
   lastDoc?: DocumentSnapshot,
   pageSize = 20,
+  currentUser?: UserProfile | null,
+  mood?: MoodPreset,
 ): Promise<{ users: UserProfile[]; lastDoc: DocumentSnapshot | null }> {
   const excludeSet = new Set([currentUid, ...excludeUids]);
+
+  // Over-fetch more aggressively when vibe-sorting so we have enough candidates
+  const fetchSize = currentUser && mood
+    ? Math.min((pageSize + excludeSet.size) * 4, 200)
+    : pageSize + excludeSet.size + 5;
 
   const constraints: QueryConstraint[] = [
     where('isBanned', '==', false),
     orderBy('profileCompleteness', 'desc'),
     orderBy('createdAt', 'desc'),
-    limit(pageSize + excludeSet.size + 5), // over-fetch to account for excludes
+    limit(fetchSize),
   ];
   if (lastDoc) constraints.push(startAfter(lastDoc));
 
   const snap = await getDocs(query(collection(db, 'users'), ...constraints));
-  const users = snap.docs
+  let users = snap.docs
     .filter((d) => !excludeSet.has(d.id))
-    .map((d) => d.data() as UserProfile)
-    .slice(0, pageSize);
+    .map((d) => d.data() as UserProfile);
+
+  // ── Vibe-sort when we have a mood + current user profile ──────────────────
+  if (currentUser && mood) {
+    users = users
+      .map((u) => ({ user: u, score: dynamicVibeMatch(currentUser, u, mood).score }))
+      .sort((a, b) => b.score - a.score)
+      .map(({ user }) => user)
+      .slice(0, pageSize);
+  } else {
+    users = users.slice(0, pageSize);
+  }
 
   const last = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
   return { users, lastDoc: last };
@@ -283,6 +306,37 @@ export async function sendMessage(
   });
 }
 
+// ─── Game Chat ────────────────────────────────────────────────────────────────
+
+export interface GameChatMessage {
+  id:        string;
+  senderUid: string;
+  senderName:string;
+  text:      string;
+  createdAt: number;
+}
+
+export function subscribeToGameChat(
+  roomId: string,
+  cb: (msgs: GameChatMessage[]) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db, 'gameRooms', roomId, 'chat'),
+    orderBy('createdAt', 'asc'),
+    limit(100),
+  );
+  return onSnapshot(q, (snap) =>
+    cb(snap.docs.map((d) => d.data() as GameChatMessage)),
+  );
+}
+
+export async function sendGameChatMessage(
+  roomId: string,
+  msg: GameChatMessage,
+): Promise<void> {
+  await setDoc(doc(db, 'gameRooms', roomId, 'chat', msg.id), msg);
+}
+
 // ─── Memories ────────────────────────────────────────────────────────────────
 
 export async function getMemories(uid: string): Promise<Memory[]> {
@@ -317,6 +371,42 @@ export async function postStatus(uid: string, status: DriftStatus): Promise<void
     Object.entries(status).filter(([, v]) => v !== undefined),
   );
   await setDoc(doc(db, 'statuses', uid), clean);
+}
+
+/** Delete the current user's status */
+export async function deleteStatus(uid: string): Promise<void> {
+  await deleteDoc(doc(db, 'statuses', uid));
+}
+
+/** Record that `viewerUid` has viewed `ownerUid`'s status */
+export async function markStatusViewed(ownerUid: string, viewerUid: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'statuses', ownerUid), {
+      views: arrayUnion(viewerUid),
+    });
+  } catch {
+    // Non-critical — status may have been deleted or viewer has no write access
+  }
+}
+
+/**
+ * Add or remove an emoji reaction on a status.
+ * `hasReacted` = whether the user already reacted with this emoji.
+ * Reactions stored as { [emoji]: string[] } — array of uids.
+ */
+export async function addStatusReaction(
+  ownerUid: string,
+  reactorUid: string,
+  emoji: string,
+  hasReacted: boolean,
+): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'statuses', ownerUid), {
+      [`reactions.${emoji}`]: hasReacted ? arrayRemove(reactorUid) : arrayUnion(reactorUid),
+    });
+  } catch {
+    // Non-critical
+  }
 }
 
 export async function getActiveStatuses(connectionUids: string[]): Promise<DriftStatus[]> {
@@ -355,6 +445,41 @@ export async function createEvent(event: Event): Promise<void> {
 
 export async function rsvpEvent(eventId: string, uid: string): Promise<void> {
   await updateDoc(doc(db, 'events', eventId), { attendees: arrayUnion(uid) });
+}
+
+export async function cancelRsvp(eventId: string, uid: string): Promise<void> {
+  await updateDoc(doc(db, 'events', eventId), { attendees: arrayRemove(uid) });
+}
+
+export async function cancelEvent(eventId: string): Promise<void> {
+  await updateDoc(doc(db, 'events', eventId), {
+    cancelled: true,
+    updatedAt: Date.now(),
+  });
+}
+
+export async function updateEvent(eventId: string, data: Partial<Event>): Promise<void> {
+  await updateDoc(doc(db, 'events', eventId), { ...data, updatedAt: Date.now() });
+}
+
+export async function getMyHostedEvents(hostId: string): Promise<Event[]> {
+  const q = query(
+    collection(db, 'events'),
+    where('hostId', '==', hostId),
+    orderBy('date', 'asc'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as Event);
+}
+
+export async function getMyAttendingEvents(uid: string): Promise<Event[]> {
+  const q = query(
+    collection(db, 'events'),
+    where('attendees', 'array-contains', uid),
+    orderBy('date', 'asc'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as Event);
 }
 
 // ─── Posts ───────────────────────────────────────────────────────────────────
@@ -458,14 +583,23 @@ export async function addPostComment(
 
 export async function getPostComments(
   postId: string,
-): Promise<import('../types').PostComment[]> {
-  const q = query(
-    collection(db, 'posts', postId, 'comments'),
+  pageSize = 30,
+  afterTimestamp?: number,
+): Promise<{ comments: import('../types').PostComment[]; hasMore: boolean; lastTimestamp: number | null }> {
+  const constraints: QueryConstraint[] = [
     orderBy('createdAt', 'desc'),
-    limit(3),
-  );
+    limit(pageSize + 1),
+  ];
+  if (afterTimestamp !== undefined) constraints.push(startAfter(afterTimestamp));
+  const q = query(collection(db, 'posts', postId, 'comments'), ...constraints);
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as import('../types').PostComment);
+  const hasMore = snap.docs.length > pageSize;
+  const pageDocs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+  const comments = pageDocs.map((d) => d.data() as import('../types').PostComment);
+  const lastTimestamp = pageDocs.length > 0
+    ? (pageDocs[pageDocs.length - 1].data() as import('../types').PostComment).createdAt
+    : null;
+  return { comments, hasMore, lastTimestamp };
 }
 
 // ─── Game Rooms (Firestore shell; live state in RTDB) ─────────────────────────
@@ -712,4 +846,45 @@ export async function respondToEventInvite(
   status: 'accepted' | 'declined',
 ): Promise<void> {
   await updateDoc(doc(db, 'eventInvites', inviteId), { status });
+}
+
+export async function castPollVote(
+  postId: string,
+  updatedOptions: import('../types').PollOption[],
+): Promise<void> {
+  const clean = updatedOptions.map((o) => ({
+    id: o.id,
+    text: o.text,
+    votes: [...o.votes],
+  }));
+  await updateDoc(doc(db, 'posts', postId), { pollOptions: clean });
+}
+
+// ─── Live User Sessions ───────────────────────────────────────────────────────
+
+export async function trackUserSession(uid: string, city: string): Promise<void> {
+  await setDoc(doc(db, 'userSessions', uid), {
+    uid,
+    city,
+    lastActive: Date.now(),
+    online: true,
+  }, { merge: true });
+}
+
+export async function clearUserSession(uid: string): Promise<void> {
+  try { await updateDoc(doc(db, 'userSessions', uid), { online: false }); } catch { /* ignore */ }
+}
+
+export function subscribeToLiveUserCount(
+  city: string,
+  callback: (count: number) => void,
+): Unsubscribe {
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  const q = query(
+    collection(db, 'userSessions'),
+    where('city', '==', city),
+    where('lastActive', '>', fiveMinutesAgo),
+    where('online', '==', true),
+  );
+  return onSnapshot(q, (snap) => callback(snap.size), () => callback(0));
 }

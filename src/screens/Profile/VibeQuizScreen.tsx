@@ -14,7 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../../store/authStore';
 import { setUserProfile } from '../../utils/firestore-helpers';
-import { colors, spacing, typography, radius } from '../../utils/theme';
+import { useTheme, AppColors, spacing, typography, radius } from '../../utils/useTheme';
 import { ProfileStackParamList, VibeProfile } from '../../types';
 
 type Nav = NativeStackNavigationProp<ProfileStackParamList>;
@@ -82,16 +82,16 @@ const QUESTIONS: Question[] = [
     type: 'multi',
     maxSelect: 4,
     options: [
-      { label: 'Creative', emoji: '🎨', value: 'Creative' },
-      { label: 'Chill', emoji: '🌊', value: 'Chill' },
-      { label: 'Ambitious', emoji: '🔥', value: 'Ambitious' },
-      { label: 'Witty', emoji: '⚡', value: 'Witty' },
-      { label: 'Romantic', emoji: '🌹', value: 'Romantic' },
-      { label: 'Adventurous', emoji: '🏕️', value: 'Adventurous' },
+      { label: 'Creative',     emoji: '🎨', value: 'Creative'     },
+      { label: 'Chill',        emoji: '🌊', value: 'Chill'        },
+      { label: 'Ambitious',    emoji: '🔥', value: 'Ambitious'    },
+      { label: 'Witty',        emoji: '⚡', value: 'Witty'        },
+      { label: 'Romantic',     emoji: '🌹', value: 'Romantic'     },
+      { label: 'Adventurous',  emoji: '🏕️', value: 'Adventurous'  },
       { label: 'Intellectual', emoji: '📚', value: 'Intellectual' },
-      { label: 'Spiritual', emoji: '✨', value: 'Spiritual' },
-      { label: 'Sporty', emoji: '💪', value: 'Sporty' },
-      { label: 'Foodie', emoji: '🍜', value: 'Foodie' },
+      { label: 'Spiritual',    emoji: '✨', value: 'Spiritual'    },
+      { label: 'Sporty',       emoji: '💪', value: 'Sporty'       },
+      { label: 'Foodie',       emoji: '🍜', value: 'Foodie'       },
     ],
   },
   {
@@ -100,14 +100,14 @@ const QUESTIONS: Question[] = [
     type: 'multi',
     maxSelect: 3,
     options: [
-      { label: 'Hip-hop / Rap', emoji: '🎤', value: 'Hip-hop' },
-      { label: 'Indie / Alt', emoji: '🎸', value: 'Indie' },
+      { label: 'Hip-hop / Rap',    emoji: '🎤', value: 'Hip-hop'    },
+      { label: 'Indie / Alt',      emoji: '🎸', value: 'Indie'      },
       { label: 'Electronic / EDM', emoji: '🎛️', value: 'Electronic' },
-      { label: 'Pop', emoji: '🎵', value: 'Pop' },
-      { label: 'R&B / Soul', emoji: '🎼', value: 'R&B' },
-      { label: 'Classical / Jazz', emoji: '🎹', value: 'Classical' },
-      { label: 'Rock / Metal', emoji: '🤘', value: 'Rock' },
-      { label: 'Folk / Acoustic', emoji: '🪕', value: 'Folk' },
+      { label: 'Pop',              emoji: '🎵', value: 'Pop'        },
+      { label: 'R&B / Soul',       emoji: '🎼', value: 'R&B'        },
+      { label: 'Classical / Jazz', emoji: '🎹', value: 'Classical'  },
+      { label: 'Rock / Metal',     emoji: '🤘', value: 'Rock'       },
+      { label: 'Folk / Acoustic',  emoji: '🪕', value: 'Folk'       },
     ],
   },
   {
@@ -115,26 +115,24 @@ const QUESTIONS: Question[] = [
     question: 'Your ideal night out is…',
     type: 'single',
     options: [
-      { label: 'Home with good people', emoji: '🏠', value: 'homebody' },
-      { label: 'Rooftop or lounge vibes', emoji: '🥂', value: 'lounge' },
+      { label: 'Home with good people',      emoji: '🏠', value: 'homebody'   },
+      { label: 'Rooftop or lounge vibes',    emoji: '🥂', value: 'lounge'     },
       { label: 'House party with a playlist', emoji: '🎶', value: 'houseparty' },
-      { label: 'Club, dancing all night', emoji: '🕺', value: 'club' },
-      { label: 'Bonfire / outdoor hangout', emoji: '🔥', value: 'outdoor' },
+      { label: 'Club, dancing all night',    emoji: '🕺', value: 'club'       },
+      { label: 'Bonfire / outdoor hangout',  emoji: '🔥', value: 'outdoor'    },
     ],
   },
 ];
 
-// ─── Helper: compute scalar answers ──────────────────────────────────────────
-
 function computeVibeProfile(answers: Record<string, string | string[]>): VibeProfile {
   return {
-    energy: parseFloat(answers.energy as string) || 0.5,
-    social: parseFloat(answers.social as string) || 0.5,
-    adventure: parseFloat(answers.adventure as string) || 0.5,
-    aesthetic: parseFloat(answers.aesthetic as string) || 0.5,
-    primaryVibes: (answers.primaryVibes as string[]) || [],
-    musicTaste: (answers.musicTaste as string[]) || [],
-    nightlifeStyle: (answers.nightlifeStyle as VibeProfile['nightlifeStyle']) || 'homebody',
+    energy:        parseFloat(answers.energy as string) || 0.5,
+    social:        parseFloat(answers.social as string) || 0.5,
+    adventure:     parseFloat(answers.adventure as string) || 0.5,
+    aesthetic:     parseFloat(answers.aesthetic as string) || 0.5,
+    primaryVibes:  (answers.primaryVibes  as string[]) || [],
+    musicTaste:    (answers.musicTaste    as string[]) || [],
+    nightlifeStyle:(answers.nightlifeStyle as VibeProfile['nightlifeStyle']) || 'homebody',
     quizCompletedAt: Date.now(),
   };
 }
@@ -142,25 +140,28 @@ function computeVibeProfile(answers: Record<string, string | string[]>): VibePro
 // ─── Option Button ─────────────────────────────────────────────────────────────
 
 function OptionButton({
-  option,
-  selected,
-  onPress,
+  option, selected, onPress, C,
 }: {
   option: Question['options'][number];
   selected: boolean;
   onPress: () => void;
+  C: AppColors;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.option, selected && styles.optionSelected]}
+      style={[
+        styles.option,
+        { backgroundColor: C.surface, borderColor: C.border },
+        selected && { borderColor: C.primary, backgroundColor: `${C.primary}12` },
+      ]}
       onPress={onPress}
       activeOpacity={0.8}
     >
       <Text style={styles.optionEmoji}>{option.emoji}</Text>
-      <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
+      <Text style={[styles.optionLabel, { color: C.text }, selected && { color: C.primary, fontWeight: '600' }]}>
         {option.label}
       </Text>
-      {selected && <Text style={styles.checkMark}>✓</Text>}
+      {selected && <Ionicons name="checkmark-circle" size={18} color={C.primary} />}
     </TouchableOpacity>
   );
 }
@@ -169,22 +170,19 @@ function OptionButton({
 
 export default function VibeQuizScreen() {
   const navigation = useNavigation<Nav>();
+  const { C } = useTheme();
   const { firebaseUser, userProfile, setUserProfile: setStoreProfile } = useAuthStore();
-  const [step, setStep] = useState(0);
+  const [step,    setStep]    = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
-  const [saving, setSaving] = useState(false);
+  const [saving,  setSaving]  = useState(false);
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   const question = QUESTIONS[step];
-  const total = QUESTIONS.length;
+  const total    = QUESTIONS.length;
   const progress = (step + 1) / total;
 
   React.useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: progress,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
+    Animated.timing(progressAnim, { toValue: progress, duration: 300, useNativeDriver: false }).start();
   }, [step]);
 
   function getAnswer(): string | string[] {
@@ -195,7 +193,7 @@ export default function VibeQuizScreen() {
     if (question.type === 'single') {
       setAnswers((prev) => ({ ...prev, [question.id]: value }));
     } else {
-      const current = (getAnswer() as string[]);
+      const current = getAnswer() as string[];
       const max = question.maxSelect ?? 99;
       if (current.includes(value)) {
         setAnswers((prev) => ({ ...prev, [question.id]: current.filter((v) => v !== value) }));
@@ -213,11 +211,8 @@ export default function VibeQuizScreen() {
 
   function handleNext() {
     if (!isAnswered()) return;
-    if (step < total - 1) {
-      setStep((s) => s + 1);
-    } else {
-      handleSave();
-    }
+    if (step < total - 1) setStep((s) => s + 1);
+    else handleSave();
   }
 
   function handleBack() {
@@ -234,7 +229,7 @@ export default function VibeQuizScreen() {
       await setUserProfile(firebaseUser.uid, { vibeProfile, profileCompleteness: updated.profileCompleteness });
       setStoreProfile(updated);
       Alert.alert('Vibe set! 🔥', 'Your Drift vibe is saved. People who match your energy will find you.', [
-        { text: 'Let\'s go', onPress: () => navigation.goBack() },
+        { text: "Let's go", onPress: () => navigation.goBack() },
       ]);
     } catch {
       Alert.alert('Error', 'Could not save your vibe. Try again.');
@@ -246,23 +241,23 @@ export default function VibeQuizScreen() {
   const answer = getAnswer();
 
   return (
-    <SafeAreaView style={styles.flex}>
+    <SafeAreaView style={[styles.flex, { backgroundColor: C.background }]}>
       {/* Progress bar */}
-      <View style={styles.progressTrack}>
+      <View style={[styles.progressTrack, { backgroundColor: C.border }]}>
         <Animated.View
           style={[
             styles.progressFill,
-            { width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
+            { backgroundColor: C.primary, width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
           ]}
         />
       </View>
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
+        <TouchableOpacity onPress={handleBack} style={[styles.backBtn, { backgroundColor: C.surface }]}>
+          <Ionicons name="chevron-back" size={24} color={C.text} />
         </TouchableOpacity>
-        <Text style={styles.stepCount}>{step + 1} / {total}</Text>
+        <Text style={[styles.stepCount, { color: C.textSecondary }]}>{step + 1} / {total}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -271,18 +266,16 @@ export default function VibeQuizScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Question */}
-        <Text style={styles.question}>{question.question}</Text>
+        <Text style={[styles.question, { color: C.text }]}>{question.question}</Text>
         {question.subtitle && (
-          <Text style={styles.subtitle}>{question.subtitle}</Text>
+          <Text style={[styles.subtitle, { color: C.textSecondary }]}>{question.subtitle}</Text>
         )}
         {question.type === 'multi' && question.maxSelect && (
-          <Text style={styles.hint}>
+          <Text style={[styles.hint, { color: C.primary }]}>
             {(answer as string[]).length} / {question.maxSelect} selected
           </Text>
         )}
 
-        {/* Options */}
         <View style={styles.options}>
           {question.options.map((opt) => {
             const selected =
@@ -295,6 +288,7 @@ export default function VibeQuizScreen() {
                 option={opt}
                 selected={selected}
                 onPress={() => handleSelect(opt.value)}
+                C={C}
               />
             );
           })}
@@ -302,9 +296,13 @@ export default function VibeQuizScreen() {
       </ScrollView>
 
       {/* Next button */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { borderTopColor: C.border, backgroundColor: C.background }]}>
         <TouchableOpacity
-          style={[styles.nextBtn, !isAnswered() && styles.nextBtnDisabled]}
+          style={[
+            styles.nextBtn,
+            { backgroundColor: C.primary },
+            !isAnswered() && styles.nextBtnDisabled,
+          ]}
           onPress={handleNext}
           disabled={!isAnswered() || saving}
           activeOpacity={0.85}
@@ -321,16 +319,10 @@ export default function VibeQuizScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
 
-  progressTrack: {
-    height: 3,
-    backgroundColor: colors.border,
-  },
-  progressFill: {
-    height: 3,
-    backgroundColor: colors.primary,
-  },
+  progressTrack: { height: 3 },
+  progressFill:  { height: 3 },
 
   header: {
     flexDirection: 'row',
@@ -340,36 +332,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 40, height: 40,
+    alignItems: 'center', justifyContent: 'center',
     borderRadius: radius.full,
-    backgroundColor: colors.surface,
   },
-  stepCount: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
+  stepCount: { ...typography.caption, fontWeight: '600' },
 
-  container: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
-  question: {
-    ...typography.title,
-    color: colors.text,
-    marginBottom: spacing.xs,
-    lineHeight: 34,
-  },
-  subtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  hint: {
-    ...typography.caption,
-    color: colors.primary,
-    fontWeight: '600',
-    marginBottom: spacing.md,
-  },
+  container: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  question:  { ...typography.title, lineHeight: 34, marginBottom: spacing.xs },
+  subtitle:  { ...typography.body, marginBottom: spacing.sm },
+  hint:      { ...typography.caption, fontWeight: '600', marginBottom: spacing.md },
 
   options: { gap: spacing.sm, marginTop: spacing.md },
   option: {
@@ -378,33 +350,17 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: colors.border,
   },
-  optionSelected: {
-    borderColor: colors.primary,
-    backgroundColor: `${colors.primary}10`,
-  },
-  optionEmoji: { fontSize: 22, width: 30, textAlign: 'center' },
-  optionLabel: {
-    flex: 1,
-    ...typography.body,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  optionLabelSelected: { color: colors.primary, fontWeight: '600' },
-  checkMark: { fontSize: 16, color: colors.primary, fontWeight: '700' },
+  optionEmoji:  { fontSize: 22, width: 30, textAlign: 'center' },
+  optionLabel:  { flex: 1, ...typography.body, fontWeight: '500' },
 
   footer: {
     padding: spacing.lg,
     paddingBottom: spacing.xl,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.background,
   },
   nextBtn: {
-    backgroundColor: colors.primary,
     borderRadius: radius.lg,
     paddingVertical: spacing.md + 2,
     alignItems: 'center',
@@ -412,7 +368,7 @@ const styles = StyleSheet.create({
   nextBtnDisabled: { opacity: 0.4 },
   nextBtnText: {
     ...typography.body,
-    color: colors.background,
+    color: '#fff',
     fontWeight: '700',
     fontSize: 16,
   },

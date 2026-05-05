@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -27,7 +28,8 @@ import {
 } from '../../utils/firestore-helpers';
 import { formatTime } from '../../utils/helpers';
 import Avatar from '../../components/Avatar';
-import { colors, spacing, typography, radius } from '../../utils/theme';
+import { spacing, typography, radius } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import {
   Message,
   DiscoverStackParamList,
@@ -65,6 +67,8 @@ function GameInviteModal({
   onClose: () => void;
   onInvite: (gameId: 'ludo' | 'truth-dare', maxPlayers: number) => Promise<void>;
 }) {
+  const { C } = useTheme();
+  const gStyles = makeGStyles(C);
   const [loading, setLoading] = useState<string | null>(null);
 
   async function handle(gameId: 'ludo' | 'truth-dare', maxPlayers: number) {
@@ -101,7 +105,7 @@ function GameInviteModal({
                 <Text style={gStyles.gameSub}>Tap to send invite</Text>
               </View>
               {loading === g.id
-                ? <ActivityIndicator size="small" color={colors.primary} />
+                ? <ActivityIndicator size="small" color={C.primary} />
                 : <Text style={gStyles.gameArrow}>→</Text>
               }
             </TouchableOpacity>
@@ -115,42 +119,86 @@ function GameInviteModal({
   );
 }
 
-const gStyles = StyleSheet.create({
-  overlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  sheet: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: spacing.lg, paddingBottom: spacing.xxl,
-  },
-  handle: {
-    width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border,
-    alignSelf: 'center', marginBottom: spacing.md,
-  },
-  title: { ...typography.heading, color: colors.text, textAlign: 'center' },
-  subtitle: {
-    ...typography.caption, color: colors.textSecondary,
-    textAlign: 'center', marginTop: 4, marginBottom: spacing.lg,
-  },
-  gameList: { gap: spacing.sm },
-  gameRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    padding: spacing.md, borderWidth: 1, borderColor: colors.border,
-  },
-  gameEmoji: { fontSize: 32 },
-  gameInfo: { flex: 1 },
-  gameName: { ...typography.body, fontWeight: '700', color: colors.text },
-  gameSub: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
-  gameArrow: { fontSize: 18, color: colors.primary, fontWeight: '700' },
-  cancelBtn: {
-    marginTop: spacing.md, padding: spacing.md,
-    alignItems: 'center',
-  },
-  cancelText: { ...typography.body, color: colors.textSecondary },
-});
+function makeGStyles(C: AppColors) {
+  return StyleSheet.create({
+    overlay: {
+      flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    },
+    sheet: {
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      backgroundColor: C.background,
+      borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      padding: spacing.lg, paddingBottom: spacing.xxl,
+    },
+    handle: {
+      width: 40, height: 4, borderRadius: 2, backgroundColor: C.border,
+      alignSelf: 'center', marginBottom: spacing.md,
+    },
+    title: { ...typography.heading, color: C.text, textAlign: 'center' },
+    subtitle: {
+      ...typography.caption, color: C.textSecondary,
+      textAlign: 'center', marginTop: 4, marginBottom: spacing.lg,
+    },
+    gameList: { gap: spacing.sm },
+    gameRow: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+      backgroundColor: C.surface, borderRadius: radius.md,
+      padding: spacing.md, borderWidth: 1, borderColor: C.border,
+    },
+    gameEmoji: { fontSize: 32 },
+    gameInfo: { flex: 1 },
+    gameName: { ...typography.body, fontWeight: '700', color: C.text },
+    gameSub: { ...typography.small, color: C.textSecondary, marginTop: 2 },
+    gameArrow: { fontSize: 18, color: C.primary, fontWeight: '700' },
+    cancelBtn: {
+      marginTop: spacing.md, padding: spacing.md,
+      alignItems: 'center',
+    },
+    cancelText: { ...typography.body, color: C.textSecondary },
+  });
+}
+
+// ─── Animated typing dots ─────────────────────────────────────────────────────
+
+function AnimatedTypingDots({ color }: { color: string }) {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    function pulse(dot: Animated.Value, delay: number) {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0.3, duration: 300, useNativeDriver: true }),
+        ]),
+      );
+    }
+    const anim = Animated.parallel([
+      pulse(dot1, 0),
+      pulse(dot2, 200),
+      pulse(dot3, 400),
+    ]);
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  return (
+    <View style={{ flexDirection: 'row', gap: 4, paddingHorizontal: 4, paddingVertical: 2 }}>
+      {[dot1, dot2, dot3].map((dot, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            width: 7, height: 7, borderRadius: 4,
+            backgroundColor: color,
+            opacity: dot,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
@@ -158,6 +206,9 @@ export default function ChatScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProps>();
   const { connectionId, connectedUser } = route.params;
+
+  const { C, isDark } = useTheme();
+  const styles = makeStyles(C, isDark);
 
   const { firebaseUser, userProfile } = useAuthStore();
   const { activeMessages, setMessages } = useMatchStore();
@@ -297,7 +348,7 @@ export default function ChatScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
+          <Ionicons name="chevron-back" size={24} color={C.text} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.headerUser}
@@ -334,7 +385,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <FlatList
           ref={flatListRef}
@@ -404,7 +455,7 @@ export default function ChatScreen() {
           <View style={styles.typingRow}>
             <Avatar name={connectedUser.name} photoURL={connectedUser.photoURL} size={20} />
             <View style={styles.typingBubble}>
-              <Text style={styles.typingDots}>• • •</Text>
+              <AnimatedTypingDots color={C.textSecondary} />
             </View>
           </View>
         )}
@@ -422,7 +473,7 @@ export default function ChatScreen() {
             value={text}
             onChangeText={handleTextChange}
             placeholder="Say something..."
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={C.textSecondary}
             multiline
             maxLength={500}
           />
@@ -432,7 +483,7 @@ export default function ChatScreen() {
             disabled={!text.trim() || sending}
           >
             {sending
-              ? <ActivityIndicator size="small" color={colors.background} />
+              ? <ActivityIndicator size="small" color={C.background} />
               : <Text style={styles.sendIcon}>↑</Text>
             }
           </TouchableOpacity>
@@ -451,113 +502,116 @@ export default function ChatScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+function makeStyles(C: AppColors, isDark: boolean) {
+  const receivedBubbleBg = isDark ? '#1C1C35' : C.surface;
 
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.sm,
-  },
-  backBtn: { padding: spacing.xs },
-  headerUser: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  headerInfo: { flex: 1 },
-  headerName: { ...typography.body, fontWeight: '600', color: colors.text },
-  headerSub: { ...typography.small, color: colors.textSecondary },
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: isDark ? '#0D0D1A' : C.background },
 
-  actionBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  actionBtnText: { fontSize: 18 },
+    header: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderBottomWidth: 1, borderBottomColor: C.border, gap: spacing.sm,
+    },
+    backBtn: { padding: spacing.xs },
+    headerUser: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    headerInfo: { flex: 1 },
+    headerName: { ...typography.body, fontWeight: '600', color: C.text },
+    headerSub: { ...typography.small, color: C.textSecondary },
 
-  messagesList: { padding: spacing.md, gap: spacing.sm, flexGrow: 1 },
+    actionBtn: {
+      width: 36, height: 36, borderRadius: 18,
+      backgroundColor: C.surface,
+      borderWidth: 1, borderColor: C.border,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    actionBtnText: { fontSize: 18 },
 
-  emptyChat: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingTop: spacing.xxl, gap: spacing.sm,
-  },
-  emptyChatEmoji: { fontSize: 48 },
-  emptyChatText: {
-    ...typography.body, fontWeight: '600', color: colors.text, textAlign: 'center',
-  },
-  emptyChatSub: {
-    ...typography.caption, color: colors.textSecondary,
-    textAlign: 'center', lineHeight: 22, paddingHorizontal: spacing.lg,
-  },
-  quickInviteRow: {
-    flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  quickChip: {
-    backgroundColor: `${colors.secondary}12`,
-    borderWidth: 1, borderColor: `${colors.secondary}30`,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-  },
-  quickChipText: { ...typography.caption, color: colors.secondary, fontWeight: '600' },
+    messagesList: { padding: spacing.md, gap: spacing.sm, flexGrow: 1 },
 
-  bubbleWrapper: {
-    flexDirection: 'row', alignItems: 'flex-end', marginBottom: spacing.xs,
-  },
-  bubbleWrapperMine:   { justifyContent: 'flex-end' },
-  bubbleWrapperTheirs: { justifyContent: 'flex-start', gap: spacing.xs },
+    emptyChat: {
+      flex: 1, alignItems: 'center', justifyContent: 'center',
+      paddingTop: spacing.xxl, gap: spacing.sm,
+    },
+    emptyChatEmoji: { fontSize: 48 },
+    emptyChatText: {
+      ...typography.body, fontWeight: '600', color: C.text, textAlign: 'center',
+    },
+    emptyChatSub: {
+      ...typography.caption, color: C.textSecondary,
+      textAlign: 'center', lineHeight: 22, paddingHorizontal: spacing.lg,
+    },
+    quickInviteRow: {
+      flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, flexWrap: 'wrap',
+      justifyContent: 'center',
+    },
+    quickChip: {
+      backgroundColor: `${C.secondary}12`,
+      borderWidth: 1, borderColor: `${C.secondary}30`,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderRadius: radius.full,
+    },
+    quickChipText: { ...typography.caption, color: C.secondary, fontWeight: '600' },
 
-  bubble: {
-    maxWidth: '72%', borderRadius: radius.md,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-  },
-  bubbleMine:   { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
-  bubbleTheirs: { backgroundColor: colors.surface,  borderBottomLeftRadius: 4 },
-  bubbleInvite: {
-    borderWidth: 1, borderColor: `${colors.secondary}40`,
-    backgroundColor: `${colors.secondary}10`,
-  },
-  bubbleText: { ...typography.body, lineHeight: 22 },
-  textMine:   { color: colors.background },
-  textTheirs: { color: colors.text },
-  bubbleTime: { ...typography.small, marginTop: 3, alignSelf: 'flex-end' },
-  timeMine:   { color: `${colors.background}90` },
-  timeTheirs: { color: colors.textSecondary },
+    bubbleWrapper: {
+      flexDirection: 'row', alignItems: 'flex-end', marginBottom: spacing.xs,
+    },
+    bubbleWrapperMine:   { justifyContent: 'flex-end' },
+    bubbleWrapperTheirs: { justifyContent: 'flex-start', gap: spacing.xs },
 
-  typingRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-  },
-  typingBubble: {
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    paddingHorizontal: spacing.md, paddingVertical: 6,
-    borderBottomLeftRadius: 4,
-  },
-  typingDots: { ...typography.caption, color: colors.textSecondary, letterSpacing: 3 },
+    bubble: {
+      maxWidth: '72%', borderRadius: radius.md,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    },
+    bubbleMine:   { backgroundColor: C.primary, borderBottomRightRadius: 4 },
+    bubbleTheirs: { backgroundColor: receivedBubbleBg,  borderBottomLeftRadius: 4 },
+    bubbleInvite: {
+      borderWidth: 1, borderColor: `${C.secondary}40`,
+      backgroundColor: `${C.secondary}10`,
+    },
+    bubbleText: { ...typography.body, lineHeight: 22 },
+    textMine:   { color: C.background },
+    textTheirs: { color: C.text },
+    bubbleTime: { ...typography.small, marginTop: 3, alignSelf: 'flex-end' },
+    timeMine:   { color: `${C.background}90` },
+    timeTheirs: { color: C.textSecondary },
 
-  inputBar: {
-    flexDirection: 'row', alignItems: 'flex-end',
-    padding: spacing.md, gap: spacing.sm,
-    borderTopWidth: 1, borderTopColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  gameBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  gameBtnText: { fontSize: 22 },
-  textInput: {
-    flex: 1, backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    ...typography.body, color: colors.text, maxHeight: 120,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  sendBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  sendBtnOff: { opacity: 0.4 },
-  sendIcon: { fontSize: 20, color: colors.background, fontWeight: '700' },
-});
+    typingRow: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+    },
+    typingBubble: {
+      backgroundColor: C.surface, borderRadius: radius.md,
+      paddingHorizontal: spacing.md, paddingVertical: 6,
+      borderBottomLeftRadius: 4,
+    },
+
+    inputBar: {
+      flexDirection: 'row', alignItems: 'flex-end',
+      padding: spacing.md, gap: spacing.sm,
+      borderTopWidth: 1, borderTopColor: C.border,
+      backgroundColor: isDark ? '#0D0D1A' : C.background,
+    },
+    gameBtn: {
+      width: 44, height: 44, borderRadius: 22,
+      backgroundColor: C.surface,
+      borderWidth: 1, borderColor: C.border,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    gameBtnText: { fontSize: 22 },
+    textInput: {
+      flex: 1, backgroundColor: C.surface,
+      borderRadius: radius.lg,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      ...typography.body, color: C.text, maxHeight: 120,
+      borderWidth: 1, borderColor: C.border,
+    },
+    sendBtn: {
+      width: 44, height: 44, borderRadius: 22,
+      backgroundColor: C.primary,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    sendBtnOff: { opacity: 0.4 },
+    sendIcon: { fontSize: 20, color: C.background, fontWeight: '700' },
+  });
+}

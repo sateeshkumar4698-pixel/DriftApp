@@ -36,8 +36,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './src/config/firebase';
 import { useAuthStore } from './src/store/authStore';
 import { useThemeStore } from './src/store/themeStore';
-import { getUserProfile } from './src/utils/firestore-helpers';
+import { getUserProfile, trackUserSession, clearUserSession } from './src/utils/firestore-helpers';
 import { processDailyLogin } from './src/services/coinService';
+import { setAnalyticsUser, trackSessionStart } from './src/services/analyticsService';
 import RootNavigator from './src/navigation/RootNavigator';
 
 // Global navigation ref — lets us navigate from outside React components (push notifications)
@@ -51,6 +52,7 @@ const MOCK_AUTH = false;
 export default function App() {
   const { setFirebaseUser, setUserProfile, setLoading } = useAuthStore();
   const hydrateTheme = useThemeStore((s) => s.hydrate);
+  const isDark       = useThemeStore((s) => s.isDark);
   const appState = useRef<AppStateStatus>(AppState.currentState);
 
   // Hydrate persisted theme preference before first render
@@ -125,6 +127,13 @@ export default function App() {
           setUserProfile(profile);
 
           if (profile) {
+            // Analytics + live session
+            setAnalyticsUser(user.uid, profile.city);
+            trackSessionStart();
+            if (profile.city) {
+              trackUserSession(user.uid, profile.city).catch(() => {});
+            }
+
             // Daily login + streak — safe defaults so processDailyLogin never crashes
             processDailyLogin(user.uid, {
               coins:  profile.coins  ?? 0,
@@ -228,7 +237,7 @@ export default function App() {
 
   return (
     <NavigationContainer ref={navigationRef}>
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <RootNavigator />
     </NavigationContainer>
   );

@@ -1,10 +1,3 @@
-/**
- * ShakeToShareScreen — Shake your phone simultaneously with someone nearby
- * to instantly exchange Drift profiles — no number, no QR needed.
- *
- * Install:  npx expo install expo-sensors
- */
-
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -28,11 +21,10 @@ import { rtdb } from '../../config/firebase';
 import { useAuthStore } from '../../store/authStore';
 import { getUserProfile } from '../../utils/firestore-helpers';
 import Avatar from '../../components/Avatar';
-import { colors, spacing, typography, radius } from '../../utils/theme';
+import { useTheme, AppColors, spacing, typography, radius } from '../../utils/useTheme';
 import { DiscoverStackParamList } from '../../types';
 import { RTDB_SHAKES_PATH, SHAKE_TTL_MS } from '../../utils/profileShare';
 
-// ─── Lazy-load expo-sensors ───────────────────────────────────────────────────
 let SensorsModule: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -44,12 +36,14 @@ type Nav = NativeStackNavigationProp<DiscoverStackParamList>;
 // ─── Not-installed screen ─────────────────────────────────────────────────────
 
 function PackageNotInstalled() {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const navigation = useNavigation();
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.primary} />
+          <Ionicons name="chevron-back" size={24} color={C.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Shake to Share</Text>
         <View style={{ width: 40 }} />
@@ -70,7 +64,7 @@ function PackageNotInstalled() {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SHAKE_THRESHOLD  = 1.8;   // G units
+const SHAKE_THRESHOLD  = 1.8;
 const MIN_SHAKE_GAP_MS = 800;
 
 interface ShakeEntry {
@@ -83,6 +77,7 @@ interface ShakeEntry {
 // ─── Pulse rings ──────────────────────────────────────────────────────────────
 
 function PulseRings({ active }: { active: boolean }) {
+  const { C } = useTheme();
   const r0 = useRef(new Animated.Value(0)).current;
   const r1 = useRef(new Animated.Value(0)).current;
   const r2 = useRef(new Animated.Value(0)).current;
@@ -113,7 +108,12 @@ function PulseRings({ active }: { active: boolean }) {
         return (
           <Animated.View
             key={i}
-            style={[pulseStyles.ring, { transform: [{ scale }], opacity }]}
+            style={[{
+              position: 'absolute',
+              width: 120, height: 120, borderRadius: 60,
+              backgroundColor: C.primary,
+              alignSelf: 'center',
+            }, { transform: [{ scale }], opacity }]}
             pointerEvents="none"
           />
         );
@@ -121,15 +121,6 @@ function PulseRings({ active }: { active: boolean }) {
     </>
   );
 }
-
-const pulseStyles = StyleSheet.create({
-  ring: {
-    position: 'absolute',
-    width: 120, height: 120, borderRadius: 60,
-    backgroundColor: colors.primary,
-    alignSelf: 'center',
-  },
-});
 
 // ─── Phone icon ───────────────────────────────────────────────────────────────
 
@@ -164,11 +155,13 @@ function PhoneIcon({ shaking }: { shaking: boolean }) {
   );
 }
 
-// ─── Inner component (renders only when expo-sensors is installed) ────────────
+// ─── Inner component ─────────────────────────────────────────────────────────
 
 type Stage = 'idle' | 'shaking' | 'searching' | 'matched' | 'notfound';
 
 function ShakeToShareInner() {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const navigation = useNavigation<Nav>();
   const { userProfile, firebaseUser } = useAuthStore();
 
@@ -285,20 +278,17 @@ function ShakeToShareInner() {
     } finally { setMatchLoading(false); }
   }
 
-  const isActive = stage === 'shaking' || stage === 'searching';
-
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => { cleanup(); navigation.goBack(); }} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.primary} />
+          <Ionicons name="chevron-back" size={24} color={C.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Shake to Share</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.center}>
-        {/* IDLE */}
         {stage === 'idle' && (
           <>
             <View style={styles.iconContainer}><PhoneIcon shaking={false} /></View>
@@ -314,7 +304,6 @@ function ShakeToShareInner() {
           </>
         )}
 
-        {/* SHAKING / SEARCHING */}
         {(stage === 'shaking' || stage === 'searching') && (
           <>
             <View style={styles.iconContainer}>
@@ -325,14 +314,13 @@ function ShakeToShareInner() {
             <Text style={styles.mainSub}>
               {stage === 'shaking' ? 'Matching you with nearby shakers' : 'Scanning for other phones shaking right now'}
             </Text>
-            {stage === 'searching' && <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.lg }} />}
+            {stage === 'searching' && <ActivityIndicator color={C.primary} style={{ marginTop: spacing.lg }} />}
             <TouchableOpacity onPress={reset} style={styles.cancelBtn}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </>
         )}
 
-        {/* MATCHED */}
         {stage === 'matched' && match && (
           <>
             <View style={styles.matchBurst}><Text style={{ fontSize: 40 }}>🤝</Text></View>
@@ -352,7 +340,6 @@ function ShakeToShareInner() {
           </>
         )}
 
-        {/* NOT FOUND */}
         {stage === 'notfound' && (
           <>
             <Text style={{ fontSize: 60 }}>😅</Text>
@@ -368,7 +355,7 @@ function ShakeToShareInner() {
   );
 }
 
-// ─── Export — shows install screen if package missing ─────────────────────────
+// ─── Export ───────────────────────────────────────────────────────────────────
 
 export default function ShakeToShareScreen() {
   if (!SensorsModule) return <PackageNotInstalled />;
@@ -377,44 +364,35 @@ export default function ShakeToShareScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  backBtn:     { width: 40, alignItems: 'flex-start' },
-  headerTitle: { ...typography.heading, color: colors.text },
-
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, gap: spacing.lg },
-  iconContainer: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
-
-  mainTitle: { ...typography.title, color: colors.text, textAlign: 'center', fontWeight: '700' },
-  mainSub:   { ...typography.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 24 },
-
-  stepsCard: {
-    backgroundColor: colors.surface, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border,
-    padding: spacing.lg, gap: spacing.md, width: '100%',
-  },
-  step: { ...typography.body, color: colors.text, lineHeight: 24 },
-  readyHint: { ...typography.caption, color: colors.primary, fontWeight: '600' },
-
-  cancelBtn:  { marginTop: spacing.sm },
-  cancelText: { ...typography.body, color: colors.textSecondary },
-
-  primaryBtn: { backgroundColor: colors.primary, borderRadius: radius.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
-  primaryBtnText: { ...typography.body, color: '#fff', fontWeight: '700' },
-
-  matchBurst: { width: 80, height: 80, borderRadius: 40, backgroundColor: `${colors.primary}18`, alignItems: 'center', justifyContent: 'center' },
-  matchCard:  { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, alignItems: 'center', gap: spacing.sm, width: '100%' },
-  matchName:  { ...typography.title, color: colors.text, fontWeight: '700' },
-
-  codeBox: {
-    backgroundColor: '#1E1E2E', borderRadius: radius.md,
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    width: '100%', marginTop: spacing.sm,
-  },
-  codeText: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: '#50FA7B', fontSize: 13 },
-});
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: C.background },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    backBtn:     { width: 40, alignItems: 'flex-start' },
+    headerTitle: { ...typography.h3, color: C.text },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, gap: spacing.lg },
+    iconContainer: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
+    mainTitle: { ...typography.h1, color: C.text, textAlign: 'center', fontWeight: '700' },
+    mainSub:   { ...typography.body, color: C.textSecondary, textAlign: 'center', lineHeight: 24 },
+    stepsCard: {
+      backgroundColor: C.surface, borderRadius: radius.lg,
+      borderWidth: 1, borderColor: C.border,
+      padding: spacing.lg, gap: spacing.md, width: '100%',
+    },
+    step:      { ...typography.body, color: C.text, lineHeight: 24 },
+    readyHint: { ...typography.caption, color: C.primary, fontWeight: '600' },
+    cancelBtn:  { marginTop: spacing.sm },
+    cancelText: { ...typography.body, color: C.textSecondary },
+    primaryBtn:     { backgroundColor: C.primary, borderRadius: radius.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+    primaryBtnText: { ...typography.body, color: '#fff', fontWeight: '700' },
+    matchBurst: { width: 80, height: 80, borderRadius: 40, backgroundColor: C.primary + '18', alignItems: 'center', justifyContent: 'center' },
+    matchCard:  { backgroundColor: C.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: C.border, padding: spacing.xl, alignItems: 'center', gap: spacing.sm, width: '100%' },
+    matchName:  { ...typography.h1, color: C.text, fontWeight: '700' },
+    codeBox:    { backgroundColor: '#1E1E2E', borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, width: '100%', marginTop: spacing.sm },
+    codeText:   { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: '#50FA7B', fontSize: 13 },
+  });
+}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, spacing, typography } from '../utils/theme';
+import { useTheme, AppColors, spacing, typography } from '../utils/useTheme';
 
 interface EmptyStateProps {
   emoji?: string;
@@ -10,6 +10,9 @@ interface EmptyStateProps {
 }
 
 export default function EmptyState({ emoji = '✨', title, subtitle, children }: EmptyStateProps) {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
+
   return (
     <View style={styles.container}>
       <Text style={styles.emoji}>{emoji}</Text>
@@ -20,27 +23,29 @@ export default function EmptyState({ emoji = '✨', title, subtitle, children }:
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xxl,
-  },
-  emoji: {
-    fontSize: 56,
-    marginBottom: spacing.lg,
-  },
-  title: {
-    ...typography.heading,
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-  },
-  subtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-});
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: spacing.xxl,
+    },
+    emoji: {
+      fontSize: 56,
+      marginBottom: spacing.lg,
+    },
+    title: {
+      ...typography.heading,
+      color: C.text,
+      textAlign: 'center',
+      marginBottom: spacing.sm,
+    },
+    subtitle: {
+      ...typography.body,
+      color: C.textSecondary,
+      textAlign: 'center',
+      lineHeight: 24,
+    },
+  });
+}

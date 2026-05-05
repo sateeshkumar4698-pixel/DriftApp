@@ -12,9 +12,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { ref as rtdbRef, set as rtdbSet, update as rtdbUpdate, onValue } from 'firebase/database';
+import { getDoc, doc } from 'firebase/firestore';
+import { rtdb, db } from '../../config/firebase';
+import { GameRoom } from '../../types';
 import { GamesStackParamList } from '../../types';
-import { colors } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { gameSounds } from '../../services/gameSounds';
+import { useAuthStore } from '../../store/authStore';
+import GameChatVoice from '../../components/GameChatVoice';
 
 // ─── Board dimensions ──────────────────────────────────────────────────────────
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -200,78 +206,150 @@ function stackOffset(groupLen: number, idx: number) {
   return { ox, oy };
 }
 
-// ─── Real rolling dice ────────────────────────────────────────────────────────
-// True 3D feel via:
-//  • Tight perspective (300px) so rotateY foreshortening is very visible
-//  • rotY maps 0→1 = 0→360° CONTINUOUS full spins (not oscillate)
-//    → face naturally goes edge-on at 90° & 270°, just like a real die
-//  • Persistent rotX tilt (-15° at rest) so you always see the top face hint
-//  • faceFlip (scaleX) fires at the edge-on moments to swap dots cleanly
-//  • Slight shadow shift during roll to reinforce depth
-const DS    = 62;
-const DPAD  = 8;
-const CELLD = (DS - DPAD * 2) / 3;
-const DOTD  = Math.round(CELLD * 0.64);
+// ─── Premium Dice ─────────────────────────────────────────────────────────────
+// Visual improvements:
+//  • Larger (90px) dark-gradient face with rounded corners
+//  • Glowing colored dots per face value
+//  • Animated glow ring that pulses during roll
+//  • Number label underneath
+//  • Landing impact ring (scale-out animation)
+const DS    = 90;
+const DPAD  = 10;
+const CELLD_SIZE = (DS - DPAD * 2) / 3;
+const DOTD  = Math.round(CELLD_SIZE * 0.60);
 
-// rotX resting value (0→1 maps to 0→-40°; 0.37 ≈ -15° persistent tilt)
 const ROT_X_REST = 0.37;
+
+// Dot color per face value — each value gets its own color for personality
+const DOT_COLORS: Record<number, string> = {
+  1: '#FF4B6E',
+  2: '#6C5CE7',
+  3: '#00D2FF',
+  4: '#00E676',
+  5: '#FFD700',
+  6: '#FF8C00',
+};
 
 interface DiceProps {
   value:    number | null;
   rollSc:   Animated.Value;
-  rotY:     Animated.Value;   // 0→1 = one full 360° spin
-  rotX:     Animated.Value;   // 0=flat, ROT_X_REST=resting, 1=max tilt
-  faceFlip: Animated.Value;   // scaleX 1→0→1
+  rotY:     Animated.Value;
+  rotX:     Animated.Value;
+  faceFlip: Animated.Value;
   onRoll:   () => void;
+  isRolling?: boolean;  // NEW — drives glow ring animation
 }
 
-function Dice3D({ value, rollSc, rotY, rotX, faceFlip, onRoll }: DiceProps) {
-  const dots = value ? (DOT_MAP[value] ?? []) : [];
+function Dice3D({ value, rollSc, rotY, rotX, faceFlip, onRoll, isRolling }: DiceProps) {
+  const dots     = value ? (DOT_MAP[value] ?? []) : [];
+  const dotColor = value ? (DOT_COLORS[value] ?? '#FFFFFF') : '#666688';
 
-  // Full 360° — the view naturally goes edge-on at 90°/270°
+  // Glow ring animation
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isRolling) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]),
+      );
+      loop.start();
+      return () => loop.stop();
+    } else {
+      glowAnim.setValue(0);
+    }
+  }, [isRolling, glowAnim]);
+
   const rotYDeg = rotY.interpolate({
     inputRange:  [0, 1],
     outputRange: ['0deg', '360deg'],
   });
-
-  // Slight downward tilt so top of die is always visible (3D depth cue)
   const rotXDeg = rotX.interpolate({
     inputRange:  [0, 1],
     outputRange: ['0deg', '-40deg'],
   });
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1], outputRange: [0, 0.8],
+  });
+  const glowScale = glowAnim.interpolate({
+    inputRange: [0, 1], outputRange: [1, 1.35],
+  });
 
   return (
     <TouchableOpacity onPress={onRoll} activeOpacity={0.75}>
-      {/* Perspective container — tight so foreshortening is dramatic */}
-      <Animated.View style={{
-        width: DS, height: DS,
-        transform: [
-          { perspective: 300 },
-          { rotateX: rotXDeg },
-          { rotateY: rotYDeg },
-          { scale:   rollSc  },
-        ],
-      }}>
-        {/* Single die face — scaleX flip synced to edge-on moments */}
-        <Animated.View style={[dSt.face, { transform: [{ scaleX: faceFlip }] }]}>
-          <View style={dSt.grid}>
-            {([0,1,2] as const).map(r => (
-              <View key={r} style={dSt.row}>
-                {([0,1,2] as const).map(c => {
-                  const on = dots.some(([dr,dc]) => dr===r && dc===c);
-                  return (
-                    <View key={c} style={dSt.cell}>
-                      {on ? <View style={dSt.dot} /> : <View style={dSt.empty} />}
-                    </View>
-                  );
-                })}
+      <View style={{ alignItems: 'center', gap: 8 }}>
+        {/* Glow ring behind the dice */}
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <Animated.View style={{
+            width: DS + 20, height: DS + 20,
+            borderRadius: (DS + 20) / 2,
+            backgroundColor: dotColor,
+            opacity: glowOpacity,
+            transform: [{ scale: glowScale }],
+          }} />
+        </View>
+
+        {/* 3D dice body */}
+        <Animated.View style={{
+          width: DS, height: DS,
+          transform: [
+            { perspective: 400 },
+            { rotateX: rotXDeg },
+            { rotateY: rotYDeg },
+            { scale:   rollSc  },
+          ],
+        }}>
+          {/* Inner face: scaleX flip to swap dots */}
+          <Animated.View style={[dSt.face, { transform: [{ scaleX: faceFlip }] }]}>
+            {/* Dark gradient background rendered as solid color (LinearGradient needs no driver) */}
+            <View style={dSt.faceInner}>
+              <View style={dSt.grid}>
+                {([0,1,2] as const).map(r => (
+                  <View key={r} style={dSt.row}>
+                    {([0,1,2] as const).map(c => {
+                      const on = dots.some(([dr,dc]) => dr===r && dc===c);
+                      return (
+                        <View key={c} style={dSt.cell}>
+                          {on ? (
+                            <View style={[dSt.dot, {
+                              backgroundColor: dotColor,
+                              shadowColor: dotColor,
+                              shadowOffset: { width: 0, height: 0 },
+                              shadowOpacity: 1,
+                              shadowRadius: 6,
+                            }]} />
+                          ) : (
+                            <View style={dSt.empty} />
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
-          {/* Top-left glass sheen */}
-          <View style={dSt.gloss} pointerEvents="none" />
+
+              {/* Corner gloss highlight */}
+              <View style={dSt.gloss} pointerEvents="none" />
+              {/* Bottom-right shadow accent */}
+              <View style={dSt.shadow} pointerEvents="none" />
+            </View>
+          </Animated.View>
         </Animated.View>
-      </Animated.View>
+
+        {/* Number label below — shows settled value */}
+        {value !== null && !isRolling && (
+          <View style={[dSt.numBadge, { backgroundColor: dotColor + '25', borderColor: dotColor + '60' }]}>
+            <Text style={[dSt.numText, { color: dotColor }]}>{value}</Text>
+          </View>
+        )}
+        {isRolling && (
+          <View style={[dSt.numBadge, { backgroundColor: '#ffffff10', borderColor: '#ffffff20' }]}>
+            <Text style={[dSt.numText, { color: '#888' }]}>•••</Text>
+          </View>
+        )}
+      </View>
     </TouchableOpacity>
   );
 }
@@ -279,34 +357,58 @@ function Dice3D({ value, rollSc, rotY, rotX, faceFlip, onRoll }: DiceProps) {
 const dSt = StyleSheet.create({
   face: {
     width: DS, height: DS,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center', justifyContent: 'center',
+    borderRadius: 18,
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: '#1E293B',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.28,
-        shadowRadius: 7,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.5,
+        shadowRadius: 10,
       },
-      android: { elevation: 7 },
+      android: { elevation: 10 },
     }),
   },
-  grid: { gap: 2 },
-  row:  { flexDirection: 'row', gap: 2 },
-  cell: { width: CELLD, height: CELLD, alignItems: 'center', justifyContent: 'center' },
+  faceInner: {
+    flex: 1,
+    backgroundColor: '#1A1A3E',
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#3A3A6A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  grid: { gap: 3 },
+  row:  { flexDirection: 'row', gap: 3 },
+  cell: { width: CELLD_SIZE, height: CELLD_SIZE, alignItems: 'center', justifyContent: 'center' },
   dot: {
     width: DOTD, height: DOTD, borderRadius: DOTD / 2,
-    backgroundColor: '#1E293B',
+    ...Platform.select({
+      ios: { shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 6 },
+      android: { elevation: 4 },
+    }),
   },
   empty: { width: DOTD, height: DOTD },
   gloss: {
-    position: 'absolute', top: 5, left: 6,
-    width: DS * 0.30, height: DS * 0.13,
-    borderRadius: 5,
-    backgroundColor: 'rgba(255,255,255,0.60)',
+    position: 'absolute', top: 7, left: 8,
+    width: DS * 0.32, height: DS * 0.14,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     transform: [{ rotate: '-22deg' }],
   },
+  shadow: {
+    position: 'absolute', bottom: 6, right: 7,
+    width: DS * 0.28, height: DS * 0.12,
+    borderRadius: 5,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    transform: [{ rotate: '-22deg' }],
+  },
+  numBadge: {
+    paddingHorizontal: 14, paddingVertical: 3,
+    borderRadius: 20, borderWidth: 1,
+  },
+  numText: { fontSize: 15, fontWeight: '900', letterSpacing: 1 },
 });
 
 // ─── 3D Coin ──────────────────────────────────────────────────────────────────
@@ -441,9 +543,18 @@ export default function LudoGame(): React.ReactElement {
   const navigation = useNavigation<NavProp>();
   const route      = useRoute<RouteProp<GamesStackParamList, 'LudoGame'>>();
   const roomId     = route.params?.roomId;
+  const { C } = useTheme();
+  const st = makeStyles(C);
+  const { firebaseUser, userProfile } = useAuthStore();
 
   const [gs, setGs]          = useState<GS>(INIT_GS);
   const [displayDice, setDD] = useState<number | null>(null);
+
+  // ── Multiplayer sync state ─────────────────────────────────────────────────
+  const [myColor,   setMyColor]   = useState<PlayerColor | null>(null);
+  const myColorRef = useRef<PlayerColor | null>(null);
+  const isHostRef  = useRef(false);
+  const suppressRemoteRef = useRef(false); // true while we're writing our own state
 
   // ── Piece animations — translateX/Y only (NOT left/top) ─────────────────────
   // Stores absolute board-pixel position; applied via transform, not layout props
@@ -476,6 +587,84 @@ export default function LudoGame(): React.ReactElement {
     gs.pieces.forEach(ensureAnim);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Multiplayer: assign colors + init RTDB state (host only) ─────────────────
+  useEffect(() => {
+    if (!roomId || !firebaseUser) return;
+    let cancelled = false;
+
+    getDoc(doc(db, 'gameRooms', roomId)).then((snap) => {
+      if (cancelled || !snap.exists()) return;
+      const room = snap.data() as GameRoom;
+      const players = Object.values(room.players).sort((a, b) => a.joinedAt - b.joinedAt);
+
+      // Assign colors: host = red, joiner = green
+      const colorMap: Record<string, PlayerColor> = {};
+      players.forEach((p, i) => { colorMap[p.uid] = i === 0 ? 'red' : 'green'; });
+
+      const me = colorMap[firebaseUser.uid] ?? 'red';
+      setMyColor(me);
+      myColorRef.current = me;
+      isHostRef.current  = room.hostUid === firebaseUser.uid;
+
+      // Host initialises RTDB game state
+      if (room.hostUid === firebaseUser.uid) {
+        const initPieces = makePieces();
+        const initState = {
+          pieces:     initPieces,
+          turnColor:  'red' as PlayerColor,
+          dice:       null,
+          phase:      'idle',
+          winner:     null,
+          bonusRoll:  false,
+          msg:        '🔴 Red — roll the dice!',
+          players:    colorMap,
+          updatedBy:  firebaseUser.uid,
+          updatedAt:  Date.now(),
+        };
+        rtdbSet(rtdbRef(rtdb, `gameRooms/${roomId}/ludo`), initState).catch(console.error);
+        setGs({ ...INIT_GS, pieces: initPieces });
+      }
+    }).catch(console.error);
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
+
+  // ── Multiplayer: subscribe to remote state changes ───────────────────────────
+  useEffect(() => {
+    if (!roomId || !firebaseUser) return;
+
+    const r = rtdbRef(rtdb, `gameRooms/${roomId}/ludo`);
+    const unsub = onValue(r, (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.val() as {
+        pieces: Piece[]; turnColor: PlayerColor; dice: number | null;
+        phase: Phase; winner: PlayerColor | null; bonusRoll: boolean;
+        msg: string; updatedBy: string;
+      };
+
+      // Skip echo from our own writes
+      if (data.updatedBy === firebaseUser.uid) return;
+
+      suppressRemoteRef.current = true;
+      setGs(prev => ({
+        ...prev,
+        pieces:    data.pieces,
+        turn:      data.turnColor,
+        dice:      data.dice,
+        phase:     data.phase,
+        winner:    data.winner,
+        bonusRoll: data.bonusRoll,
+        msg:       data.msg,
+      }));
+      if (data.dice !== null) setDD(data.dice); else setDD(null);
+      suppressRemoteRef.current = false;
+    });
+
+    return () => unsub();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, firebaseUser?.uid]);
 
   // Sync non-moving pieces when state changes
   useEffect(() => {
@@ -646,8 +835,20 @@ export default function LudoGame(): React.ReactElement {
   // "flip over" to the new value — clearest at the slow phase.
   //
   // Tap the dice OR the Roll button — both call handleRoll.
+  // ── Write local GS snapshot to RTDB (multiplayer) ────────────────────────────
+  function syncToRTDB(patch: Partial<GS> & { turnColor?: PlayerColor }) {
+    if (!roomId || !firebaseUser) return;
+    rtdbUpdate(rtdbRef(rtdb, `gameRooms/${roomId}/ludo`), {
+      ...patch,
+      updatedBy: firebaseUser.uid,
+      updatedAt: Date.now(),
+    }).catch(console.error);
+  }
+
   const handleRoll = useCallback(() => {
     if (gs.phase !== 'idle') return;
+    // In multiplayer: only let the player whose color matches the current turn roll
+    if (roomId && myColorRef.current && gs.turn !== myColorRef.current) return;
 
     const value = rollDice();
     gameSounds.fire('dice_roll');
@@ -700,10 +901,12 @@ export default function LudoGame(): React.ReactElement {
         Animated.spring (diceScale, { toValue: 1,   friction: 4, tension: 260, useNativeDriver: true }),
       ]).start();
 
+      const rollMsg = value === 6 ? '🎲 Six! 🎉 Move a coin!' : `🎲 Rolled ${value} — tap a coin`;
       setGs(prev => ({
-        ...prev, dice: value, phase: 'rolled',
-        msg: value === 6 ? '🎲 Six! 🎉 Move a coin!' : `🎲 Rolled ${value} — tap a coin`,
+        ...prev, dice: value, phase: 'rolled', msg: rollMsg,
       }));
+      // Broadcast dice result to opponent
+      syncToRTDB({ dice: value, phase: 'rolled', turnColor: gs.turn, msg: rollMsg });
       flashMsg();
     }, settleAt);
     rollTimers.current.push(t);
@@ -771,6 +974,8 @@ export default function LudoGame(): React.ReactElement {
   const doMove = useCallback((piece: Piece) => {
     if ((gs.phase !== 'rolled' && gs.phase !== 'moving') || gs.dice === null) return;
     if (piece.color !== gs.turn) return;
+    // In multiplayer: only the player whose color it is can move
+    if (roomId && myColorRef.current && gs.turn !== myColorRef.current) return;
 
     const elig = eligiblePieces(gs.pieces, gs.turn, gs.dice);
     if (!elig.some(e => e.id === piece.id)) { gameSounds.fire('error'); return; }
@@ -799,30 +1004,36 @@ export default function LudoGame(): React.ReactElement {
       }
 
       if (checkWin(newPieces, gs.turn)) {
+        const winMsg = `${P[gs.turn].emoji} ${P[gs.turn].label} wins! 🏆`;
         setGs(prev => ({
           ...prev, pieces: newPieces, phase: 'won', winner: prev.turn,
-          dice: null, msg: `${P[prev.turn].emoji} ${P[prev.turn].label} wins! 🏆`,
+          dice: null, msg: winMsg,
         }));
+        syncToRTDB({ pieces: newPieces, phase: 'won', winner: gs.turn, turnColor: gs.turn, dice: null, msg: winMsg });
         setDD(null);
         return;
       }
 
       if (dice === 6 || captured) {
+        const bonusMsg = captured ? '💥 Captured! Roll again 🎲' : '🎉 Six — roll again 🎲';
         setGs(prev => ({
           ...prev, pieces: newPieces, phase: 'idle', dice: null, bonusRoll: true,
-          msg: captured ? '💥 Captured! Roll again 🎲' : '🎉 Six — roll again 🎲',
+          msg: bonusMsg,
         }));
+        syncToRTDB({ pieces: newPieces, phase: 'idle', turnColor: gs.turn, dice: null, bonusRoll: true, msg: bonusMsg });
         setDD(null);
         flashMsg();
       } else {
         const next: PlayerColor = gs.turn === 'red' ? 'green' : 'red';
+        const nextMsg = `${P[next].emoji} ${P[next].label} — roll the dice!`;
         gameSounds.fire('turn_change');
         bounceTurn();
         setGs(prev => ({
           ...prev, pieces: newPieces, turn: next,
           phase: 'idle', dice: null, bonusRoll: false,
-          msg: `${P[next].emoji} ${P[next].label} — roll the dice!`,
+          msg: nextMsg,
         }));
+        syncToRTDB({ pieces: newPieces, phase: 'idle', turnColor: next, dice: null, bonusRoll: false, msg: nextMsg });
         setDD(null);
       }
     });
@@ -842,8 +1053,10 @@ export default function LudoGame(): React.ReactElement {
   }, [winAnim, bounceTurn]);
 
   // ─── Derived values ──────────────────────────────────────────────────────────
-  const cfg     = P[gs.turn];
-  const canRoll = gs.phase === 'idle' && !gs.winner;
+  const cfg        = P[gs.turn];
+  // In multiplayer: only allow interaction when it's this player's turn
+  const isMyTurn   = !roomId || !myColor || gs.turn === myColor;
+  const canRoll    = gs.phase === 'idle' && !gs.winner && isMyTurn;
 
   const eligIds = (gs.phase === 'rolled' && gs.dice !== null)
     ? new Set(eligiblePieces(gs.pieces, gs.turn, gs.dice).map(p => p.id))
@@ -1036,6 +1249,16 @@ export default function LudoGame(): React.ReactElement {
           </View>
         </View>
 
+        {/* Multiplayer: waiting for opponent */}
+        {roomId && !isMyTurn && gs.phase !== 'won' && (
+          <View style={[st.waitBanner, { borderColor: cfg.color + '40' }]}>
+            <Text style={st.waitEmoji}>⏳</Text>
+            <Text style={[st.waitTxt, { color: cfg.color }]}>
+              Waiting for {P[gs.turn].label}…
+            </Text>
+          </View>
+        )}
+
         {/* Status message */}
         <Animated.View style={[st.msgBox, { borderLeftColor: cfg.color, opacity: msgFade }]}>
           <Text style={[st.msgTxt, { color: cfg.color }]}>{gs.msg}</Text>
@@ -1050,6 +1273,7 @@ export default function LudoGame(): React.ReactElement {
             rotX={diceRotX}
             faceFlip={faceFlip}
             onRoll={handleRoll}
+            isRolling={gs.phase === 'rolling'}
           />
 
           <Animated.View style={{ transform: [{ scale: btnScale }] }}>
@@ -1112,6 +1336,12 @@ export default function LudoGame(): React.ReactElement {
         </>
       )}
 
+      <GameChatVoice
+        roomId={roomId}
+        myUid={firebaseUser?.uid ?? ''}
+        myName={userProfile?.name ?? 'Player'}
+        accentColor="#6C5CE7"
+      />
     </SafeAreaView>
   );
 }
@@ -1135,9 +1365,10 @@ const bSt = StyleSheet.create({
 });
 
 // ─── Screen styles ─────────────────────────────────────────────────────────────
-const st = StyleSheet.create({
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
   root:  { flex: 1, backgroundColor: '#F0F4F8' },
-  mpBanner: { backgroundColor: colors.secondary, paddingVertical: 5, alignItems: 'center' },
+  mpBanner: { backgroundColor: C.secondary, paddingVertical: 5, alignItems: 'center' },
   mpTxt:    { color: '#fff', fontSize: 12, fontWeight: '700' },
 
   header: {
@@ -1150,7 +1381,7 @@ const st = StyleSheet.create({
     }),
   },
   backBtn: { paddingVertical: 4, paddingRight: 8 },
-  backTxt: { fontSize: 15, color: colors.primary, fontWeight: '600' },
+  backTxt: { fontSize: 15, color: C.primary, fontWeight: '600' },
   title:   { fontSize: 20, fontWeight: '900', color: '#111827', flex: 1, textAlign: 'center' },
   turnPill: {
     paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
@@ -1183,6 +1414,15 @@ const st = StyleSheet.create({
     borderWidth: 2, borderColor: '#CE93D8',
   },
   centreStar: { color: '#9C27B0', fontWeight: '900' },
+
+  waitBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingHorizontal: 20, paddingVertical: 8, marginTop: 8,
+    backgroundColor: '#ffffff10', borderRadius: 12,
+    borderWidth: 1,
+  },
+  waitEmoji: { fontSize: 15 },
+  waitTxt:   { fontSize: 13, fontWeight: '700' },
 
   msgBox: {
     marginTop: 12, marginBottom: 2,
@@ -1248,4 +1488,5 @@ const st = StyleSheet.create({
   winBtnTxt:    { fontSize: 16, fontWeight: '800', color: '#fff' },
   winOutline:   { width: '100%', paddingVertical: 13, borderRadius: 16, alignItems: 'center', borderWidth: 2, borderColor: '#E5E7EB' },
   winOutlineTxt:{ fontSize: 15, fontWeight: '700', color: '#374151' },
-});
+  });
+}

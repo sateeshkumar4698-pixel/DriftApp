@@ -13,7 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GamesStackParamList } from '../../types';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { gameSounds } from '../../services/gameSounds';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -380,6 +381,8 @@ function buildMoveNotation(
 
 export default function ChessGame() {
   const navigation = useNavigation<Nav>();
+  const { C } = useTheme();
+  const styles = makeStyles(C);
 
   const [board, setBoard] = useState<Board>(initBoard);
   const [selected, setSelected] = useState<[number, number] | null>(null);
@@ -859,10 +862,11 @@ export default function ChessGame() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: C.background,
   },
   header: {
     flexDirection: 'row',
@@ -870,20 +874,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.background,
+    borderBottomColor: C.border,
+    backgroundColor: C.background,
   },
   backButton: {
     width: 36,
     height: 36,
     borderRadius: radius.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: C.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   backArrow: {
     fontSize: 20,
-    color: colors.text,
+    color: C.text,
     fontWeight: '600',
   },
   headerTitle: {
@@ -891,37 +895,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: typography.heading.fontSize,
     fontWeight: typography.heading.fontWeight,
-    color: colors.text,
+    color: C.text,
   },
   turnBadge: {
-    backgroundColor: colors.surface,
+    backgroundColor: C.surface,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: C.border,
   },
   turnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.text,
+    color: C.text,
   },
   capturedBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
-    backgroundColor: colors.surface,
+    backgroundColor: C.surface,
     minHeight: 28,
   },
   capturedLabel: {
     fontSize: 11,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     fontWeight: '600',
   },
   capturedPieces: {
     fontSize: 14,
-    color: colors.text,
+    color: C.text,
     letterSpacing: 1,
   },
   boardContainer: {
@@ -993,9 +997,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: C.surface,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: C.border,
   },
   statusBarCheck: {
     backgroundColor: '#FFF3CD',
@@ -1004,14 +1008,14 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: typography.body.fontSize,
     fontWeight: '600',
-    color: colors.text,
+    color: C.text,
     flex: 1,
   },
   statusTextCheck: {
     color: '#856404',
   },
   resignButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: C.primary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: radius.sm,
@@ -1025,16 +1029,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: C.border,
   },
   historyToggleText: {
     fontSize: 12,
-    color: colors.secondary,
+    color: C.secondary,
     fontWeight: '600',
   },
   historyScroll: {
     maxHeight: 48,
-    backgroundColor: colors.surface,
+    backgroundColor: C.surface,
   },
   historyContainer: {
     flexDirection: 'row',
@@ -1050,7 +1054,7 @@ const styles = StyleSheet.create({
   },
   historyMoveNumber: {
     fontSize: 11,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     fontWeight: '600',
     marginRight: 2,
   },
@@ -1064,9 +1068,9 @@ const styles = StyleSheet.create({
   },
   whiteMoveText: {
     backgroundColor: '#FFFFFF',
-    color: colors.text,
+    color: C.text,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: C.border,
   },
   blackMoveText: {
     backgroundColor: '#2D2D2D',
@@ -1081,7 +1085,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   modalCard: {
-    backgroundColor: colors.background,
+    backgroundColor: C.background,
     borderRadius: radius.lg,
     padding: spacing.xl,
     width: '100%',
@@ -1091,25 +1095,25 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: colors.text,
+    color: C.text,
     textAlign: 'center',
     marginBottom: spacing.xs,
   },
   modalSubtitle: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     textAlign: 'center',
     marginBottom: spacing.md,
   },
   modalDivider: {
     height: 1,
-    backgroundColor: colors.border,
+    backgroundColor: C.border,
     marginVertical: spacing.md,
   },
   modalCapturedTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.textSecondary,
+    color: C.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: spacing.sm,
@@ -1121,17 +1125,17 @@ const styles = StyleSheet.create({
   },
   modalCapturedLabel: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     width: 80,
   },
   modalCapturedPieces: {
     fontSize: 16,
-    color: colors.text,
+    color: C.text,
     letterSpacing: 2,
     flex: 1,
   },
   modalPrimaryButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: C.primary,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',
@@ -1144,16 +1148,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   modalSecondaryButton: {
-    backgroundColor: colors.surface,
+    backgroundColor: C.surface,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: C.border,
   },
   modalSecondaryButtonText: {
-    color: colors.text,
+    color: C.text,
     fontSize: 16,
     fontWeight: '600',
   },
-});
+  });
+}

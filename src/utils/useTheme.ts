@@ -10,6 +10,7 @@
  */
 
 import { useThemeStore } from '../store/themeStore';
+export { typography, spacing, radius, shadows, gradients } from './theme';
 
 // ─── Light palette ────────────────────────────────────────────────────────────
 export const lightColors = {

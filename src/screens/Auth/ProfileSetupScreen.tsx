@@ -13,7 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { setUserProfile } from '../../utils/firestore-helpers';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
-import { colors, spacing, typography, radius } from '../../utils/theme';
+import { useTheme, AppColors, spacing, typography, radius } from '../../utils/useTheme';
 import { LookingForOption, UserProfile } from '../../types';
 
 const INTERESTS = [
@@ -30,6 +30,8 @@ const LOOKING_FOR: { label: string; value: LookingForOption }[] = [
 ];
 
 export default function ProfileSetupScreen() {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const { firebaseUser, setUserProfile: setStoreProfile } = useAuthStore();
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
@@ -181,70 +183,72 @@ export default function ProfileSetupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  container: {
-    padding: spacing.lg,
-    paddingTop: spacing.xxl,
-    paddingBottom: spacing.xxl,
-  },
-  title: {
-    ...typography.title,
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.xl,
-  },
-  bioInput: {
-    height: 90,
-    textAlignVertical: 'top',
-  },
-  sectionLabel: {
-    ...typography.caption,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-  },
-  chipLarge: {
-    paddingHorizontal: spacing.lg,
-  },
-  chipSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  chipText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  chipTextSelected: {
-    color: colors.background,
-    fontWeight: '600',
-  },
-  errorText: {
-    ...typography.small,
-    color: colors.error,
-    marginBottom: spacing.sm,
-  },
-  saveButton: {
-    marginTop: spacing.md,
-  },
-});
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
+    container: {
+      padding: spacing.lg,
+      paddingTop: spacing.xxl,
+      paddingBottom: spacing.xxl,
+    },
+    title: {
+      ...typography.h1,
+      color: C.text,
+      marginBottom: spacing.xs,
+    },
+    subtitle: {
+      ...typography.body,
+      color: C.textSecondary,
+      marginBottom: spacing.xl,
+    },
+    bioInput: {
+      height: 90,
+      textAlignVertical: 'top',
+    },
+    sectionLabel: {
+      ...typography.label,
+      color: C.textSecondary,
+      marginBottom: spacing.sm,
+      marginTop: spacing.xs,
+      textTransform: 'uppercase',
+    },
+    chipsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginBottom: spacing.lg,
+    },
+    chip: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.lg,
+      backgroundColor: C.surface,
+      borderWidth: 1.5,
+      borderColor: C.border,
+    },
+    chipLarge: {
+      paddingHorizontal: spacing.lg,
+    },
+    chipSelected: {
+      backgroundColor: C.primary,
+      borderColor: C.primary,
+    },
+    chipText: {
+      ...typography.caption,
+      color: C.textSecondary,
+      fontWeight: '500',
+    },
+    chipTextSelected: {
+      color: '#fff',
+      fontWeight: '600',
+    },
+    errorText: {
+      ...typography.small,
+      color: C.error,
+      marginBottom: spacing.sm,
+    },
+    saveButton: {
+      marginTop: spacing.md,
+    },
+  });
+}

@@ -19,12 +19,15 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { auth } from '../../config/firebase';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { RootStackParamList } from '../../types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function EmailAuthScreen() {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const navigation = useNavigation<Nav>();
 
   const [mode, setMode]               = useState<'signin' | 'signup'>('signin');
@@ -119,7 +122,7 @@ export default function EmailAuthScreen() {
             value={email}
             onChangeText={(v) => { setEmail(v); setError(''); }}
             placeholder="you@example.com"
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={C.textTertiary}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
@@ -133,13 +136,13 @@ export default function EmailAuthScreen() {
               value={password}
               onChangeText={(v) => { setPassword(v); setError(''); }}
               placeholder={mode === 'signup' ? 'Min 6 characters' : 'Enter password'}
-              placeholderTextColor={colors.textSecondary}
+              placeholderTextColor={C.textTertiary}
               secureTextEntry={!showPw}
               returnKeyType={mode === 'signup' ? 'next' : 'done'}
               onSubmitEditing={mode === 'signin' ? handleSubmit : undefined}
             />
             <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPw((p) => !p)}>
-              <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textSecondary} />
+              <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={C.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -152,13 +155,13 @@ export default function EmailAuthScreen() {
                   value={confirmPw}
                   onChangeText={(v) => { setConfirmPw(v); setError(''); }}
                   placeholder="Re-enter password"
-                  placeholderTextColor={colors.textSecondary}
+                  placeholderTextColor={C.textTertiary}
                   secureTextEntry={!showConfirmPw}
                   returnKeyType="done"
                   onSubmitEditing={handleSubmit}
                 />
                 <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPw((p) => !p)}>
-                  <Ionicons name={showConfirmPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textSecondary} />
+                  <Ionicons name={showConfirmPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={C.textSecondary} />
                 </TouchableOpacity>
               </View>
             </>
@@ -210,135 +213,137 @@ function parseEmailAuthError(err: unknown, mode: 'signin' | 'signup'): string {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xxl,
-  },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: C.background,
+    },
+    scroll: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.xxl,
+    },
 
-  // Logo
-  logoSection: {
-    alignItems: 'center',
-    marginBottom: spacing.xxl,
-  },
-  logo: {
-    fontSize: 56,
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: -2,
-    marginBottom: spacing.xs,
-  },
-  tagline: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
+    // Logo
+    logoSection: {
+      alignItems: 'center',
+      marginBottom: spacing.xxl,
+    },
+    logo: {
+      fontSize: 56,
+      fontWeight: '800',
+      color: C.primary,
+      letterSpacing: -2,
+      marginBottom: spacing.xs,
+    },
+    tagline: {
+      ...typography.body,
+      color: C.textSecondary,
+      textAlign: 'center',
+    },
 
-  // Mode toggle
-  toggle: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: 4,
-    marginBottom: spacing.xl,
-  },
-  toggleBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-    borderRadius: radius.sm,
-  },
-  toggleBtnActive: {
-    backgroundColor: colors.primary,
-  },
-  toggleText: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  toggleTextActive: {
-    color: '#fff',
-  },
+    // Mode toggle
+    toggle: {
+      flexDirection: 'row',
+      backgroundColor: C.surface,
+      borderRadius: radius.md,
+      padding: 4,
+      marginBottom: spacing.xl,
+    },
+    toggleBtn: {
+      flex: 1,
+      paddingVertical: spacing.sm,
+      alignItems: 'center',
+      borderRadius: radius.sm,
+    },
+    toggleBtnActive: {
+      backgroundColor: C.primary,
+    },
+    toggleText: {
+      ...typography.body,
+      fontWeight: '600',
+      color: C.textSecondary,
+    },
+    toggleTextActive: {
+      color: '#fff',
+    },
 
-  // Form
-  form: {
-    backgroundColor: colors.background,
-  },
+    // Form
+    form: {
+      backgroundColor: C.background,
+    },
 
-  label: {
-    ...typography.caption,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    letterSpacing: 0.8,
-    marginBottom: spacing.sm,
-    textTransform: 'uppercase',
-  },
+    label: {
+      ...typography.caption,
+      fontWeight: '700',
+      color: C.textSecondary,
+      letterSpacing: 0.8,
+      marginBottom: spacing.sm,
+      textTransform: 'uppercase',
+    },
 
-  input: {
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    height: 56,
-    paddingHorizontal: spacing.md,
-    ...typography.body,
-    fontSize: 16,
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  inputErr: {
-    borderColor: colors.error,
-  },
-  inputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    height: 56,
-    marginBottom: spacing.sm,
-  },
-  inputInner: {
-    flex: 1,
-    paddingHorizontal: spacing.md,
-    ...typography.body,
-    fontSize: 16,
-    color: colors.text,
-  },
-  eyeBtn: {
-    paddingHorizontal: spacing.md,
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    input: {
+      borderWidth: 1.5,
+      borderColor: C.inputBorder,
+      borderRadius: radius.md,
+      backgroundColor: C.inputBg,
+      height: 56,
+      paddingHorizontal: spacing.md,
+      ...typography.body,
+      fontSize: 16,
+      color: C.text,
+      marginBottom: spacing.sm,
+    },
+    inputErr: {
+      borderColor: C.error,
+    },
+    inputWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1.5,
+      borderColor: C.inputBorder,
+      borderRadius: radius.md,
+      backgroundColor: C.inputBg,
+      height: 56,
+      marginBottom: spacing.sm,
+    },
+    inputInner: {
+      flex: 1,
+      paddingHorizontal: spacing.md,
+      ...typography.body,
+      fontSize: 16,
+      color: C.text,
+    },
+    eyeBtn: {
+      paddingHorizontal: spacing.md,
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  errorText: {
-    ...typography.small,
-    color: colors.error,
-    marginBottom: spacing.sm,
-  },
+    errorText: {
+      ...typography.small,
+      color: C.error,
+      marginBottom: spacing.sm,
+    },
 
-  // Button
-  btn: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.xs,
-    ...shadows.card,
-  },
-  btnOff: { opacity: 0.4 },
-  btnText: { ...typography.body, fontWeight: '700', color: '#fff', fontSize: 16 },
+    // Button
+    btn: {
+      backgroundColor: C.primary,
+      borderRadius: radius.md,
+      height: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: spacing.xs,
+      ...shadows.card,
+    },
+    btnOff: { opacity: 0.4 },
+    btnText: { ...typography.body, fontWeight: '700', color: '#fff', fontSize: 16 },
 
-  // Back link
-  backBtn:     { alignSelf: 'center', marginTop: spacing.xl },
-  backBtnText: { ...typography.body, color: colors.primary },
-});
+    // Back link
+    backBtn:     { alignSelf: 'center', marginTop: spacing.xl },
+    backBtnText: { ...typography.body, color: C.primary },
+  });
+}

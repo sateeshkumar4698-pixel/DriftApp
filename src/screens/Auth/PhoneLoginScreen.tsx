@@ -18,7 +18,8 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { auth } from '../../config/firebase';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { normalizePhone, formatIndianNumber } from '../../utils/helpers';
 import { isBackendOtpEnabled, sendBackendOtp, verifyBackendOtp } from '../../services/otpService';
 import { RootStackParamList } from '../../types';
@@ -42,6 +43,8 @@ const mockVerifier = {
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function PhoneLoginScreen() {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const navigation = useNavigation<Nav>();
   const [digits, setDigits]             = useState('');
   const [otp, setOtp]                   = useState('');
@@ -137,7 +140,7 @@ export default function PhoneLoginScreen() {
                 value={formatIndianNumber(digits)}
                 onChangeText={onPhoneChange}
                 placeholder="98765 43210"
-                placeholderTextColor={colors.textSecondary}
+                placeholderTextColor={C.textTertiary}
                 keyboardType="number-pad"
                 maxLength={11}
                 returnKeyType="done"
@@ -187,7 +190,7 @@ export default function PhoneLoginScreen() {
               value={otp}
               onChangeText={(v) => { setOtp(v.replace(/\D/g, '').slice(0, 6)); setError(''); }}
               placeholder="• • • • • •"
-              placeholderTextColor={colors.textSecondary}
+              placeholderTextColor={C.textTertiary}
               keyboardType="number-pad"
               maxLength={6}
               returnKeyType="done"
@@ -256,146 +259,148 @@ function parseOtpError(err: unknown): string {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-  },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: C.background,
+      justifyContent: 'center',
+      paddingHorizontal: spacing.lg,
+    },
 
-  // Logo
-  logoSection: {
-    alignItems: 'center',
-    marginBottom: spacing.xxl,
-  },
-  logo: {
-    fontSize: 56,
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: -2,
-    marginBottom: spacing.xs,
-  },
-  tagline: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
+    // Logo
+    logoSection: {
+      alignItems: 'center',
+      marginBottom: spacing.xxl,
+    },
+    logo: {
+      fontSize: 56,
+      fontWeight: '800',
+      color: C.primary,
+      letterSpacing: -2,
+      marginBottom: spacing.xs,
+    },
+    tagline: {
+      ...typography.body,
+      color: C.textSecondary,
+      textAlign: 'center',
+    },
 
-  // Form card
-  form: {
-    backgroundColor: colors.background,
-  },
+    // Form card
+    form: {
+      backgroundColor: C.background,
+    },
 
-  label: {
-    ...typography.caption,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    letterSpacing: 0.8,
-    marginBottom: spacing.sm,
-    textTransform: 'uppercase',
-  },
+    label: {
+      ...typography.caption,
+      fontWeight: '700',
+      color: C.textSecondary,
+      letterSpacing: 0.8,
+      marginBottom: spacing.sm,
+      textTransform: 'uppercase',
+    },
 
-  // Phone row
-  phoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    height: 56,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  flag:      { fontSize: 22, marginRight: 6 },
-  code:      { ...typography.body, fontWeight: '700', color: colors.text, marginRight: 8 },
-  divider:   { width: 1, height: 26, backgroundColor: colors.border, marginRight: 10 },
-  phoneInput: {
-    flex: 1,
-    ...typography.body,
-    fontSize: 18,
-    color: colors.text,
-    letterSpacing: 0.5,
-  },
-  tick: { fontSize: 18, color: colors.success, fontWeight: '700', marginLeft: 4 },
+    // Phone row
+    phoneRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1.5,
+      borderColor: C.inputBorder,
+      borderRadius: radius.md,
+      backgroundColor: C.inputBg,
+      height: 56,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.sm,
+    },
+    flag:      { fontSize: 22, marginRight: 6 },
+    code:      { ...typography.body, fontWeight: '700', color: C.text, marginRight: 8 },
+    divider:   { width: 1, height: 26, backgroundColor: C.border, marginRight: 10 },
+    phoneInput: {
+      flex: 1,
+      ...typography.body,
+      fontSize: 18,
+      color: C.text,
+      letterSpacing: 0.5,
+    },
+    tick: { fontSize: 18, color: C.success, fontWeight: '700', marginLeft: 4 },
 
-  // OTP input
-  otpInput: {
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    height: 64,
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: 14,
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
+    // OTP input
+    otpInput: {
+      borderWidth: 1.5,
+      borderColor: C.inputBorder,
+      borderRadius: radius.md,
+      backgroundColor: C.inputBg,
+      height: 64,
+      fontSize: 28,
+      fontWeight: '700',
+      letterSpacing: 14,
+      color: C.text,
+      marginBottom: spacing.sm,
+    },
 
-  inputErr: { borderColor: colors.error },
+    inputErr: { borderColor: C.error },
 
-  sentTo: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-  },
+    sentTo: {
+      ...typography.body,
+      color: C.textSecondary,
+      marginBottom: spacing.md,
+    },
 
-  errorText: {
-    ...typography.small,
-    color: colors.error,
-    marginBottom: spacing.sm,
-  },
+    errorText: {
+      ...typography.small,
+      color: C.error,
+      marginBottom: spacing.sm,
+    },
 
-  // Button
-  btn: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.xs,
-    ...shadows.card,
-  },
-  btnOff: { opacity: 0.4 },
-  btnText: { ...typography.body, fontWeight: '700', color: '#fff', fontSize: 16 },
+    // Button
+    btn: {
+      backgroundColor: C.primary,
+      borderRadius: radius.md,
+      height: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: spacing.xs,
+      ...shadows.card,
+    },
+    btnOff: { opacity: 0.4 },
+    btnText: { ...typography.body, fontWeight: '700', color: '#fff', fontSize: 16 },
 
-  changeBtn:     { alignSelf: 'center', marginTop: spacing.lg },
-  changeBtnText: { ...typography.body, color: colors.primary },
+    changeBtn:     { alignSelf: 'center', marginTop: spacing.lg },
+    changeBtnText: { ...typography.body, color: C.primary },
 
-  hint:     { alignSelf: 'center', marginTop: spacing.md },
-  hintText: { ...typography.small, color: colors.textSecondary, textDecorationLine: 'underline' },
+    hint:     { alignSelf: 'center', marginTop: spacing.md },
+    hintText: { ...typography.small, color: C.textSecondary, textDecorationLine: 'underline' },
 
-  // OR divider + email button
-  orRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: spacing.lg,
-  },
-  orLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  orText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginHorizontal: spacing.sm,
-    fontWeight: '600',
-  },
-  emailBtn: {
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emailBtnText: {
-    ...typography.body,
-    fontWeight: '700',
-    color: colors.primary,
-    fontSize: 16,
-  },
-});
+    // OR divider + email button
+    orRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginVertical: spacing.lg,
+    },
+    orLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: C.border,
+    },
+    orText: {
+      ...typography.caption,
+      color: C.textSecondary,
+      marginHorizontal: spacing.sm,
+      fontWeight: '600',
+    },
+    emailBtn: {
+      borderWidth: 1.5,
+      borderColor: C.primary,
+      borderRadius: radius.md,
+      height: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    emailBtnText: {
+      ...typography.body,
+      fontWeight: '700',
+      color: C.primary,
+      fontSize: 16,
+    },
+  });
+}

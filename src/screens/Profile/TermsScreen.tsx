@@ -8,7 +8,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { colors, spacing, typography, radius } from '../../utils/theme';
+import { spacing, typography, radius } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 
 type Tab = 'terms' | 'privacy';
 
@@ -83,7 +84,8 @@ We use Firebase Analytics to understand app usage. This is anonymous and aggrega
 **Contact**
 privacy@driftapp.in`;
 
-function ContentView({ content }: { content: string }) {
+function ContentView({ content, C }: { content: string; C: AppColors }) {
+  const contentStyles = makeContentStyles(C);
   const paragraphs = content.split('\n\n');
   return (
     <ScrollView contentContainerStyle={contentStyles.container} showsVerticalScrollIndicator={false}>
@@ -105,15 +107,19 @@ function ContentView({ content }: { content: string }) {
   );
 }
 
-const contentStyles = StyleSheet.create({
-  container: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  heading: { ...typography.body, fontWeight: '700', color: colors.text, marginTop: spacing.lg, marginBottom: spacing.xs },
-  body: { ...typography.body, color: colors.textSecondary, lineHeight: 26, marginBottom: spacing.sm },
-  bold: { fontWeight: '600', color: colors.text },
-});
+function makeContentStyles(C: AppColors) {
+  return StyleSheet.create({
+    container: { padding: spacing.lg, paddingBottom: spacing.xxl },
+    heading: { ...typography.body, fontWeight: '700', color: C.text, marginTop: spacing.lg, marginBottom: spacing.xs },
+    body: { ...typography.body, color: C.textSecondary, lineHeight: 26, marginBottom: spacing.sm },
+    bold: { fontWeight: '600', color: C.text },
+  });
+}
 
 export default function TermsScreen() {
   const navigation = useNavigation();
+  const { C, isDark } = useTheme();
+  const styles = makeStyles(C);
   const [activeTab, setActiveTab] = useState<Tab>('terms');
 
   return (
@@ -145,32 +151,34 @@ export default function TermsScreen() {
         </TouchableOpacity>
       </View>
 
-      <ContentView content={activeTab === 'terms' ? TERMS_CONTENT : PRIVACY_CONTENT} />
+      <ContentView content={activeTab === 'terms' ? TERMS_CONTENT : PRIVACY_CONTENT} C={C} />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  backBtn: { width: 40, height: 40, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
-  backText: { fontSize: 20, color: colors.text },
-  headerTitle: { ...typography.heading, color: colors.text },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    backBtn: { width: 40, height: 40, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface },
+    backText: { fontSize: 20, color: C.text },
+    headerTitle: { ...typography.heading, color: C.text },
 
-  tabs: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  tab: {
-    flex: 1, paddingVertical: spacing.md, alignItems: 'center',
-    borderBottomWidth: 2, borderBottomColor: 'transparent',
-  },
-  tabActive: { borderBottomColor: colors.primary },
-  tabText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
-  tabTextActive: { color: colors.primary },
-});
+    tabs: {
+      flexDirection: 'row',
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+    },
+    tab: {
+      flex: 1, paddingVertical: spacing.md, alignItems: 'center',
+      borderBottomWidth: 2, borderBottomColor: 'transparent',
+    },
+    tabActive: { borderBottomColor: C.primary },
+    tabText: { ...typography.caption, color: C.textSecondary, fontWeight: '600' },
+    tabTextActive: { color: C.primary },
+  });
+}

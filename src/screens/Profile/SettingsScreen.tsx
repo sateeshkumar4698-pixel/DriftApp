@@ -198,7 +198,7 @@ export default function SettingsScreen() {
           <SectionHeader title="Account" C={C} />
           <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
             <SettingRow icon="person-outline"    label="Edit Profile"       sublabel="Update your name, bio & photos"  iconGrad={['#FF4B6E', '#C2185B']} C={C} onPress={() => navigation.navigate('EditProfile')} />
-            <SettingRow icon="at-outline"         label="Drift ID & Handle"  sublabel={userProfile?.driftId ? `@${userProfile.driftId}` : 'Set your @handle'} iconGrad={['#00D2FF', '#0077FF']} C={C} onPress={() => navigation.navigate('EditProfile')} />
+            <SettingRow icon="at-outline"         label="Drift ID & Handle"  sublabel={userProfile?.driftId ? `@${userProfile.driftId}` : 'Set your @handle'} iconGrad={['#00D2FF', '#0077FF']} C={C} onPress={() => navigation.navigate('DriftId')} />
             <SettingRow icon="shield-checkmark-outline" label="Privacy Settings" sublabel="Control who sees what"      iconGrad={['#6C5CE7', '#4834D4']} C={C} onPress={() => navigation.navigate('PrivacySettings')} />
           </View>
 

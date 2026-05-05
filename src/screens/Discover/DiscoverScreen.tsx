@@ -5,6 +5,7 @@ import {
   Animated,
   FlatList,
   Modal,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -26,76 +28,13 @@ import {
 } from '../../utils/firestore-helpers';
 import Avatar from '../../components/Avatar';
 import EmptyState from '../../components/EmptyState';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors, spacing, typography, radius, shadows } from '../../utils/useTheme';
 import { Connection, DiscoverStackParamList, DriftStatus, UserProfile } from '../../types';
+import { dynamicVibeMatch } from '../../utils/vibeMatch';
+import { useMoodStore, MOOD_META, MoodPreset } from '../../store/moodStore';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 
-const INTENT_EMOJI: Record<string, string> = {
-  friends: '👫',
-  dating: '💘',
-  networking: '💼',
-  events: '🎉',
-};
 
-const STATUS_TYPE_EMOJI: Record<string, string> = {
-  vibe_check:    '✨',
-  location_drop: '📍',
-  looking_for:   '👀',
-  game_invite:   '🎮',
-  photo_moment:  '📸',
-  memory_share:  '🌟',
-  event_invite:  '🎉',
-};
-
-const STATUS_TYPE_LABEL: Record<string, string> = {
-  vibe_check:    'Vibe Check',
-  location_drop: 'Location Drop',
-  looking_for:   'Looking For',
-  game_invite:   'Game Invite',
-  photo_moment:  'Photo Moment',
-  memory_share:  'Memory Share',
-};
-
-const INTENT_FILTERS = ['All', 'Friends', 'Networking', 'Events', 'Dating', '🟢 Active'];
-
-// ─── Vibe helpers ─────────────────────────────────────────────────────────────
-
-function vibeHint(me: UserProfile, other: UserProfile): string {
-  const myInterests    = me.interests    ?? [];
-  const otherInterests = other.interests ?? [];
-  const shared = myInterests.filter((i) => otherInterests.includes(i));
-  if (shared.length >= 3) return `You both love ${shared.slice(0, 2).join(' & ')} ✨`;
-  if (shared.length > 0)  return `Shared interest: ${shared[0]} 🎯`;
-  const myVibes    = me.vibeProfile?.primaryVibes    ?? [];
-  const otherVibes = other.vibeProfile?.primaryVibes ?? [];
-  const sharedVibes = myVibes.filter((v) => otherVibes.includes(v));
-  if (sharedVibes.length > 0) return `Same vibe: ${sharedVibes[0]} 🔥`;
-  return 'New kind of connection 🌊';
-}
-
-function vibeMatch(me: UserProfile, other: UserProfile): number {
-  let score = 0;
-  const myI    = me.interests    ?? [];
-  const otherI = other.interests ?? [];
-  const sharedI = myI.filter((i) => otherI.includes(i));
-  score += Math.min(sharedI.length * 12, 40);
-
-  const myV    = me.vibeProfile?.primaryVibes    ?? [];
-  const otherV = other.vibeProfile?.primaryVibes ?? [];
-  const sharedV = myV.filter((v) => otherV.includes(v));
-  score += Math.min(sharedV.length * 12, 30);
-
-  if (me.city && other.city && me.city.toLowerCase() === other.city.toLowerCase()) score += 15;
-
-  const myLF    = me.lookingFor    ?? [];
-  const otherLF = other.lookingFor ?? [];
-  if (myLF.some((f) => otherLF.includes(f))) score += 15;
-
-  return Math.min(score, 99); // cap at 99 so 100 is never shown (keeps it honest)
-}
-
-// ─── Status Viewer Modal ──────────────────────────────────────────────────────
 
 interface StatusViewItem {
   status: DriftStatus;
@@ -104,38 +43,72 @@ interface StatusViewItem {
   isMine?: boolean;
 }
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const INTENT_FILTERS: Array<{ key: string; label: string; emoji: string; color: string }> = [
+  { key: 'All',        label: 'All',     emoji: '✨', color: '#6C5CE7' },
+  { key: 'Friends',    label: 'Friends', emoji: '🤝', color: '#00B894' },
+  { key: 'Networking', label: 'Network', emoji: '💼', color: '#0984E3' },
+  { key: 'Events',     label: 'Events',  emoji: '🎉', color: '#E17055' },
+  { key: 'Dating',     label: 'Dating',  emoji: '💘', color: '#FF4B6E' },
+  { key: '🟢 Active',  label: 'Active',  emoji: '🟢', color: '#00E676' },
+];
+
+const CHIP_PALETTE = [
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+  '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
+  '#FFB347', '#87CEEB',
+];
+
+const MOODS: MoodPreset[] = ['energetic', 'chill', 'creative', 'social', 'romantic', 'focused'];
+
+const STATUS_TYPE_EMOJI: Record<string, string> = {
+  vibe_check: '✨', location_drop: '📍', looking_for: '👀',
+  game_invite: '🎮', photo_moment: '📸', memory_share: '🌟', event_invite: '🎉',
+};
+
+const STATUS_TYPE_LABEL: Record<string, string> = {
+  vibe_check: 'Vibe Check', location_drop: 'Location Drop', looking_for: 'Looking For',
+  game_invite: 'Game Invite', photo_moment: 'Photo Moment', memory_share: 'Memory Share',
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function matchGrad(pct: number): readonly [string, string] {
+  if (pct >= 85) return ['#FF4B6E', '#FF8C42'];
+  if (pct >= 70) return ['#6C5CE7', '#A855F7'];
+  if (pct >= 50) return ['#0984E3', '#00B4D8'];
+  return ['#636E72', '#B2BEC3'];
+}
+
+// ─── Status Viewer Modal ──────────────────────────────────────────────────────
+
 function StatusViewerModal({
-  item,
-  onClose,
-  onEdit,
+  item, onClose, onEdit,
 }: {
   item: StatusViewItem | null;
   onClose: () => void;
   onEdit?: () => void;
 }) {
+  const { C } = useTheme();
+  const sv = makeSvStyles(C);
   if (!item) return null;
+
   const { status, name, isMine } = item;
   const emoji = STATUS_TYPE_EMOJI[status.type] ?? '✨';
   const label = STATUS_TYPE_LABEL[status.type] ?? status.type;
   const typeColor: Record<string, string> = {
-    vibe_check:    '#6C5CE7',
-    location_drop: '#00B894',
-    looking_for:   '#FF4B6E',
-    game_invite:   '#0984E3',
-    photo_moment:  '#E17055',
-    memory_share:  '#FDCB6E',
+    vibe_check: '#6C5CE7', location_drop: '#00B894', looking_for: '#FF4B6E',
+    game_invite: '#0984E3', photo_moment: '#E17055', memory_share: '#FDCB6E',
   };
-  const accentColor = typeColor[status.type] ?? colors.secondary;
+  const accentColor = typeColor[status.type] ?? C.secondary;
   const timeLeft = Math.max(0, Math.round((status.expiresAt - Date.now()) / (1000 * 60 * 60)));
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={sv.overlay} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={sv.sheet}>
-          {/* Color bar */}
           <View style={[sv.colorBar, { backgroundColor: accentColor }]} />
-
-          {/* Header */}
           <View style={sv.header}>
             <View style={[sv.typePill, { backgroundColor: accentColor + '18', borderColor: accentColor + '40' }]}>
               <Text style={sv.typePillEmoji}>{emoji}</Text>
@@ -152,29 +125,21 @@ function StatusViewerModal({
               </TouchableOpacity>
             </View>
           </View>
-
-          {/* Poster */}
           <Text style={sv.posterName}>{isMine ? 'Your status' : name}</Text>
-
-          {/* Content */}
           <View style={sv.contentBox}>
             {status.text ? (
               <Text style={sv.contentText}>{status.text}</Text>
             ) : status.location ? (
               <View>
                 <Text style={sv.locationVenue}>📍 {status.location.venue}</Text>
-                {status.location.city ? (
-                  <Text style={sv.locationCity}>{status.location.city}</Text>
-                ) : null}
+                {status.location.city ? <Text style={sv.locationCity}>{status.location.city}</Text> : null}
               </View>
             ) : null}
           </View>
-
-          {/* Footer */}
           <View style={sv.footer}>
             <Text style={sv.expiryText}>⏱ Expires in {timeLeft}h</Text>
-            <View style={[sv.audiencePill, { backgroundColor: status.audience === 'everyone' ? colors.success + '18' : colors.secondary + '18' }]}>
-              <Text style={[sv.audienceText, { color: status.audience === 'everyone' ? colors.success : colors.secondary }]}>
+            <View style={[sv.audiencePill, { backgroundColor: status.audience === 'everyone' ? C.success + '18' : C.secondary + '18' }]}>
+              <Text style={[sv.audienceText, { color: status.audience === 'everyone' ? C.success : C.secondary }]}>
                 {status.audience === 'everyone' ? '🌍 Everyone' : '🫂 Connections'}
               </Text>
             </View>
@@ -185,63 +150,180 @@ function StatusViewerModal({
   );
 }
 
-const sv = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+function makeSvStyles(C: AppColors) {
+  return StyleSheet.create({
+    overlay:       { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+    sheet:         { backgroundColor: C.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, overflow: 'hidden', paddingBottom: 40 },
+    colorBar:      { height: 4 },
+    header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.md },
+    typePill:      { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full, borderWidth: 1 },
+    typePillEmoji: { fontSize: 16 },
+    typePillLabel: { ...typography.caption, fontWeight: '700' },
+    closeBtn:      { padding: spacing.sm },
+    closeBtnText:  { fontSize: 16, color: C.textSecondary, fontWeight: '600' },
+    editBtn:       { borderWidth: 1, borderColor: C.border, borderRadius: radius.full, paddingHorizontal: 10 },
+    posterName:    { ...typography.body, fontWeight: '700', color: C.text, paddingHorizontal: spacing.md, marginBottom: spacing.md },
+    contentBox:    { marginHorizontal: spacing.md, padding: spacing.md, backgroundColor: C.surface, borderRadius: radius.md, marginBottom: spacing.md, minHeight: 80, justifyContent: 'center' },
+    contentText:   { fontSize: 20, fontWeight: '600', color: C.text, lineHeight: 30 },
+    locationVenue: { fontSize: 20, fontWeight: '700', color: C.text },
+    locationCity:  { ...typography.body, color: C.textSecondary, marginTop: 4 },
+    footer:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md },
+    expiryText:    { ...typography.small, color: C.textSecondary },
+    audiencePill:  { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full },
+    audienceText:  { ...typography.small, fontWeight: '700' },
+  });
+}
+
+// ─── SkeletonCard ─────────────────────────────────────────────────────────────
+
+function SkeletonCard() {
+  const { C } = useTheme();
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 850, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0, duration: 850, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  const opacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.8] });
+
+  return (
+    <Animated.View style={{ opacity, backgroundColor: C.background, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: C.border, marginBottom: 12 }}>
+      <View style={{ height: 4, backgroundColor: C.border }} />
+      <View style={{ padding: 16 }}>
+        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+          <View style={{ width: 68, height: 68, borderRadius: 34, backgroundColor: C.border }} />
+          <View style={{ flex: 1, gap: 9, paddingTop: 4 }}>
+            <View style={{ width: '75%', height: 13, borderRadius: 6, backgroundColor: C.border }} />
+            <View style={{ width: '50%', height: 10, borderRadius: 5, backgroundColor: C.border }} />
+          </View>
+          <View style={{ width: 54, height: 46, borderRadius: 10, backgroundColor: C.border }} />
+        </View>
+        <View style={{ width: '88%', height: 10, borderRadius: 5, backgroundColor: C.border, marginTop: 14 }} />
+        <View style={{ width: '65%', height: 10, borderRadius: 5, backgroundColor: C.border, marginTop: 8 }} />
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+          {[60, 72, 55].map((w, i) => (
+            <View key={i} style={{ width: w, height: 26, borderRadius: 13, backgroundColor: C.border }} />
+          ))}
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+// ─── MoodStrip — carousel pager ───────────────────────────────────────────────
+
+function MoodStrip() {
+  const { C } = useTheme();
+  const { moodPreset, setMood } = useMoodStore();
+
+  const activeIndex = MOODS.indexOf(moodPreset);
+  const meta        = MOOD_META[moodPreset];
+
+  // Slide + fade animation on mood change
+  const slideX   = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const prevIdx  = useRef(activeIndex);
+
+  useEffect(() => {
+    if (prevIdx.current === activeIndex) return;
+    const dir = activeIndex > prevIdx.current ? 1 : -1;
+    prevIdx.current = activeIndex;
+
+    Animated.parallel([
+      Animated.timing(slideX,   { toValue: -dir * 36, duration: 110, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0,          duration: 90,  useNativeDriver: true }),
+    ]).start(() => {
+      slideX.setValue(dir * 36);
+      Animated.parallel([
+        Animated.spring(slideX,   { toValue: 0, useNativeDriver: true, speed: 28, bounciness: 6 }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 130, useNativeDriver: true }),
+      ]).start();
+    });
+  }, [activeIndex]);
+
+  function goNext() { setMood(MOODS[(activeIndex + 1) % MOODS.length]); }
+  function goPrev() { setMood(MOODS[(activeIndex - 1 + MOODS.length) % MOODS.length]); }
+
+  return (
+    <View style={[ms.wrapper, { borderBottomColor: C.border }]}>
+      {/* Subtle colour wash behind row */}
+      <LinearGradient
+        colors={[meta.color + '28', meta.color + '06', 'transparent']}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+      />
+
+      {/* ‹ Prev */}
+      <TouchableOpacity onPress={goPrev} style={ms.arrow} activeOpacity={0.55}>
+        <Text style={[ms.arrowTxt, { color: C.textSecondary }]}>‹</Text>
+      </TouchableOpacity>
+
+      {/* Animated mood info */}
+      <Animated.View style={[ms.center, { transform: [{ translateX: slideX }], opacity: fadeAnim }]}>
+        <View style={[ms.colourDot, { backgroundColor: meta.color }]} />
+        <Text style={ms.emoji}>{meta.icon}</Text>
+        <View style={ms.textBlock}>
+          <Text style={[ms.moodName, { color: meta.color }]}>{meta.label}</Text>
+          <Text style={[ms.moodDesc, { color: C.textSecondary }]} numberOfLines={1}>
+            {meta.description}
+          </Text>
+        </View>
+      </Animated.View>
+
+      {/* Progress dots — tap to jump */}
+      <View style={ms.dotsRow}>
+        {MOODS.map((m, i) => (
+          <TouchableOpacity key={m} onPress={() => setMood(MOODS[i])} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+            <View style={[ms.dot, {
+              backgroundColor: i === activeIndex ? meta.color : C.border,
+              width: i === activeIndex ? 14 : 5,
+            }]} />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Next › */}
+      <TouchableOpacity onPress={goNext} style={ms.arrow} activeOpacity={0.55}>
+        <Text style={[ms.arrowTxt, { color: C.textSecondary }]}>›</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const ms = StyleSheet.create({
+  wrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 50,
+    borderBottomWidth: 1,
     overflow: 'hidden',
-    paddingBottom: 40,
+    paddingHorizontal: 4,
   },
-  colorBar:    { height: 4 },
-  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.md },
-  typePill: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    paddingHorizontal: spacing.sm, paddingVertical: 4,
-    borderRadius: radius.full, borderWidth: 1,
-  },
-  typePillEmoji: { fontSize: 16 },
-  typePillLabel: { ...typography.caption, fontWeight: '700' },
-  closeBtn:      { padding: spacing.sm },
-  closeBtnText:  { fontSize: 16, color: colors.textSecondary, fontWeight: '600' },
-  editBtn:       { borderWidth: 1, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 10 },
-  posterName:    { ...typography.body, fontWeight: '700', color: colors.text, paddingHorizontal: spacing.md, marginBottom: spacing.md },
-  contentBox: {
-    marginHorizontal: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    marginBottom: spacing.md,
-    minHeight: 80,
-    justifyContent: 'center',
-  },
-  contentText:   { fontSize: 20, fontWeight: '600', color: colors.text, lineHeight: 30 },
-  locationVenue: { fontSize: 20, fontWeight: '700', color: colors.text },
-  locationCity:  { ...typography.body, color: colors.textSecondary, marginTop: 4 },
-  footer: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-  },
-  expiryText:    { ...typography.small, color: colors.textSecondary },
-  audiencePill: {
-    paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full,
-  },
-  audienceText:  { ...typography.small, fontWeight: '700' },
+  arrow:   { width: 32, alignItems: 'center', justifyContent: 'center' },
+  arrowTxt:{ fontSize: 26, lineHeight: 30, fontWeight: '300' },
+  center:  { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 2 },
+  colourDot: { width: 8, height: 8, borderRadius: 4 },
+  emoji:   { fontSize: 22 },
+  textBlock: { flex: 1, minWidth: 0 },
+  moodName:  { fontSize: 13, fontWeight: '800', letterSpacing: -0.3 },
+  moodDesc:  { fontSize: 10, marginTop: 1 },
+  dotsRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4 },
+  dot:     { height: 5, borderRadius: 3 },
 });
 
-// ─── Stories Bar ──────────────────────────────────────────────────────────────
+
+
+// ─── StoriesBar ───────────────────────────────────────────────────────────────
 
 function StoriesBar({
-  currentUser,
-  myStatus,
-  statuses,
-  onAddStatus,
-  onViewStatus,
+  currentUser, myStatus, statuses, onAddStatus, onViewStatus,
 }: {
   currentUser: UserProfile;
   myStatus: DriftStatus | null;
@@ -249,32 +331,46 @@ function StoriesBar({
   onAddStatus: () => void;
   onViewStatus: (item: StatusViewItem) => void;
 }) {
+  const { C } = useTheme();
+
   return (
-    <View style={storiesStyles.container}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={storiesStyles.row}>
-        {/* My status */}
+    <View style={{ borderBottomWidth: 1, borderBottomColor: C.border, paddingVertical: spacing.sm }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.md, gap: spacing.md }}>
+
+        {/* My Status bubble */}
         <TouchableOpacity
-          style={storiesStyles.storyItem}
-          onPress={myStatus ? () => onViewStatus({ status: myStatus, name: currentUser.name, photoURL: currentUser.photoURL, isMine: true }) : onAddStatus}
+          style={{ alignItems: 'center', gap: 4, width: 70 }}
+          onPress={
+            myStatus
+              ? () => onViewStatus({ status: myStatus, name: currentUser.name, photoURL: currentUser.photoURL, isMine: true })
+              : onAddStatus
+          }
           activeOpacity={0.8}
         >
-          <View style={[
-            storiesStyles.avatarRing,
-            myStatus ? storiesStyles.activeRing : storiesStyles.addRing,
-          ]}>
-            <Avatar name={currentUser.name} photoURL={currentUser.photoURL} size={48} />
+          <View style={{ position: 'relative' }}>
+            {myStatus ? (
+              <LinearGradient colors={['#FF4B6E', '#6C5CE7']} style={{ width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                <View style={{ width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: C.background }}>
+                  <Avatar name={currentUser.name} photoURL={currentUser.photoURL} size={56} />
+                </View>
+              </LinearGradient>
+            ) : (
+              <View style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: C.primary, alignItems: 'center', justifyContent: 'center' }}>
+                <Avatar name={currentUser.name} photoURL={currentUser.photoURL} size={56} />
+              </View>
+            )}
             {!myStatus && (
-              <View style={storiesStyles.addDot}>
-                <Text style={storiesStyles.addPlus}>+</Text>
+              <View style={{ position: 'absolute', bottom: -2, right: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.background }}>
+                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800', lineHeight: 16 }}>+</Text>
               </View>
             )}
             {myStatus && (
-              <View style={storiesStyles.statusTypeDot}>
-                <Text style={{ fontSize: 10 }}>{STATUS_TYPE_EMOJI[myStatus.type] ?? '✨'}</Text>
+              <View style={{ position: 'absolute', bottom: -2, right: -2, width: 23, height: 23, borderRadius: 12, backgroundColor: C.background, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: C.border }}>
+                <Text style={{ fontSize: 11 }}>{STATUS_TYPE_EMOJI[myStatus.type] ?? '✨'}</Text>
               </View>
             )}
           </View>
-          <Text style={storiesStyles.storyName} numberOfLines={1}>
+          <Text style={{ ...typography.small, color: C.textSecondary, textAlign: 'center', maxWidth: 70 }} numberOfLines={1}>
             {myStatus ? 'My Status' : 'Add Status'}
           </Text>
         </TouchableOpacity>
@@ -283,17 +379,21 @@ function StoriesBar({
         {statuses.map((item) => (
           <TouchableOpacity
             key={item.status.uid}
-            style={storiesStyles.storyItem}
+            style={{ alignItems: 'center', gap: 4, width: 70 }}
             onPress={() => onViewStatus(item)}
             activeOpacity={0.8}
           >
-            <View style={[storiesStyles.avatarRing, storiesStyles.connectionRing]}>
-              <Avatar name={item.name} photoURL={item.photoURL} size={48} />
-              <View style={storiesStyles.statusTypeDot}>
-                <Text style={{ fontSize: 10 }}>{STATUS_TYPE_EMOJI[item.status.type] ?? '✨'}</Text>
+            <View style={{ position: 'relative' }}>
+              <LinearGradient colors={['#6C5CE7', '#FF4B6E']} style={{ width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                <View style={{ width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: C.background }}>
+                  <Avatar name={item.name} photoURL={item.photoURL} size={56} />
+                </View>
+              </LinearGradient>
+              <View style={{ position: 'absolute', bottom: -2, right: -2, width: 23, height: 23, borderRadius: 12, backgroundColor: C.background, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: C.border }}>
+                <Text style={{ fontSize: 11 }}>{STATUS_TYPE_EMOJI[item.status.type] ?? '✨'}</Text>
               </View>
             </View>
-            <Text style={storiesStyles.storyName} numberOfLines={1}>
+            <Text style={{ ...typography.small, color: C.textSecondary, textAlign: 'center', maxWidth: 70 }} numberOfLines={1}>
               {item.name.split(' ')[0]}
             </Text>
           </TouchableOpacity>
@@ -303,118 +403,64 @@ function StoriesBar({
   );
 }
 
-const storiesStyles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingVertical: spacing.sm,
-  },
-  row: { paddingHorizontal: spacing.md, gap: spacing.md },
-  storyItem: { alignItems: 'center', gap: 4, width: 68 },
-  avatarRing: {
-    width: 60, height: 60,
-    borderRadius: 30,
-    borderWidth: 2.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addRing: {
-    borderColor: colors.primary,
-    borderStyle: 'dashed',
-  },
-  activeRing: {
-    borderColor: colors.primary,
-    borderStyle: 'solid',
-  },
-  connectionRing: {
-    borderColor: colors.secondary,
-    borderStyle: 'solid',
-  },
-  addDot: {
-    position: 'absolute', bottom: -2, right: -2,
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: colors.background,
-  },
-  addPlus: { color: '#fff', fontSize: 13, fontWeight: '700', lineHeight: 15 },
-  statusTypeDot: {
-    position: 'absolute', bottom: -2, right: -2,
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: colors.background,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: colors.border,
-  },
-  storyName: {
-    ...typography.small,
-    color: colors.textSecondary,
-    maxWidth: 68,
-    textAlign: 'center',
-  },
-});
+// ─── NearYouStrip ─────────────────────────────────────────────────────────────
 
-// ─── Filter Bar ───────────────────────────────────────────────────────────────
-
-function FilterBar({
-  search,
-  setSearch,
-  activeFilter,
-  setActiveFilter,
+function NearYouStrip({
+  nearYou, activeUids, city, onPress,
 }: {
-  search: string;
-  setSearch: (s: string) => void;
-  activeFilter: string;
-  setActiveFilter: (f: string) => void;
+  nearYou: UserProfile[];
+  activeUids: Set<string>;
+  city: string;
+  onPress: (u: UserProfile) => void;
 }) {
+  const { C, isDark } = useTheme();
+
   return (
-    <View style={styles.filterContainer}>
-      <View style={styles.searchBox}>
-        <Text style={styles.searchIcon}>🔍</Text>
-        <TextInput
-          style={styles.searchInput}
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search by name, interest or vibe..."
-          placeholderTextColor={colors.textSecondary}
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <Text style={{ color: colors.textSecondary, fontSize: 16 }}>✕</Text>
-          </TouchableOpacity>
-        )}
+    <LinearGradient
+      colors={isDark ? ['#1A0A2E', '#0D1233'] : [C.surface, C.surface]}
+      style={{ paddingTop: spacing.md, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: C.border }}
+      start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.lg, marginBottom: spacing.sm }}>
+        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#FF4B6E' }} />
+        <Text style={{ ...typography.small, fontWeight: '800', color: C.textSecondary, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          Near You · {city}
+        </Text>
       </View>
-      <FlatList
-        data={INTENT_FILTERS}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item}
-        contentContainerStyle={styles.filterList}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.filterChip, activeFilter === item && styles.filterChipActive]}
-            onPress={() => setActiveFilter(item)}
-          >
-            <Text style={[styles.filterChipText, activeFilter === item && styles.filterChipTextActive]}>
-              {item}
-            </Text>
-          </TouchableOpacity>
-        )}
-      />
-    </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
+        {nearYou.map((u) => {
+          const active = activeUids.has(u.uid);
+          return (
+            <TouchableOpacity key={u.uid} style={{ alignItems: 'center', gap: 4, width: 64 }} onPress={() => onPress(u)} activeOpacity={0.8}>
+              <View style={{ position: 'relative' }}>
+                {active ? (
+                  <LinearGradient colors={['#00E676', '#00B4D8']} style={{ width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center' }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                    <View style={{ width: 50, height: 50, borderRadius: 25, overflow: 'hidden', backgroundColor: C.background }}>
+                      <Avatar name={u.name} photoURL={u.photoURL} size={50} />
+                    </View>
+                  </LinearGradient>
+                ) : (
+                  <Avatar name={u.name} photoURL={u.photoURL} size={54} />
+                )}
+                {active && (
+                  <View style={{ position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#00E676', borderWidth: 2, borderColor: C.background }} />
+                )}
+              </View>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: C.text, textAlign: 'center', maxWidth: 64 }} numberOfLines={1}>
+                {u.name.split(' ')[0]}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </LinearGradient>
   );
 }
 
-// ─── Profile Card ─────────────────────────────────────────────────────────────
+// ─── ProfileCard ──────────────────────────────────────────────────────────────
 
 function ProfileCard({
-  user,
-  currentUser,
-  isActive,
-  onPress,
-  onConnect,
-  onMeet,
-  onEvent,
+  user, currentUser, isActive, onPress, onConnect, mood,
 }: {
   user: UserProfile;
   currentUser: UserProfile;
@@ -423,141 +469,226 @@ function ProfileCard({
   onConnect: () => void;
   onMeet: () => void;
   onEvent: () => void;
+  mood: MoodPreset;
 }) {
-  const hint     = vibeHint(currentUser, user);
-  const matchPct = vibeMatch(currentUser, user);
+  const { C, isDark } = useTheme();
+  const { score: matchPct } = dynamicVibeMatch(currentUser, user, mood);
+  const grad    = matchGrad(matchPct);
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const interests = user.interests ?? [];
-  const lookingFor = user.lookingFor ?? [];
+  const glowAnim  = useRef(new Animated.Value(0)).current;
+  const interests = (user.interests ?? []).slice(0, 2);
 
   function handlePressIn() {
-    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true }).start();
+    Animated.parallel([
+      Animated.spring(scaleAnim, { toValue: 0.968, useNativeDriver: true, speed: 30 }),
+      Animated.timing(glowAnim,  { toValue: 1, duration: 120, useNativeDriver: false }),
+    ]).start();
   }
   function handlePressOut() {
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
+    Animated.parallel([
+      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 24 }),
+      Animated.timing(glowAnim,  { toValue: 0, duration: 200, useNativeDriver: false }),
+    ]).start();
   }
 
+  // Glow border color transitions on press
+  const borderColor = glowAnim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', grad[0] + 'BB'],
+  });
+
   return (
-    <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-      >
-        {/* Top row */}
-        <View style={styles.cardTop}>
-          <View>
-            <Avatar name={user.name} photoURL={user.photoURL} size={64} />
-            {isActive && <View style={styles.activeDot} />}
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      {/* Gradient glow border — wraps the card */}
+      <Animated.View style={[cs.glowWrap, { borderColor }]}>
+        <TouchableOpacity
+          style={[cs.card, {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+          }]}
+          activeOpacity={1}
+          onPress={onPress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+        >
+          {/* Gradient stripe — left side score indicator */}
+          <LinearGradient colors={grad} style={cs.stripe} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} />
+
+          {/* Avatar */}
+          <View style={cs.avatarWrap}>
+            {isActive ? (
+              <LinearGradient colors={['#00E676', '#00CEC9']} style={cs.avatarRing} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                <View style={cs.avatarInner}>
+                  <Avatar name={user.name} photoURL={user.photoURL} size={38} />
+                </View>
+              </LinearGradient>
+            ) : (
+              <Avatar name={user.name} photoURL={user.photoURL} size={42} />
+            )}
+            {isActive && <View style={cs.activeDot} />}
           </View>
-          <View style={styles.cardInfo}>
-            <View style={styles.nameRow}>
-              <Text style={styles.cardName}>{user.name}{user.age ? `, ${user.age}` : ''}</Text>
-              {user.isVerified && <Text style={styles.verifiedBadge}>✓</Text>}
+
+          {/* Info — single dense line layout */}
+          <View style={cs.info}>
+            {/* Row 1: name + chips */}
+            <View style={cs.row1}>
+              <Text style={[cs.name, { color: C.text }]} numberOfLines={1}>
+                {user.name}
+                {user.age ? <Text style={[cs.age, { color: C.textSecondary }]}>, {user.age}</Text> : null}
+              </Text>
+              {user.isVerified && (
+                <Ionicons name="checkmark-circle" size={12} color={C.success} />
+              )}
               {isActive && (
-                <View style={styles.activePill}>
-                  <Text style={styles.activePillText}>🟢 Active</Text>
+                <View style={cs.livePill}>
+                  <View style={cs.liveDot} />
+                  <Text style={cs.liveText}>Live</Text>
                 </View>
               )}
             </View>
-            {user.city ? <Text style={styles.cardCity}>📍 {user.city}</Text> : null}
-            {(user.college || user.work) ? (
-              <Text style={styles.cardMeta} numberOfLines={1}>{user.college ?? user.work}</Text>
-            ) : null}
-          </View>
-          {/* Match % badge */}
-          {matchPct > 0 && (
-            <View style={[styles.matchBadge, matchPct >= 60 && styles.matchBadgeHigh]}>
-              <Text style={[styles.matchPct, matchPct >= 60 && styles.matchPctHigh]}>{matchPct}%</Text>
-              <Text style={styles.matchLabel}>match</Text>
+
+            {/* Row 2: city + interests inline */}
+            <View style={cs.row2}>
+              {user.city ? (
+                <Text style={[cs.meta, { color: C.textSecondary }]} numberOfLines={1}>
+                  <Text style={{ fontSize: 9 }}>📍 </Text>{user.city}
+                </Text>
+              ) : null}
+              {interests.map((t, i) => (
+                <View key={t} style={[cs.chip, { borderColor: CHIP_PALETTE[i % CHIP_PALETTE.length] + '60', backgroundColor: CHIP_PALETTE[i % CHIP_PALETTE.length] + '18' }]}>
+                  <Text style={[cs.chipTxt, { color: CHIP_PALETTE[i % CHIP_PALETTE.length] }]}>{t}</Text>
+                </View>
+              ))}
             </View>
-          )}
-        </View>
+          </View>
 
-        {/* Bio */}
-        {user.bio ? (
-          <Text style={styles.cardBio} numberOfLines={2}>{user.bio}</Text>
-        ) : null}
-
-        {/* Interest chips */}
-        {interests.length > 0 && (
-          <View style={styles.chipsRow}>
-            {interests.slice(0, 4).map((interest) => (
-              <View key={interest} style={styles.chip}>
-                <Text style={styles.chipText}>{interest}</Text>
-              </View>
-            ))}
-            {interests.length > 4 && (
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>+{interests.length - 4}</Text>
-              </View>
+          {/* Right: match % pill + connect */}
+          <View style={cs.right}>
+            {matchPct > 0 && (
+              <LinearGradient
+                colors={matchPct >= 50 ? grad : ['rgba(120,120,120,0.3)', 'rgba(80,80,80,0.3)']}
+                style={cs.scorePill}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              >
+                <Text style={cs.scoreText}>{matchPct}%</Text>
+              </LinearGradient>
             )}
-          </View>
-        )}
 
-        {/* Vibe hint */}
-        {hint ? (
-          <View style={styles.hintRow}>
-            <Text style={styles.hintText}>{hint}</Text>
+            {/* Shiny gradient connect button */}
+            <TouchableOpacity onPress={onConnect} activeOpacity={0.8}>
+              <LinearGradient
+                colors={['#FF4B6E', '#FF2D6E', '#C2185B']}
+                style={cs.connectBtn}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              >
+                {/* Shine overlay */}
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.35)', 'rgba(255,255,255,0)']}
+                  style={cs.shine}
+                  start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+                />
+                <Ionicons name="person-add-outline" size={14} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
-        ) : null}
-
-        {/* Vibe tags */}
-        {(user.vibeProfile?.primaryVibes ?? []).length > 0 && (
-          <View style={styles.vibeRow}>
-            {(user.vibeProfile!.primaryVibes).slice(0, 2).map((v) => (
-              <View key={v} style={styles.vibeChip}>
-                <Text style={styles.vibeChipText}>{v}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </TouchableOpacity>
-
-      {/* ── Action row ── */}
-      <View style={styles.actionRow}>
-        <TouchableOpacity style={styles.actionBtn} onPress={onMeet} activeOpacity={0.8}>
-          <Text style={styles.actionBtnEmoji}>🗺</Text>
-          <Text style={styles.actionBtnLabel}>Meet</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={onEvent} activeOpacity={0.8}>
-          <Text style={styles.actionBtnEmoji}>🎉</Text>
-          <Text style={styles.actionBtnLabel}>Event</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, styles.connectBtn]} onPress={onConnect} activeOpacity={0.8}>
-          <Text style={styles.connectBtnEmoji}>🤝</Text>
-          <Text style={styles.connectBtnLabel}>Connect</Text>
-        </TouchableOpacity>
-      </View>
+      </Animated.View>
     </Animated.View>
   );
 }
 
+const cs = StyleSheet.create({
+  glowWrap: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    // shadow for depth
+    shadowColor: '#FF4B6E',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 66,
+    paddingRight: 10,
+    gap: 10,
+  },
+  stripe: {
+    width: 3,
+    alignSelf: 'stretch',
+  },
+
+  avatarWrap:  { position: 'relative', marginLeft: 4 },
+  avatarRing:  { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  avatarInner: { width: 41, height: 41, borderRadius: 20, overflow: 'hidden', backgroundColor: 'transparent' },
+  activeDot:   { position: 'absolute', bottom: 0, right: 0, width: 11, height: 11, borderRadius: 5.5, backgroundColor: '#00E676', borderWidth: 2, borderColor: 'rgba(0,0,0,0.4)' },
+
+  info:  { flex: 1, gap: 4, minWidth: 0 },
+  row1:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  row2:  { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'nowrap' },
+
+  name:  { fontSize: 13.5, fontWeight: '800', flex: 1 },
+  age:   { fontSize: 12, fontWeight: '500' },
+  meta:  { fontSize: 10, flexShrink: 1 },
+
+  livePill: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#00E67622', borderRadius: 20, paddingHorizontal: 5, paddingVertical: 1 },
+  liveDot:  { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#00E676' },
+  liveText: { fontSize: 8.5, fontWeight: '800', color: '#00E676' },
+
+  chip:    { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 20, borderWidth: 1 },
+  chipTxt: { fontSize: 9.5, fontWeight: '700' },
+
+  right:      { alignItems: 'center', gap: 6 },
+  scorePill:  { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 10, minWidth: 38, alignItems: 'center' },
+  scoreText:  { fontSize: 11, fontWeight: '900', color: '#fff' },
+
+  connectBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+    shadowColor: '#FF4B6E',
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  shine: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    height: '50%',
+    borderRadius: 16,
+  },
+});
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function DiscoverScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<DiscoverStackParamList>>();
-  const uid         = useAuthStore((s) => s.firebaseUser?.uid);
-  const userProfile = useAuthStore((s) => s.userProfile);
+  const { C, isDark } = useTheme();
+  const sc            = makeMainStyles(C);
+  const navigation    = useNavigation<NativeStackNavigationProp<DiscoverStackParamList>>();
+  const uid           = useAuthStore((s) => s.firebaseUser?.uid);
+  const userProfile   = useAuthStore((s) => s.userProfile);
+  const moodPreset    = useMoodStore((s) => s.moodPreset);
 
   const [users, setUsers]               = useState<UserProfile[]>([]);
   const [loading, setLoading]           = useState(true);
   const [loadingMore, setLoadingMore]   = useState(false);
+  const [refreshing, setRefreshing]     = useState(false);
   const [feedError, setFeedError]       = useState(false);
   const [search, setSearch]             = useState('');
+  const [showSearch, setShowSearch]     = useState(false);
   const [activeFilter, setActiveFilter] = useState('All');
   const [myStatus, setMyStatus]         = useState<DriftStatus | null>(null);
   const [connectionStatuses, setConnectionStatuses] = useState<StatusViewItem[]>([]);
-  const [viewingStatus, setViewingStatus] = useState<StatusViewItem | null>(null);
-  const [activeUids, setActiveUids]       = useState<Set<string>>(new Set());
-  const [unreadCount, setUnreadCount]     = useState(0);
+  const [viewingStatus, setViewingStatus] = useState<StatusViewItem | null>(null); // kept for legacy, now navigates to screen
+  const [activeUids, setActiveUids]     = useState<Set<string>>(new Set());
+  const [unreadCount, setUnreadCount]   = useState(0);
 
-  // Live unread notification badge
   useEffect(() => {
     if (!uid) return;
-    const unsub = subscribeToUnreadCount(uid, setUnreadCount);
-    return unsub;
+    return subscribeToUnreadCount(uid, setUnreadCount);
   }, [uid]);
 
   const lastDocRef = useRef<any>(null);
@@ -576,9 +707,7 @@ export default function DiscoverScreen() {
       const blockedUids = userProfile?.blockedUsers ?? [];
       const excludeUids = reset ? [...await getInteractedUids(uid), ...blockedUids] : [];
       const { users: newUsers, lastDoc } = await getDiscoverFeed(
-        uid,
-        excludeUids,
-        reset ? undefined : lastDocRef.current,
+        uid, excludeUids, reset ? undefined : lastDocRef.current, 20, userProfile, moodPreset,
       );
       lastDocRef.current = lastDoc;
       hasMoreRef.current = newUsers.length === 20;
@@ -588,13 +717,12 @@ export default function DiscoverScreen() {
     } finally {
       setLoading(false);
       setLoadingMore(false);
+      setRefreshing(false);
     }
-  }, [uid]);
+  }, [uid, userProfile, moodPreset]);
 
   useEffect(() => { loadFeed(true); }, [loadFeed]);
 
-  // Own status — re-fetch every time the screen comes into focus so it
-  // appears immediately after posting or expiring (no stale cache).
   useFocusEffect(
     useCallback(() => {
       if (!uid) return;
@@ -602,29 +730,33 @@ export default function DiscoverScreen() {
     }, [uid]),
   );
 
-  // Connection statuses — enrich names from already-loaded users when possible
   useEffect(() => {
     if (!uid) return;
     const unsub = subscribeToConnections(uid, async (connections: Connection[]) => {
-      if (connections.length === 0) { setConnectionStatuses([]); setActiveUids(new Set()); return; }
-      const otherUids = connections.map((c) => c.users[0] === uid ? c.users[1] : c.users[0]);
+      if (connections.length === 0) {
+        setConnectionStatuses([]);
+        setActiveUids(new Set());
+        return;
+      }
+      const otherUids = connections
+        .map((c) => (c.users[0] === uid ? c.users[1] : c.users[0]))
+        .slice(0, 15);
       try {
         const statuses = await getActiveStatuses(otherUids);
-        // Build set of who has an active status (for badge on profile cards)
         setActiveUids(new Set(statuses.map((s) => s.uid)));
-        setConnectionStatuses(statuses.map((s) => {
-          // Try to find the real name from already-loaded users
-          const found = users.find((u) => u.uid === s.uid);
-          return {
-            status: s,
-            name: found?.name ?? s.uid.slice(0, 8),
-            photoURL: found?.photoURL,
-          };
-        }));
+        const statusMap = new Map(statuses.map((s) => [s.uid, s]));
+        // Only put users WITH an active status into connectionStatuses (for the story ring)
+        setConnectionStatuses(
+          statuses.map((s) => {
+            const found = users.find((u) => u.uid === s.uid);
+            return { status: s, name: found?.name ?? s.uid.slice(0, 8), photoURL: found?.photoURL };
+          }),
+        );
       } catch { /* non-critical */ }
     });
     return unsub;
   }, [uid, users]);
+
 
   function handleLoadMore() {
     if (loadingMore || !hasMoreRef.current) return;
@@ -632,354 +764,246 @@ export default function DiscoverScreen() {
     loadFeed(false);
   }
 
-  const filtered = users.filter((u) => {
-    const interests  = u.interests  ?? [];
-    const lookingFor = u.lookingFor ?? [];
-    const matchesSearch =
-      !search ||
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      interests.some((i) => i.toLowerCase().includes(search.toLowerCase())) ||
-      (u.vibeProfile?.primaryVibes ?? []).some((v) => v.toLowerCase().includes(search.toLowerCase()));
-    let matchesFilter = true;
-    if (activeFilter === '🟢 Active') {
-      matchesFilter = activeUids.has(u.uid);
-    } else if (activeFilter !== 'All') {
-      matchesFilter = lookingFor.includes(activeFilter.toLowerCase() as any);
-    }
-    return matchesSearch && matchesFilter;
-  });
+  const filtered = users
+    .filter((u) => {
+      const interests  = u.interests  ?? [];
+      const lookingFor = u.lookingFor ?? [];
+      const matchesSearch =
+        !search ||
+        u.name.toLowerCase().includes(search.toLowerCase()) ||
+        interests.some((i) => i.toLowerCase().includes(search.toLowerCase())) ||
+        (u.vibeProfile?.primaryVibes ?? []).some((v) => v.toLowerCase().includes(search.toLowerCase()));
+      let matchesFilter = true;
+      if (activeFilter === '🟢 Active') {
+        matchesFilter = activeUids.has(u.uid);
+      } else if (activeFilter !== 'All') {
+        matchesFilter = lookingFor.includes(activeFilter.toLowerCase() as any);
+      }
+      return matchesSearch && matchesFilter;
+    })
+    .sort((a, b) => {
+      if (!userProfile) return 0;
+      return dynamicVibeMatch(userProfile, b, moodPreset).score - dynamicVibeMatch(userProfile, a, moodPreset).score;
+    });
 
-  // "Near You" — same city, shown as a horizontal strip above the feed
   const nearYou = userProfile?.city
-    ? users
-        .filter((u) => u.city && u.city.toLowerCase() === (userProfile.city ?? '').toLowerCase())
-        .slice(0, 12)
+    ? users.filter((u) => u.city && u.city.toLowerCase() === (userProfile.city ?? '').toLowerCase()).slice(0, 12)
     : [];
 
-  function handleConnect(user: UserProfile) {
-    navigation.navigate('ConnectRequest', { user });
-  }
-
-  function handleMeet(user: UserProfile) {
-    // MeetupSuggest requires a connectionId — navigate via any cast since we
-    // may not have one at discover time; the MeetupSuggest screen will handle gracefully.
-    (navigation as any).navigate('MeetupSuggest', { connectedUser: user, connectionId: '' });
-  }
-
-  function handleEvent(_user: UserProfile) {
-    // Navigate to events tab — user can pick an event to invite to
-    (navigation as any).navigate('Events');
-  }
-
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
+  function handleConnect(user: UserProfile) { navigation.navigate('ConnectRequest', { user }); }
+  function handleMeet(user: UserProfile)    { (navigation as any).navigate('MeetupSuggest', { connectedUser: user, connectionId: '' }); }
+  function handleEvent(_user: UserProfile)  { (navigation as any).navigate('Events'); }
 
   return (
-    <SafeAreaView style={styles.flex} edges={['top']}>
-      {/* Status Viewer Modal */}
-      <StatusViewerModal
-        item={viewingStatus}
-        onClose={() => setViewingStatus(null)}
-        onEdit={() => {
-          const status = viewingStatus?.status;
-          setViewingStatus(null);
-          navigation.navigate('StatusCreate', { initialStatus: status });
-        }}
-      />
+    <View style={sc.root}>
+      {isDark && <LinearGradient colors={['#0D0D1A', '#0A0A1F', '#0D0D1A']} style={StyleSheet.absoluteFill} />}
+      <SafeAreaView style={sc.flex} edges={['top']}>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Drift</Text>
-          <Text style={styles.headerSub}>Discover your people</Text>
-        </View>
-        <View style={styles.headerActions}>
-          {/* Shake to Share */}
-          <TouchableOpacity
-            style={styles.headerIconBtn}
-            onPress={() => navigation.navigate('ShakeShare')}
-          >
-            <Ionicons name="people-outline" size={22} color={colors.text} />
-          </TouchableOpacity>
+        {/* ViewStatus is now a dedicated screen — modal kept for backward compat but unused */}
 
-          {/* QR Scanner */}
-          <TouchableOpacity
-            style={styles.headerIconBtn}
-            onPress={() => navigation.navigate('QRScanner')}
-          >
-            <Ionicons name="qr-code-outline" size={22} color={colors.text} />
-          </TouchableOpacity>
-
-          {/* Bell icon with unread badge */}
-          <TouchableOpacity
-            style={styles.bellBtn}
-            onPress={() => navigation.navigate('Notifications')}
-          >
-            <Ionicons name="notifications-outline" size={24} color={colors.text} />
-            {unreadCount > 0 && (
-              <View style={styles.bellBadge}>
-                <Text style={styles.bellBadgeText}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Text>
+        {/* ── Header ─────────────────────────────────────────────────────────── */}
+        <LinearGradient
+          colors={isDark ? ['#1A0A2E', '#0D1744', '#0A1628'] : [C.background, C.surface]}
+          style={sc.header}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        >
+          {showSearch ? (
+            <View style={sc.searchRow}>
+              <View style={sc.searchBox}>
+                <Ionicons name="search-outline" size={16} color={C.textSecondary} />
+                <TextInput
+                  style={sc.searchInput}
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Name, interest or vibe..."
+                  placeholderTextColor={C.textSecondary}
+                  autoFocus
+                />
+                {search.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearch('')}>
+                    <Ionicons name="close-circle" size={16} color={C.textSecondary} />
+                  </TouchableOpacity>
+                )}
               </View>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerIconBtn}
-            onPress={() => navigation.navigate('Connections')}
-          >
-            <Ionicons name="git-network-outline" size={22} color={colors.text} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {userProfile && (
-        <StoriesBar
-          currentUser={userProfile}
-          myStatus={myStatus}
-          statuses={connectionStatuses}
-          onAddStatus={() => navigation.navigate('StatusCreate', undefined)}
-          onViewStatus={(item) => setViewingStatus(item)}
-        />
-      )}
-
-      <FilterBar
-        search={search}
-        setSearch={setSearch}
-        activeFilter={activeFilter}
-        setActiveFilter={setActiveFilter}
-      />
-
-      {/* Near You horizontal strip */}
-      {nearYou.length > 0 && !search && (
-        <View style={styles.nearYouSection}>
-          <Text style={styles.nearYouTitle}>📍 Near You · {userProfile?.city}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.nearYouRow}>
-            {nearYou.map((u) => (
-              <TouchableOpacity
-                key={u.uid}
-                style={styles.nearYouCard}
-                onPress={() => navigation.navigate('ProfileDetail', { user: u })}
-                activeOpacity={0.8}
-              >
-                <View style={styles.nearYouAvatarWrap}>
-                  <Avatar name={u.name} photoURL={u.photoURL} size={48} />
-                  {activeUids.has(u.uid) && <View style={styles.activeDot} />}
-                </View>
-                <Text style={styles.nearYouName} numberOfLines={1}>{u.name.split(' ')[0]}</Text>
-                {u.city ? <Text style={styles.nearYouCity} numberOfLines={1}>{u.city}</Text> : null}
+              <TouchableOpacity onPress={() => { setShowSearch(false); setSearch(''); }} style={{ paddingLeft: spacing.sm }}>
+                <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>Done</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.uid}
-        contentContainerStyle={styles.feedList}
-        showsVerticalScrollIndicator={false}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
-        ListEmptyComponent={
-          feedError ? (
-            <EmptyState emoji="📡" title="Could not load people" subtitle="Check your connection and tap retry.">
-              <TouchableOpacity style={styles.retryBtn} onPress={() => loadFeed(true)}>
-                <Text style={styles.retryText}>Try Again</Text>
-              </TouchableOpacity>
-            </EmptyState>
+            </View>
           ) : (
-            <EmptyState emoji="🌊" title="No one here yet" subtitle="Check back soon — more people are joining Drift every day." />
-          )
-        }
-        ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.primary} style={{ paddingVertical: spacing.lg }} /> : null}
-        renderItem={({ item }) =>
-          userProfile ? (
-            <ProfileCard
-              user={item}
-              currentUser={userProfile}
-              isActive={activeUids.has(item.uid)}
-              onPress={() => navigation.navigate('ProfileDetail', { user: item })}
-              onConnect={() => handleConnect(item)}
-              onMeet={() => handleMeet(item)}
-              onEvent={() => handleEvent(item)}
-            />
-          ) : null
-        }
-      />
-    </SafeAreaView>
+            <>
+              <View>
+                <Text style={sc.headerTitle}>Drift</Text>
+                <Text style={sc.headerSub}>Discover your people</Text>
+              </View>
+              <View style={sc.headerActions}>
+                <TouchableOpacity style={sc.iconBtn} onPress={() => setShowSearch(true)}>
+                  <Ionicons name="search-outline" size={20} color={C.text} />
+                </TouchableOpacity>
+                <TouchableOpacity style={sc.iconBtn} onPress={() => navigation.navigate('ShakeShare')}>
+                  <Ionicons name="people-outline" size={20} color={C.text} />
+                </TouchableOpacity>
+                <TouchableOpacity style={sc.iconBtn} onPress={() => navigation.navigate('QRScanner')}>
+                  <Ionicons name="qr-code-outline" size={20} color={C.text} />
+                </TouchableOpacity>
+                <TouchableOpacity style={sc.bellBtn} onPress={() => navigation.navigate('Notifications')}>
+                  <Ionicons name="notifications-outline" size={22} color={C.text} />
+                  {unreadCount > 0 && (
+                    <View style={sc.bellBadge}>
+                      <Text style={sc.bellBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity style={sc.iconBtn} onPress={() => navigation.navigate('Connections')}>
+                  <Ionicons name="git-network-outline" size={20} color={C.text} />
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </LinearGradient>
+
+        {/* ── Stories + Mood ─────────────────────────────────────────────────── */}
+        {userProfile && (
+          <StoriesBar
+            currentUser={userProfile}
+            myStatus={myStatus}
+            statuses={connectionStatuses}
+            onAddStatus={() => navigation.navigate('StatusCreate', undefined)}
+            onViewStatus={(item) => navigation.navigate('ViewStatus', {
+              status: item.status,
+              name: item.name,
+              photoURL: item.photoURL,
+              isMine: item.isMine ?? false,
+            })}
+          />
+        )}
+        <MoodStrip />
+
+        {/* ── Filter chips ───────────────────────────────────────────────────── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: spacing.md, gap: 8, paddingVertical: 8, alignItems: 'center' }}
+          style={{ borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.background }}
+        >
+          {INTENT_FILTERS.map(({ key, label, emoji, color }) => {
+            const active = activeFilter === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => setActiveFilter(key)}
+                activeOpacity={0.75}
+                style={{
+                  width: 62,
+                  height: 52,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  backgroundColor: active ? color + '20' : C.surface,
+                  borderWidth: 1.5,
+                  borderColor: active ? color : C.border,
+                }}
+              >
+                <Text style={{ fontSize: 18, lineHeight: 22 }}>{emoji}</Text>
+                <Text style={{
+                  fontSize: 10,
+                  fontWeight: active ? '800' : '500',
+                  color: active ? color : C.textSecondary,
+                  letterSpacing: -0.2,
+                }}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* ── Near You ───────────────────────────────────────────────────────── */}
+        {!loading && nearYou.length > 0 && !search && (
+          <NearYouStrip
+            nearYou={nearYou}
+            activeUids={activeUids}
+            city={userProfile?.city ?? ''}
+            onPress={(u) => navigation.navigate('ProfileDetail', { user: u })}
+          />
+        )}
+
+        {/* ── Feed ───────────────────────────────────────────────────────────── */}
+        {loading ? (
+          <ScrollView contentContainerStyle={{ padding: spacing.md }}>
+            <SkeletonCard /><SkeletonCard /><SkeletonCard />
+          </ScrollView>
+        ) : (
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item.uid}
+            contentContainerStyle={sc.feedList}
+            showsVerticalScrollIndicator={false}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.5}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadFeed(true); }} tintColor={C.primary} colors={[C.primary]} />
+            }
+            ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
+            ListEmptyComponent={
+              feedError ? (
+                <EmptyState emoji="📡" title="Could not load people" subtitle="Check your connection and tap retry.">
+                  <TouchableOpacity style={sc.retryBtn} onPress={() => loadFeed(true)}>
+                    <Text style={sc.retryText}>Try Again</Text>
+                  </TouchableOpacity>
+                </EmptyState>
+              ) : (
+                <EmptyState emoji="🌊" title="No one here yet" subtitle="Check back soon — more people are joining Drift every day." />
+              )
+            }
+            ListFooterComponent={loadingMore ? <ActivityIndicator color={C.primary} style={{ paddingVertical: spacing.lg }} /> : null}
+            renderItem={({ item }) =>
+              userProfile ? (
+                <ProfileCard
+                  user={item}
+                  currentUser={userProfile}
+                  isActive={activeUids.has(item.uid)}
+                  mood={moodPreset}
+                  onPress={() => navigation.navigate('ProfileDetail', { user: item })}
+                  onConnect={() => handleConnect(item)}
+                  onMeet={() => handleMeet(item)}
+                  onEvent={() => handleEvent(item)}
+                />
+              ) : null
+            }
+          />
+        )}
+      </SafeAreaView>
+    </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.surface },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+function makeMainStyles(C: AppColors) {
+  return StyleSheet.create({
+    root:    { flex: 1, backgroundColor: C.background },
+    flex:    { flex: 1 },
+    feedList: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 100 },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    backgroundColor: colors.background,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  headerTitle: { ...typography.heading, color: colors.primary, fontWeight: '700', letterSpacing: -1 },
-  headerSub:   { ...typography.small, color: colors.textSecondary, marginTop: 1 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  headerIconBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  bellBtn: { position: 'relative', padding: 6 },
-  bellBadge: {
-    position: 'absolute', top: 0, right: 0,
-    minWidth: 18, height: 18, borderRadius: 9,
-    backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 2, borderColor: colors.background,
-  },
-  bellBadgeText: { fontSize: 10, color: '#fff', fontWeight: '800' },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: '#ffffff10',
+    },
+    headerTitle:   { ...typography.h2, color: C.primary, fontWeight: '800', letterSpacing: -1 },
+    headerSub:     { ...typography.small, color: C.textSecondary, marginTop: 1 },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+    bellBtn: { position: 'relative', padding: 4 },
+    bellBadge: { position: 'absolute', top: 0, right: 0, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3, borderWidth: 2, borderColor: C.background },
+    bellBadgeText: { fontSize: 10, color: '#fff', fontWeight: '800' },
 
-  filterContainer: {
-    backgroundColor: colors.background,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  searchBox: {
-    flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: spacing.lg, marginTop: spacing.sm,
-    backgroundColor: colors.surface, borderRadius: radius.lg,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderWidth: 1, borderColor: colors.border,
-    gap: spacing.sm,
-  },
-  searchIcon:  { fontSize: 14 },
-  searchInput: { flex: 1, ...typography.body, color: colors.text },
-  filterList:  { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
-  filterChip: {
-    paddingHorizontal: spacing.md, paddingVertical: 6,
-    borderRadius: radius.full,
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
-  },
-  filterChipActive:     { backgroundColor: colors.primary, borderColor: colors.primary },
-  filterChipText:       { ...typography.caption, color: colors.textSecondary, fontWeight: '500' },
-  filterChipTextActive: { color: colors.background, fontWeight: '600' },
+    searchRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: C.surface, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: 9, borderWidth: 1, borderColor: C.border },
+    searchInput: { flex: 1, ...typography.body, color: C.text, padding: 0 },
 
-  feedList: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
-
-  card: {
-    backgroundColor: colors.background,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    ...shadows.card,
-  },
-  cardTop:  { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.sm },
-  cardInfo: { flex: 1 },
-  nameRow:  { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  cardName: { ...typography.body, fontWeight: '700', color: colors.text },
-  verifiedBadge: { fontSize: 12, color: colors.success, fontWeight: '700' },
-  cardCity: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-  cardMeta: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
-  intentBadge: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
-  },
-  intentText: { fontSize: 18 },
-  cardBio: { ...typography.body, color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.sm },
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
-  chip: {
-    paddingHorizontal: spacing.sm, paddingVertical: 4,
-    borderRadius: radius.full, backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  chipText: { ...typography.small, color: colors.textSecondary },
-  hintRow: {
-    backgroundColor: `${colors.primary}10`, borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm, paddingVertical: 6, marginBottom: spacing.sm,
-  },
-  hintText: { ...typography.caption, color: colors.primary, fontWeight: '500' },
-  vibeRow:  { flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.sm },
-  vibeChip: {
-    paddingHorizontal: spacing.sm, paddingVertical: 3,
-    borderRadius: radius.full, backgroundColor: `${colors.secondary}15`,
-  },
-  vibeChipText: { ...typography.small, color: colors.secondary, fontWeight: '600' },
-
-  // Action row
-  actionRow: {
-    flexDirection: 'row', gap: spacing.sm,
-    marginTop: spacing.sm,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1, borderTopColor: colors.border,
-  },
-  actionBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  actionBtnEmoji: { fontSize: 14 },
-  actionBtnLabel: { ...typography.small, fontWeight: '600', color: colors.text },
-  connectBtn: {
-    flex: 1.5,
-    backgroundColor: colors.primary, borderColor: colors.primary,
-  },
-  connectBtnEmoji: { fontSize: 14 },
-  connectBtnLabel: { ...typography.small, fontWeight: '700', color: colors.background },
-
-  retryBtn: {
-    marginTop: spacing.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm,
-    backgroundColor: colors.primary, borderRadius: radius.full, alignSelf: 'center',
-  },
-  retryText: { ...typography.body, color: '#fff', fontWeight: '600' },
-
-  // ── Active dot (on avatar) ────────────────────────────────────────────────
-  activeDot: {
-    position: 'absolute', bottom: 1, right: 1,
-    width: 13, height: 13, borderRadius: 7,
-    backgroundColor: colors.success,
-    borderWidth: 2, borderColor: colors.background,
-  },
-  activePill: {
-    backgroundColor: colors.success + '18',
-    paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.full,
-  },
-  activePillText: { fontSize: 10, fontWeight: '700', color: colors.success },
-
-  // ── Match badge ───────────────────────────────────────────────────────────
-  matchBadge: {
-    alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: spacing.sm, paddingVertical: 4,
-    borderRadius: radius.md, borderWidth: 1.5,
-    borderColor: colors.border, backgroundColor: colors.surface,
-    minWidth: 52,
-  },
-  matchBadgeHigh: { borderColor: colors.success + '60', backgroundColor: colors.success + '10' },
-  matchPct:     { fontSize: 15, fontWeight: '800', color: colors.textSecondary },
-  matchPctHigh: { color: colors.success },
-  matchLabel:   { fontSize: 9, fontWeight: '600', color: colors.textSecondary, letterSpacing: 0.5 },
-
-  // ── Near You section ──────────────────────────────────────────────────────
-  nearYouSection: {
-    backgroundColor: colors.background,
-    paddingTop: spacing.md, paddingBottom: spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  nearYouTitle: {
-    ...typography.small, fontWeight: '800', color: colors.textSecondary,
-    letterSpacing: 0.5, paddingHorizontal: spacing.lg, marginBottom: spacing.sm,
-  },
-  nearYouRow: { paddingHorizontal: spacing.lg, gap: spacing.md },
-  nearYouCard: { alignItems: 'center', gap: 4, width: 64 },
-  nearYouAvatarWrap: { position: 'relative' },
-  nearYouName: { ...typography.small, fontWeight: '600', color: colors.text, textAlign: 'center', maxWidth: 64 },
-  nearYouCity: { fontSize: 10, color: colors.textSecondary, textAlign: 'center', maxWidth: 64 },
-});
+    retryBtn: { marginTop: spacing.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, backgroundColor: C.primary, borderRadius: radius.full, alignSelf: 'center' },
+    retryText: { ...typography.body, color: '#fff', fontWeight: '600' },
+  });
+}

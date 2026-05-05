@@ -21,7 +21,8 @@ import {
 } from '../../utils/firestore-helpers';
 import Avatar from '../../components/Avatar';
 import EmptyState from '../../components/EmptyState';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import {
   Connection,
   GamesStackParamList,
@@ -58,6 +59,8 @@ export default function GameInviteScreen() {
   const info = GAME_INFO[gameId];
 
   const { firebaseUser, userProfile } = useAuthStore();
+  const { C } = useTheme();
+  const styles = makeStyles(C);
 
   const [connections, setConnections] = useState<Connection[]>([]);
   const [profiles, setProfiles] = useState<Record<string, UserProfile>>({});
@@ -263,66 +266,68 @@ export default function GameInviteScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  backIcon: { fontSize: 22, color: colors.text, width: 32 },
-  headerTitle: { ...typography.heading, color: colors.text },
+    header: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    backIcon: { fontSize: 22, color: C.text, width: 32 },
+    headerTitle: { ...typography.heading, color: C.text },
 
-  subHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
-  },
-  subText:      { ...typography.caption, color: colors.textSecondary, flex: 1 },
-  selectedText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
+    subHeader: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      backgroundColor: C.surface,
+    },
+    subText:      { ...typography.caption, color: C.textSecondary, flex: 1 },
+    selectedText: { ...typography.caption, color: C.primary, fontWeight: '700' },
 
-  list: { padding: spacing.lg, paddingBottom: spacing.xxl, flexGrow: 1 },
+    list: { padding: spacing.lg, paddingBottom: spacing.xxl, flexGrow: 1 },
 
-  row: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    backgroundColor: colors.background,
-    borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border,
-    padding: spacing.md,
-  },
-  rowChecked: {
-    borderColor: colors.primary,
-    backgroundColor: `${colors.primary}08`,
-  },
-  rowInfo: { flex: 1 },
-  rowName: { ...typography.body, fontWeight: '600', color: colors.text },
-  rowMeta: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
+    row: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+      backgroundColor: C.background,
+      borderRadius: radius.md,
+      borderWidth: 1, borderColor: C.border,
+      padding: spacing.md,
+    },
+    rowChecked: {
+      borderColor: C.primary,
+      backgroundColor: `${C.primary}08`,
+    },
+    rowInfo: { flex: 1 },
+    rowName: { ...typography.body, fontWeight: '600', color: C.text },
+    rowMeta: { ...typography.small, color: C.textSecondary, marginTop: 2 },
 
-  checkbox: {
-    width: 26, height: 26, borderRadius: radius.full,
-    borderWidth: 2, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-  checkboxChecked: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  checkmark: { color: '#fff', fontWeight: '700', fontSize: 14 },
+    checkbox: {
+      width: 26, height: 26, borderRadius: radius.full,
+      borderWidth: 2, borderColor: C.border,
+      alignItems: 'center', justifyContent: 'center',
+      backgroundColor: C.background,
+    },
+    checkboxChecked: {
+      backgroundColor: C.primary,
+      borderColor: C.primary,
+    },
+    checkmark: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  footer: {
-    padding: spacing.lg,
-    borderTopWidth: 1, borderTopColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  createBtn: {
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.md,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    ...shadows.card,
-  },
-  createBtnDisabled: { opacity: 0.5 },
-  createBtnText: { ...typography.body, fontWeight: '700', color: '#fff' },
-});
+    footer: {
+      padding: spacing.lg,
+      borderTopWidth: 1, borderTopColor: C.border,
+      backgroundColor: C.background,
+    },
+    createBtn: {
+      backgroundColor: C.primary,
+      paddingVertical: spacing.md,
+      borderRadius: radius.lg,
+      alignItems: 'center',
+      ...shadows.card,
+    },
+    createBtnDisabled: { opacity: 0.5 },
+    createBtnText: { ...typography.body, fontWeight: '700', color: '#fff' },
+  });
+}

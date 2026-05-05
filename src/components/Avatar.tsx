@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
-import { colors, typography } from '../utils/theme';
+import { useTheme, AppColors } from '../utils/useTheme';
 import { getInitials } from '../utils/helpers';
 
 interface AvatarProps {
@@ -10,6 +10,7 @@ interface AvatarProps {
 }
 
 export default function Avatar({ name, photoURL, size = 48 }: AvatarProps) {
+  const { C } = useTheme();
   const initials = getInitials(name);
   const fontSize = size * 0.35;
 
@@ -26,11 +27,11 @@ export default function Avatar({ name, photoURL, size = 48 }: AvatarProps) {
     <View
       style={[
         styles.base,
-        styles.placeholder,
+        { backgroundColor: C.primary },
         { width: size, height: size, borderRadius: size / 2 },
       ]}
     >
-      <Text style={[styles.initials, { fontSize }]}>{initials}</Text>
+      <Text style={[styles.initials, { fontSize, color: '#fff' }]}>{initials}</Text>
     </View>
   );
 }
@@ -38,14 +39,10 @@ export default function Avatar({ name, photoURL, size = 48 }: AvatarProps) {
 const styles = StyleSheet.create({
   base: {
     overflow: 'hidden',
-  },
-  placeholder: {
-    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   initials: {
-    color: colors.background,
     fontWeight: '700',
   },
 });

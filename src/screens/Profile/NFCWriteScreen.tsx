@@ -36,11 +36,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 
 import { useAuthStore } from '../../store/authStore';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors, spacing, typography, radius, shadows } from '../../utils/useTheme';
 import { profileDeepLink } from '../../utils/profileShare';
 
 // ─── Lazy-load react-native-nfc-manager ──────────────────────────────────────
-// If not installed yet, the UI still renders with a "not available" state.
 let NfcManager: any = null;
 let Ndef:       any = null;
 
@@ -54,7 +53,7 @@ try {
 
 // ─── NFC ring animation ───────────────────────────────────────────────────────
 
-function NfcRing({ active }: { active: boolean }) {
+function NfcRing({ active, color }: { active: boolean; color: string }) {
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -73,7 +72,10 @@ function NfcRing({ active }: { active: boolean }) {
   const opacity = anim.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.55, 0.3, 0] });
 
   return (
-    <Animated.View style={[ringStyle.ring, { transform: [{ scale }], opacity }]} pointerEvents="none" />
+    <Animated.View
+      style={[ringStyle.ring, { transform: [{ scale }], opacity, borderColor: color }]}
+      pointerEvents="none"
+    />
   );
 }
 
@@ -81,7 +83,7 @@ const ringStyle = StyleSheet.create({
   ring: {
     position: 'absolute',
     width: 110, height: 110, borderRadius: 55,
-    borderWidth: 3, borderColor: colors.primary,
+    borderWidth: 3,
     alignSelf: 'center',
   },
 });
@@ -91,54 +93,39 @@ const ringStyle = StyleSheet.create({
 type Stage = 'idle' | 'waiting' | 'success' | 'error' | 'unavailable';
 
 export default function NFCWriteScreen() {
-  const navigation     = useNavigation();
+  const navigation      = useNavigation();
   const { userProfile } = useAuthStore();
+  const { C }           = useTheme();
+  const styles          = makeStyles(C);
 
   const [stage,    setStage]    = useState<Stage>('idle');
   const [errMsg,   setErrMsg]   = useState('');
   const [nfcReady, setNfcReady] = useState(false);
 
   const uid      = userProfile?.uid ?? '';
-  const deepLink = profileDeepLink(uid); // https://driftapp.in/u/{uid}
+  const deepLink = profileDeepLink(uid);
 
-  // ── Init NFC on mount ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (!NfcManager) {
-      setStage('unavailable');
-      return;
-    }
+    if (!NfcManager) { setStage('unavailable'); return; }
     NfcManager.start()
       .then(() => setNfcReady(true))
       .catch(() => { setStage('unavailable'); });
-
-    return () => {
-      NfcManager?.cancelTechnologyRequest?.().catch(() => {});
-    };
+    return () => { NfcManager?.cancelTechnologyRequest?.().catch(() => {}); };
   }, []);
 
-  // ── Write tag ─────────────────────────────────────────────────────────────
   async function writeTag() {
     if (!NfcManager || !Ndef || !uid) return;
     setStage('waiting');
-
     try {
-      // Request NFC technology
       await NfcManager.requestTechnology('Ndef');
-
-      // Build NDEF message: URI record containing the Drift deep link
       const bytes = Ndef.encodeMessage([Ndef.uriRecord(deepLink)]);
-
-      // Write to tag
       await NfcManager.ndefHandler.writeNdefMessage(bytes);
-
       setStage('success');
       NfcManager.cancelTechnologyRequest().catch(() => {});
     } catch (ex: any) {
       NfcManager.cancelTechnologyRequest().catch(() => {});
-
       const msg = String(ex?.message ?? ex);
       if (msg.toLowerCase().includes('cancelled') || msg.toLowerCase().includes('cancel')) {
-        // User cancelled — go back to idle silently
         setStage('idle');
       } else if (msg.toLowerCase().includes('readonly') || msg.toLowerCase().includes('read only')) {
         setErrMsg('This tag is read-only and cannot be written to. Use a blank NTAG213 sticker.');
@@ -150,12 +137,7 @@ export default function NFCWriteScreen() {
     }
   }
 
-  function reset() {
-    setStage('idle');
-    setErrMsg('');
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
+  function reset() { setStage('idle'); setErrMsg(''); }
 
   return (
     <SafeAreaView style={styles.root}>
@@ -188,19 +170,17 @@ export default function NFCWriteScreen() {
           </>
         )}
 
-        {/* ── Idle: explain + start ── */}
+        {/* ── Idle ── */}
         {stage === 'idle' && (
           <>
             <View style={styles.iconBox}>
               <Text style={{ fontSize: 60 }}>📡</Text>
             </View>
-
             <Text style={styles.title}>Write to NFC Sticker</Text>
             <Text style={styles.sub}>
               Write your Drift profile to a physical NFC sticker. Anyone who taps it
-              opens your profile instantly — no app needed to tap, but they'll be prompted to download Drift to connect.
+              opens your profile instantly.
             </Text>
-
             <View style={styles.infoCard}>
               <Text style={styles.infoTitle}>What you need</Text>
               <Text style={styles.infoItem}>📦 Any NTAG213 / 215 / 216 NFC sticker</Text>
@@ -208,31 +188,29 @@ export default function NFCWriteScreen() {
               <Text style={styles.infoItem}>📱 A phone with NFC enabled</Text>
               <Text style={styles.infoItem}>🖊️ One write per sticker — works forever after</Text>
             </View>
-
             <Text style={styles.linkPreview}>Will write: {deepLink}</Text>
-
             {nfcReady ? (
               <TouchableOpacity style={styles.primaryBtn} onPress={writeTag} activeOpacity={0.85}>
                 <Text style={styles.primaryBtnText}>Start Writing →</Text>
               </TouchableOpacity>
             ) : (
-              <ActivityIndicator color={colors.primary} />
+              <ActivityIndicator color={C.primary} />
             )}
           </>
         )}
 
-        {/* ── Waiting for tag ── */}
+        {/* ── Waiting ── */}
         {stage === 'waiting' && (
           <>
             <View style={styles.iconBox}>
-              <NfcRing active={true} />
+              <NfcRing active={true} color={C.primary} />
               <Text style={{ fontSize: 60, zIndex: 1 }}>📡</Text>
             </View>
             <Text style={styles.title}>Hold Near Sticker</Text>
             <Text style={styles.sub}>
               Hold the back of your phone against the NFC sticker and keep still for 2–3 seconds
             </Text>
-            <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.lg }} />
+            <ActivityIndicator color={C.primary} style={{ marginTop: spacing.lg }} />
             <TouchableOpacity onPress={reset} style={styles.cancelBtn}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
@@ -247,14 +225,12 @@ export default function NFCWriteScreen() {
             </View>
             <Text style={styles.title}>NFC Sticker Written!</Text>
             <Text style={styles.sub}>
-              Anyone who taps this sticker will see your Drift profile.
-              Stick it on your laptop, notebook, water bottle — anywhere.
+              Anyone who taps this sticker will see your Drift profile. Stick it anywhere!
             </Text>
             <View style={styles.infoCard}>
               <Text style={styles.infoTitle}>What happens when someone taps</Text>
               <Text style={styles.infoItem}>📱 Has Drift app → opens your profile directly</Text>
               <Text style={styles.infoItem}>🌐 No app → opens driftapp.in in browser</Text>
-              <Text style={styles.infoItem}>   (they'll be prompted to download Drift)</Text>
             </View>
             <TouchableOpacity style={styles.primaryBtn} onPress={reset} activeOpacity={0.85}>
               <Text style={styles.primaryBtnText}>Write Another Sticker</Text>
@@ -276,7 +252,6 @@ export default function NFCWriteScreen() {
             </TouchableOpacity>
           </>
         )}
-
       </View>
     </SafeAreaView>
   );
@@ -284,56 +259,58 @@ export default function NFCWriteScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: C.background },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  backBtn:     { width: 40, alignItems: 'flex-start' },
-  backText:    { fontSize: 22, color: colors.primary },
-  headerTitle: { ...typography.heading, color: colors.text },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    backBtn:     { width: 40, alignItems: 'flex-start' },
+    backText:    { fontSize: 22, color: C.primary },
+    headerTitle: { ...typography.heading, color: C.text },
 
-  center: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: spacing.xl, gap: spacing.lg,
-  },
+    center: {
+      flex: 1, alignItems: 'center', justifyContent: 'center',
+      paddingHorizontal: spacing.xl, gap: spacing.lg,
+    },
 
-  bigEmoji: { fontSize: 70, textAlign: 'center' },
+    bigEmoji: { fontSize: 70, textAlign: 'center' },
 
-  iconBox: {
-    width: 110, height: 110,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-  successBox: {
-    backgroundColor: `${colors.success}12`,
-    borderRadius: 55,
-    borderWidth: 1, borderColor: `${colors.success}30`,
-  },
+    iconBox: {
+      width: 110, height: 110,
+      alignItems: 'center', justifyContent: 'center',
+      marginBottom: spacing.sm,
+    },
+    successBox: {
+      backgroundColor: `${C.success}12`,
+      borderRadius: 55,
+      borderWidth: 1, borderColor: `${C.success}30`,
+    },
 
-  title: { ...typography.title, color: colors.text, textAlign: 'center', fontWeight: '700' },
-  sub:   { ...typography.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 24 },
+    title: { ...typography.title, color: C.text, textAlign: 'center', fontWeight: '700' },
+    sub:   { ...typography.body, color: C.textSecondary, textAlign: 'center', lineHeight: 24 },
 
-  infoCard: {
-    width: '100%', backgroundColor: colors.surface,
-    borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
-    padding: spacing.md, gap: 6,
-  },
-  infoTitle: { ...typography.body, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  infoItem:  { ...typography.small, color: colors.textSecondary, lineHeight: 20 },
+    infoCard: {
+      width: '100%', backgroundColor: C.surface,
+      borderRadius: radius.lg, borderWidth: 1, borderColor: C.border,
+      padding: spacing.md, gap: 6,
+    },
+    infoTitle: { ...typography.body, fontWeight: '700', color: C.text, marginBottom: 4 },
+    infoItem:  { ...typography.small, color: C.textSecondary, lineHeight: 20 },
 
-  linkPreview: { ...typography.small, color: colors.primary, fontStyle: 'italic', textAlign: 'center' },
+    linkPreview: { ...typography.small, color: C.primary, fontStyle: 'italic', textAlign: 'center' },
 
-  primaryBtn: {
-    backgroundColor: colors.primary, borderRadius: radius.lg,
-    paddingHorizontal: spacing.xl, paddingVertical: spacing.md,
-    ...shadows.card,
-  },
-  primaryBtnText: { ...typography.body, color: '#fff', fontWeight: '700' },
+    primaryBtn: {
+      backgroundColor: C.primary, borderRadius: radius.lg,
+      paddingHorizontal: spacing.xl, paddingVertical: spacing.md,
+      ...shadows.card,
+    },
+    primaryBtnText: { ...typography.body, color: '#fff', fontWeight: '700' },
 
-  cancelBtn:  { marginTop: spacing.xs },
-  cancelText: { ...typography.body, color: colors.textSecondary },
-});
+    cancelBtn:  { marginTop: spacing.xs },
+    cancelText: { ...typography.body, color: C.textSecondary },
+  });
+}

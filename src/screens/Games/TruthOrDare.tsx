@@ -17,8 +17,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GamesStackParamList } from '../../types';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { gameSounds } from '../../services/gameSounds';
+import { useAuthStore } from '../../store/authStore';
+import GameChatVoice from '../../components/GameChatVoice';
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
 
@@ -349,9 +352,10 @@ interface StatCardProps {
   value: number | string;
   label: string;
   color: string;
+  styles: ReturnType<typeof makeStyles>;
 }
 
-function StatCard({ emoji, value, label, color }: StatCardProps): React.JSX.Element {
+function StatCard({ emoji, value, label, color, styles }: StatCardProps): React.JSX.Element {
   return (
     <View style={[styles.statCard, { borderTopColor: color }]}>
       <Text style={styles.statEmoji}>{emoji}</Text>
@@ -367,6 +371,9 @@ export default function TruthOrDareScreen(): React.JSX.Element {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteProp<GamesStackParamList, 'TruthOrDare'>>();
   const roomId = route.params?.roomId;
+  const { C } = useTheme();
+  const styles = makeStyles(C);
+  const { firebaseUser, userProfile } = useAuthStore();
 
   // ── Phase & Setup State ──
   const [phase, setPhase] = useState<GamePhase>('setup');
@@ -544,11 +551,11 @@ export default function TruthOrDareScreen(): React.JSX.Element {
   interface LeaderEntry { name: string; count: number; color: string }
   const mostTruths: LeaderEntry = players.reduce<LeaderEntry>(
     (best, p) => (p.truths > best.count ? { name: p.name, count: p.truths, color: p.color } : best),
-    { name: '—', count: 0, color: colors.textSecondary },
+    { name: '—', count: 0, color: C.textSecondary },
   );
   const mostDares: LeaderEntry = players.reduce<LeaderEntry>(
     (best, p) => (p.dares > best.count ? { name: p.name, count: p.dares, color: p.color } : best),
-    { name: '—', count: 0, color: colors.textSecondary },
+    { name: '—', count: 0, color: C.textSecondary },
   );
 
   // ─── Phase: Setup ──────────────────────────────────────────────────────────
@@ -560,7 +567,7 @@ export default function TruthOrDareScreen(): React.JSX.Element {
 
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+        <StatusBar barStyle="dark-content" backgroundColor={C.background} />
         {roomId && (
           <View style={styles.roomBanner}>
             <Text style={styles.roomBannerText}>
@@ -597,7 +604,7 @@ export default function TruthOrDareScreen(): React.JSX.Element {
                   <TextInput
                     style={styles.playerInput}
                     placeholder={`Player ${i + 1} name`}
-                    placeholderTextColor={colors.textSecondary}
+                    placeholderTextColor={C.textSecondary}
                     value={name}
                     onChangeText={(v) => updatePlayerName(i, v)}
                     maxLength={20}
@@ -689,7 +696,7 @@ export default function TruthOrDareScreen(): React.JSX.Element {
               style={[
                 styles.startBtn,
                 !canStart && styles.startBtnDisabled,
-                canStart && { backgroundColor: SPICE_OPTIONS.find((s) => s.level === spiceLevel)?.color ?? colors.primary },
+                canStart && { backgroundColor: SPICE_OPTIONS.find((s) => s.level === spiceLevel)?.color ?? C.primary },
               ]}
               activeOpacity={0.85}
             >
@@ -715,14 +722,14 @@ export default function TruthOrDareScreen(): React.JSX.Element {
       ? (isAdultPlus ? '#F5F0FF' : '#EEF2FF')
       : (isAdultPlus ? '#FFF0FA' : '#FFF0F3');
     const cardAccent    = card.type === 'truth'
-      ? (isAdultPlus ? spiceConfig.color : colors.secondary)
-      : (isAdultPlus ? spiceConfig.color : colors.primary);
+      ? (isAdultPlus ? spiceConfig.color : C.secondary)
+      : (isAdultPlus ? spiceConfig.color : C.primary);
     const cardEmoji     = card.type === 'truth' ? '🤔' : '💥';
     const dotCount      = spiceDotCount(spiceLevel);
 
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+        <StatusBar barStyle="dark-content" backgroundColor={C.background} />
 
         {/* Thin spice accent stripe at the very top */}
         <View style={[styles.spiceStripe, { backgroundColor: spiceConfig.color }]} />
@@ -777,7 +784,7 @@ export default function TruthOrDareScreen(): React.JSX.Element {
           {!card.visible && (
             <View style={styles.actionBtnRow}>
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: isAdultPlus ? spiceConfig.color + 'CC' : colors.secondary }]}
+                style={[styles.actionBtn, { backgroundColor: isAdultPlus ? spiceConfig.color + 'CC' : C.secondary }]}
                 onPress={() => revealCard('truth')}
                 activeOpacity={0.85}
               >
@@ -786,7 +793,7 @@ export default function TruthOrDareScreen(): React.JSX.Element {
                 <Text style={styles.actionBtnSub}>Answer honestly</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: isAdultPlus ? spiceConfig.color : colors.primary }]}
+                style={[styles.actionBtn, { backgroundColor: isAdultPlus ? spiceConfig.color : C.primary }]}
                 onPress={() => revealCard('dare')}
                 activeOpacity={0.85}
               >
@@ -839,7 +846,7 @@ export default function TruthOrDareScreen(): React.JSX.Element {
 
                 {/* Card Body */}
                 <View style={styles.cardBody}>
-                  <Text style={[styles.cardText, { color: colors.text }]}>{card.text}</Text>
+                  <Text style={[styles.cardText, { color: C.text }]}>{card.text}</Text>
                 </View>
 
                 {/* Card Actions */}
@@ -883,6 +890,12 @@ export default function TruthOrDareScreen(): React.JSX.Element {
             ))}
           </View>
         </View>
+        <GameChatVoice
+          roomId={roomId}
+          myUid={firebaseUser?.uid ?? ''}
+          myName={userProfile?.name ?? 'Player'}
+          accentColor="#FF4B6E"
+        />
       </SafeAreaView>
     );
   }
@@ -895,7 +908,7 @@ export default function TruthOrDareScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={C.background} />
       <ScrollView contentContainerStyle={styles.gameoverScroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <Text style={styles.gameoverTitle}>Game Over! 🎉</Text>
@@ -911,10 +924,10 @@ export default function TruthOrDareScreen(): React.JSX.Element {
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
-          <StatCard emoji="🔄" value={totalRounds} label="Rounds"  color={colors.secondary} />
-          <StatCard emoji="🤔" value={totalTruths} label="Truths"  color={colors.secondary} />
-          <StatCard emoji="💥" value={totalDares}  label="Dares"   color={colors.primary} />
-          <StatCard emoji="⏭" value={totalSkips}  label="Skips"   color={colors.warning} />
+          <StatCard emoji="🔄" value={totalRounds} label="Rounds"  color={C.secondary} styles={styles} />
+          <StatCard emoji="🤔" value={totalTruths} label="Truths"  color={C.secondary} styles={styles} />
+          <StatCard emoji="💥" value={totalDares}  label="Dares"   color={C.primary} styles={styles} />
+          <StatCard emoji="⏭" value={totalSkips}  label="Skips"   color={C.warning} styles={styles} />
         </View>
 
         {/* Leaderboard */}
@@ -933,7 +946,7 @@ export default function TruthOrDareScreen(): React.JSX.Element {
                 <View style={styles.leaderStats}>
                   <Text style={styles.leaderStatItem}>🤔 {p.truths}</Text>
                   <Text style={styles.leaderStatItem}>💥 {p.dares}</Text>
-                  <Text style={[styles.leaderStatItem, { color: colors.textSecondary }]}>⏭ {p.skips}</Text>
+                  <Text style={[styles.leaderStatItem, { color: C.textSecondary }]}>⏭ {p.skips}</Text>
                 </View>
                 <Text style={[styles.leaderTotal, { color: p.color }]}>{p.truths + p.dares}</Text>
               </View>
@@ -985,10 +998,11 @@ export default function TruthOrDareScreen(): React.JSX.Element {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: C.background,
   },
   flex: {
     flex: 1,
@@ -996,7 +1010,7 @@ const styles = StyleSheet.create({
 
   // ── Room Banner ────────────────────────────────────────────────────────────
   roomBanner: {
-    backgroundColor: colors.secondary,
+    backgroundColor: C.secondary,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignItems: 'center',
@@ -1030,7 +1044,7 @@ const styles = StyleSheet.create({
   },
   backBtnText: {
     fontSize: 22,
-    color: colors.text,
+    color: C.text,
     fontWeight: '600',
   },
   setupTitleBlock: {
@@ -1038,11 +1052,11 @@ const styles = StyleSheet.create({
   },
   setupTitle: {
     ...typography.title,
-    color: colors.text,
+    color: C.text,
   },
   setupSubtitle: {
     ...typography.body,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     marginTop: spacing.xs,
   },
   section: {
@@ -1051,7 +1065,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     ...typography.caption,
     fontWeight: '700',
-    color: colors.textSecondary,
+    color: C.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: spacing.md,
@@ -1071,24 +1085,24 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 48,
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: C.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     ...typography.body,
-    color: colors.text,
-    backgroundColor: colors.surface,
+    color: C.text,
+    backgroundColor: C.surface,
   },
   removeBtn: {
     width: 32,
     height: 32,
     borderRadius: radius.full,
-    backgroundColor: colors.border,
+    backgroundColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   removeBtnText: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     fontWeight: '700',
   },
   addPlayerBtn: {
@@ -1097,14 +1111,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 48,
     borderWidth: 1.5,
-    borderColor: colors.primary,
+    borderColor: C.primary,
     borderRadius: radius.md,
     borderStyle: 'dashed',
     marginTop: spacing.xs,
   },
   addPlayerText: {
     ...typography.body,
-    color: colors.primary,
+    color: C.primary,
     fontWeight: '600',
   },
   spiceRow: {
@@ -1118,8 +1132,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     borderRadius: radius.md,
     borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: C.border,
+    backgroundColor: C.surface,
     gap: 4,
   },
   spicePillWide: {
@@ -1131,8 +1145,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: C.border,
+    backgroundColor: C.surface,
   },
   spicePillAgeGate: {
     borderStyle: 'dashed',
@@ -1147,7 +1161,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: radius.sm,
-    backgroundColor: colors.border,
+    backgroundColor: C.border,
   },
   ageBadgeSelected: {
     backgroundColor: 'rgba(255,255,255,0.25)',
@@ -1155,7 +1169,7 @@ const styles = StyleSheet.create({
   ageBadgeText: {
     fontSize: 10,
     fontWeight: '800',
-    color: colors.textSecondary,
+    color: C.textSecondary,
     letterSpacing: 0.5,
   },
   ageBadgeTextSelected: {
@@ -1167,36 +1181,36 @@ const styles = StyleSheet.create({
   spicePillLabel: {
     ...typography.caption,
     fontWeight: '700',
-    color: colors.text,
+    color: C.text,
   },
   spicePillLabelSelected: {
-    color: colors.background,
+    color: C.background,
   },
   spicePillDesc: {
     fontSize: 10,
     fontWeight: '400',
-    color: colors.textSecondary,
+    color: C.textSecondary,
     textAlign: 'center',
   },
   spicePillDescSelected: {
-    color: colors.background + 'CC',
+    color: C.background + 'CC',
   },
   startBtn: {
     height: 56,
     borderRadius: radius.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: C.primary,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.card,
     marginTop: spacing.sm,
   },
   startBtnDisabled: {
-    backgroundColor: colors.border,
+    backgroundColor: C.border,
   },
   startBtnText: {
     ...typography.body,
     fontWeight: '700',
-    color: colors.background,
+    color: C.background,
     fontSize: 18,
   },
 
@@ -1214,7 +1228,7 @@ const styles = StyleSheet.create({
   },
   roundLabel: {
     ...typography.heading,
-    color: colors.text,
+    color: C.text,
     fontWeight: '700',
   },
   skipCounter: {
@@ -1229,14 +1243,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   skipDotActive: {
-    backgroundColor: colors.success,
+    backgroundColor: C.success,
   },
   skipDotUsed: {
-    backgroundColor: colors.border,
+    backgroundColor: C.border,
   },
   skipCounterText: {
     ...typography.small,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     marginLeft: 2,
   },
   spiceBadge: {
@@ -1258,11 +1272,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: C.border,
   },
   endBtnText: {
     ...typography.caption,
-    color: colors.text,
+    color: C.text,
     fontWeight: '600',
   },
   playerBanner: {
@@ -1288,7 +1302,7 @@ const styles = StyleSheet.create({
   },
   playerBannerSub: {
     ...typography.small,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     fontWeight: '500',
   },
   playerBannerStats: {
@@ -1297,7 +1311,7 @@ const styles = StyleSheet.create({
   },
   playerBannerStatText: {
     ...typography.caption,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     fontWeight: '600',
   },
   actionBtnRow: {
@@ -1322,13 +1336,13 @@ const styles = StyleSheet.create({
   },
   actionBtnLabel: {
     ...typography.heading,
-    color: colors.background,
+    color: C.background,
     fontWeight: '800',
     fontSize: 20,
   },
   actionBtnSub: {
     ...typography.small,
-    color: colors.background + 'BB',
+    color: C.background + 'BB',
     fontWeight: '500',
   },
   cardWrapper: {
@@ -1395,24 +1409,24 @@ const styles = StyleSheet.create({
   },
   doneText: {
     ...typography.body,
-    color: colors.background,
+    color: C.background,
     fontWeight: '700',
   },
   skipBtn: {
-    backgroundColor: colors.surface,
+    backgroundColor: C.surface,
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: C.border,
   },
   skipBtnDisabled: {
     opacity: 0.45,
   },
   skipText: {
     ...typography.body,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     fontWeight: '600',
   },
   skipTextDisabled: {
-    color: colors.border,
+    color: C.border,
   },
   miniScoreboard: {
     flexDirection: 'row',
@@ -1427,7 +1441,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radius.full,
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: C.border,
     gap: 4,
     maxWidth: '47%',
   },
@@ -1438,7 +1452,7 @@ const styles = StyleSheet.create({
   },
   miniPlayerName: {
     ...typography.small,
-    color: colors.text,
+    color: C.text,
     fontWeight: '600',
     flexShrink: 1,
   },
@@ -1456,13 +1470,13 @@ const styles = StyleSheet.create({
   gameoverTitle: {
     ...typography.title,
     fontSize: 32,
-    color: colors.text,
+    color: C.text,
     textAlign: 'center',
     marginBottom: spacing.xs,
   },
   gameoverSubtitle: {
     ...typography.body,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     textAlign: 'center',
     marginBottom: spacing.md,
   },
@@ -1489,7 +1503,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: C.surface,
     borderRadius: radius.md,
     alignItems: 'center',
     paddingVertical: spacing.md,
@@ -1507,12 +1521,12 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     ...typography.small,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     fontWeight: '500',
     marginTop: 2,
   },
   leaderboardCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: C.surface,
     borderRadius: radius.lg,
     padding: spacing.md,
     marginBottom: spacing.lg,
@@ -1521,7 +1535,7 @@ const styles = StyleSheet.create({
   },
   leaderboardTitle: {
     ...typography.heading,
-    color: colors.text,
+    color: C.text,
     marginBottom: spacing.md,
   },
   leaderRow: {
@@ -1529,7 +1543,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: C.border,
     gap: spacing.sm,
   },
   leaderRowFirst: {
@@ -1548,7 +1562,7 @@ const styles = StyleSheet.create({
   },
   leaderName: {
     ...typography.body,
-    color: colors.text,
+    color: C.text,
     fontWeight: '600',
     flex: 1,
   },
@@ -1559,7 +1573,7 @@ const styles = StyleSheet.create({
   leaderStatItem: {
     ...typography.small,
     fontWeight: '600',
-    color: colors.text,
+    color: C.text,
   },
   leaderTotal: {
     fontSize: 18,
@@ -1568,7 +1582,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   highlightsCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: C.surface,
     borderRadius: radius.lg,
     padding: spacing.md,
     marginBottom: spacing.xl,
@@ -1577,7 +1591,7 @@ const styles = StyleSheet.create({
   },
   highlightsTitle: {
     ...typography.heading,
-    color: colors.text,
+    color: C.text,
     marginBottom: spacing.md,
   },
   highlightRow: {
@@ -1586,21 +1600,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: C.border,
   },
   highlightLabel: {
     ...typography.body,
-    color: colors.textSecondary,
+    color: C.textSecondary,
   },
   highlightValue: {
     ...typography.body,
     fontWeight: '700',
-    color: colors.text,
+    color: C.text,
   },
   playAgainBtn: {
     height: 56,
     borderRadius: radius.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: C.primary,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.card,
@@ -1610,21 +1624,22 @@ const styles = StyleSheet.create({
   playAgainText: {
     ...typography.body,
     fontWeight: '700',
-    color: colors.background,
+    color: C.background,
     fontSize: 18,
   },
   backToGamesBtn: {
     height: 52,
     borderRadius: radius.lg,
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
   },
   backToGamesText: {
     ...typography.body,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     fontWeight: '600',
   },
-});
+  });
+}

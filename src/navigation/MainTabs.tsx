@@ -13,7 +13,7 @@ import {
   GamesStackParamList,
   ProfileStackParamList,
 } from '../types';
-import { colors, typography } from '../utils/theme';
+import { typography } from '../utils/theme';
 import { useThemeStore } from '../store/themeStore';
 import { darkColors, lightColors } from '../utils/useTheme';
 
@@ -52,6 +52,7 @@ import GameInviteBanner from '../components/GameInviteBanner';
 // Profile stack
 import ProfileScreen from '../screens/Profile/ProfileScreen';
 import EditProfileScreen from '../screens/Profile/EditProfileScreen';
+import DriftIdScreen from '../screens/Profile/DriftIdScreen';
 import VibeQuizScreen from '../screens/Profile/VibeQuizScreen';
 import ViewMemoriesScreen from '../screens/Profile/ViewMemoriesScreen';
 import StatusCreateScreen from '../screens/Profile/StatusCreateScreen';
@@ -64,6 +65,7 @@ import FeedbackScreen from '../screens/Profile/FeedbackScreen';
 // Discover extras (Phase 1)
 import QRScannerScreen from '../screens/Discover/QRScannerScreen';
 import ShakeToShareScreen from '../screens/Discover/ShakeToShareScreen';
+import ViewStatusScreen from '../screens/Discover/ViewStatusScreen';
 
 // ─── Stack Navigators ─────────────────────────────────────────────────────────
 
@@ -85,9 +87,10 @@ function DiscoverNavigator() {
       <DiscoverStack.Screen name="Chat"            component={ChatScreen} />
       <DiscoverStack.Screen name="Notifications"   component={NotificationsScreen} />
       <DiscoverStack.Screen name="StatusCreate"    component={StatusCreateScreen} />
-      {/* Profile Share — Phase 1 */}
+      {/* Phase 1 extras */}
       <DiscoverStack.Screen name="QRScanner"   component={QRScannerScreen} />
       <DiscoverStack.Screen name="ShakeShare"  component={ShakeToShareScreen} />
+      <DiscoverStack.Screen name="ViewStatus"  component={ViewStatusScreen} />
     </DiscoverStack.Navigator>
   );
 }
@@ -132,6 +135,7 @@ function ProfileNavigator() {
     <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
       <ProfileStack.Screen name="ProfileMain"    component={ProfileScreen} />
       <ProfileStack.Screen name="EditProfile"    component={EditProfileScreen} />
+      <ProfileStack.Screen name="DriftId"        component={DriftIdScreen} />
       <ProfileStack.Screen name="VibeQuiz"       component={VibeQuizScreen} />
       <ProfileStack.Screen name="ViewMemories"   component={ViewMemoriesScreen} />
       <ProfileStack.Screen name="StatusCreate"   component={StatusCreateScreen} />
@@ -141,6 +145,7 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="ProfileShare"   component={ProfileShareScreen} />
       <ProfileStack.Screen name="Settings"       component={SettingsScreen} />
       <ProfileStack.Screen name="Feedback"       component={FeedbackScreen} />
+      <ProfileStack.Screen name="ViewStatus"     component={ViewStatusScreen} />
     </ProfileStack.Navigator>
   );
 }
@@ -170,14 +175,14 @@ export default function MainTabs() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: isDark ? '#0F0F1E' : colors.background,
+          backgroundColor: C.background,
           borderTopColor:  C.border,
           borderTopWidth:  1,
           height:          tabBarH,
           paddingTop:      8,
           paddingBottom:   bottomPad,
         },
-        tabBarActiveTintColor:   colors.primary,
+        tabBarActiveTintColor:   C.primary,
         tabBarInactiveTintColor: C.textSecondary,
         tabBarLabelStyle: { ...typography.small, marginTop: -2 },
       }}

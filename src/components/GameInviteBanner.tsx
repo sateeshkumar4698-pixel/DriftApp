@@ -17,7 +17,7 @@ import {
   joinGameRoom,
 } from '../utils/firestore-helpers';
 import Avatar from './Avatar';
-import { colors, spacing, typography, radius, shadows } from '../utils/theme';
+import { useTheme, AppColors, spacing, typography, radius, shadows } from '../utils/useTheme';
 import { GameInvite, GameRoomPlayer } from '../types';
 
 const GAME_DISPLAY: Record<string, { name: string; emoji: string }> = {
@@ -37,6 +37,8 @@ export default function GameInviteBanner() {
   // nav tree — actual navigation happens by name.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const navigation = useNavigation<NavigationProp<any>>();
+
+  const { C } = useTheme();
 
   const [current, setCurrent] = useState<GameInvite | null>(null);
   const [acting, setActing] = useState(false);
@@ -139,6 +141,7 @@ export default function GameInviteBanner() {
   if (!current) return null;
 
   const display = GAME_DISPLAY[current.gameId] ?? { name: current.gameId, emoji: '🎮' };
+  const styles = makeStyles(C);
 
   return (
     <Animated.View
@@ -177,39 +180,41 @@ export default function GameInviteBanner() {
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    position: 'absolute',
-    left: 0, right: 0, bottom: 0,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl + 60, // above tab bar
-    zIndex: 1000,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.background,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.modal,
-  },
-  info: { flex: 1 },
-  title: { ...typography.body, fontWeight: '700', color: colors.text },
-  sub:   { ...typography.small, color: colors.textSecondary, marginTop: 2 },
-  declineBtn: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  declineText: { ...typography.small, color: colors.textSecondary, fontWeight: '600' },
-  acceptBtn: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    backgroundColor: colors.primary,
-  },
-  acceptText: { ...typography.small, color: '#fff', fontWeight: '700' },
-});
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    wrap: {
+      position: 'absolute',
+      left: 0, right: 0, bottom: 0,
+      paddingHorizontal: spacing.md,
+      paddingBottom: spacing.xl + 60, // above tab bar
+      zIndex: 1000,
+    },
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      backgroundColor: C.background,
+      borderRadius: radius.lg,
+      padding: spacing.md,
+      borderWidth: 1,
+      borderColor: C.border,
+      ...shadows.modal,
+    },
+    info: { flex: 1 },
+    title: { ...typography.body, fontWeight: '700', color: C.text },
+    sub:   { ...typography.small, color: C.textSecondary, marginTop: 2 },
+    declineBtn: {
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderRadius: radius.full,
+      backgroundColor: C.surface,
+      borderWidth: 1, borderColor: C.border,
+    },
+    declineText: { ...typography.small, color: C.textSecondary, fontWeight: '600' },
+    acceptBtn: {
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderRadius: radius.full,
+      backgroundColor: C.primary,
+    },
+    acceptText: { ...typography.small, color: '#fff', fontWeight: '700' },
+  });
+}

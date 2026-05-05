@@ -15,7 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GamesStackParamList } from '../../types';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { gameSounds } from '../../services/gameSounds';
 
 type Nav = NativeStackNavigationProp<GamesStackParamList, 'BetGame'>;
@@ -198,7 +199,8 @@ const CARD_CONFIG = {
 
 // ─── Setup Screen ─────────────────────────────────────────────────────────────
 
-function SetupScreen({ onStart }: { onStart: (players: Player[], stakes: Stakes) => void }) {
+function SetupScreen({ onStart, C }: { onStart: (players: Player[], stakes: Stakes) => void; C: AppColors }) {
+  const setup = makeSetupStyles(C);
   const [playerCount, setPlayerCount] = useState(3);
   const [names, setNames] = useState(['', '', '', '', '', '']);
   const [stakes, setStakes] = useState<Stakes>({
@@ -266,7 +268,7 @@ function SetupScreen({ onStart }: { onStart: (players: Player[], stakes: Stakes)
               setNames(next);
             }}
             placeholder={`Player ${i + 1} name`}
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={C.textSecondary}
             maxLength={20}
           />
         </View>
@@ -280,7 +282,7 @@ function SetupScreen({ onStart }: { onStart: (players: Player[], stakes: Stakes)
         value={stakes.truthStake}
         onChangeText={(v) => setStakes({ ...stakes, truthStake: v })}
         placeholder="e.g. Share your most embarrassing photo"
-        placeholderTextColor={colors.textSecondary}
+        placeholderTextColor={C.textSecondary}
         maxLength={100}
         multiline
       />
@@ -291,7 +293,7 @@ function SetupScreen({ onStart }: { onStart: (players: Player[], stakes: Stakes)
         value={stakes.dareStake}
         onChangeText={(v) => setStakes({ ...stakes, dareStake: v })}
         placeholder="e.g. Do 20 pushups in front of everyone"
-        placeholderTextColor={colors.textSecondary}
+        placeholderTextColor={C.textSecondary}
         maxLength={100}
         multiline
       />
@@ -343,7 +345,7 @@ function SetupScreen({ onStart }: { onStart: (players: Player[], stakes: Stakes)
         <Switch
           value={stakes.wildEnabled}
           onValueChange={(v) => setStakes({ ...stakes, wildEnabled: v })}
-          trackColor={{ false: colors.border, true: colors.warning }}
+          trackColor={{ false: C.border, true: C.warning }}
           thumbColor={stakes.wildEnabled ? '#fff' : '#fff'}
         />
       </View>
@@ -353,7 +355,7 @@ function SetupScreen({ onStart }: { onStart: (players: Player[], stakes: Stakes)
           value={stakes.wildStake}
           onChangeText={(v) => setStakes({ ...stakes, wildStake: v })}
           placeholder="Wild consequence: e.g. The group picks any dare for you"
-          placeholderTextColor={colors.textSecondary}
+          placeholderTextColor={C.textSecondary}
           maxLength={100}
           multiline
         />
@@ -388,11 +390,14 @@ function ScoreboardModal({
   visible,
   players,
   onClose,
+  C,
 }: {
   visible: boolean;
   players: Player[];
   onClose: () => void;
+  C: AppColors;
 }) {
+  const sb = makeSbStyles(C);
   const sorted = [...players].sort((a, b) => b.coins - a.coins);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -425,11 +430,14 @@ function GameScreen({
   game,
   setGame,
   onEnd,
+  C,
 }: {
   game: GameState;
   setGame: (g: GameState) => void;
   onEnd: () => void;
+  C: AppColors;
 }) {
+  const game_s = makeGameStyles(C);
   const [phase, setPhase] = useState<'pass' | 'reveal' | 'raised'>('pass');
   const [card, setCard]   = useState<{ type: CardType; prompt: string } | null>(null);
   const [shown, setShown] = useState(false);
@@ -621,6 +629,7 @@ function GameScreen({
         visible={scoreVisible}
         players={game.players}
         onClose={() => setScoreVisible(false)}
+        C={C}
       />
     </View>
   );
@@ -632,11 +641,14 @@ function GameOverScreen({
   game,
   onPlayAgain,
   onBack,
+  C,
 }: {
   game: GameState;
   onPlayAgain: () => void;
   onBack: () => void;
+  C: AppColors;
 }) {
+  const over = makeOverStyles(C);
   const sorted = [...game.players].sort((a, b) => b.coins - a.coins);
   const winner = sorted[0];
   const mostDares   = [...game.players].sort((a, b) => b.dares - a.dares)[0];
@@ -684,6 +696,8 @@ function GameOverScreen({
 
 export default function BetGame() {
   const navigation = useNavigation<Nav>();
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const [screen, setScreen] = useState<'setup' | 'game' | 'over'>('setup');
   const [game, setGame] = useState<GameState | null>(null);
 
@@ -722,12 +736,12 @@ export default function BetGame() {
             <Text style={styles.headerTitle}>Stake It 🎰</Text>
             <View style={{ width: 80 }} />
           </View>
-          <SetupScreen onStart={handleStart} />
+          <SetupScreen onStart={handleStart} C={C} />
         </>
       )}
 
       {screen === 'game' && game && (
-        <GameScreen game={game} setGame={setGame} onEnd={handleEnd} />
+        <GameScreen game={game} setGame={setGame} onEnd={handleEnd} C={C} />
       )}
 
       {screen === 'over' && game && (
@@ -741,6 +755,7 @@ export default function BetGame() {
             game={game}
             onPlayAgain={handlePlayAgain}
             onBack={() => navigation.navigate('GamesList')}
+            C={C}
           />
         </>
       )}
@@ -750,240 +765,250 @@ export default function BetGame() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  backBtn: {},
-  backText: { ...typography.body, color: colors.primary, fontWeight: '600' },
-  headerTitle: { ...typography.heading, color: colors.text, fontWeight: '800' },
-});
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    backBtn: {},
+    backText: { ...typography.body, color: C.primary, fontWeight: '600' },
+    headerTitle: { ...typography.heading, color: C.text, fontWeight: '800' },
+  });
+}
 
-const setup = StyleSheet.create({
-  container: { padding: spacing.lg, paddingBottom: spacing.xxl, backgroundColor: colors.background },
-  heroBox: { alignItems: 'center', marginBottom: spacing.xl, paddingVertical: spacing.lg },
-  heroEmoji: { fontSize: 52, marginBottom: spacing.sm },
-  heroTitle: { fontSize: 32, fontWeight: '900', color: colors.text, letterSpacing: -1 },
-  heroSub:   { ...typography.body, color: colors.textSecondary, marginTop: spacing.xs },
+function makeSetupStyles(C: AppColors) {
+  return StyleSheet.create({
+    container: { padding: spacing.lg, paddingBottom: spacing.xxl, backgroundColor: C.background },
+    heroBox: { alignItems: 'center', marginBottom: spacing.xl, paddingVertical: spacing.lg },
+    heroEmoji: { fontSize: 52, marginBottom: spacing.sm },
+    heroTitle: { fontSize: 32, fontWeight: '900', color: C.text, letterSpacing: -1 },
+    heroSub:   { ...typography.body, color: C.textSecondary, marginTop: spacing.xs },
 
-  label: { ...typography.small, fontWeight: '800', color: colors.textSecondary, letterSpacing: 1.2, marginBottom: spacing.sm },
-  sublabel: { ...typography.caption, color: colors.textSecondary, marginBottom: spacing.xs, marginTop: spacing.sm },
-  hint: { ...typography.small, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.xs },
+    label: { ...typography.small, fontWeight: '800', color: C.textSecondary, letterSpacing: 1.2, marginBottom: spacing.sm },
+    sublabel: { ...typography.caption, color: C.textSecondary, marginBottom: spacing.xs, marginTop: spacing.sm },
+    hint: { ...typography.small, color: C.textSecondary, textAlign: 'center', marginTop: spacing.xs },
 
-  countRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
-  countBtn: {
-    flex: 1, paddingVertical: spacing.sm, borderRadius: radius.md,
-    backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border,
-    alignItems: 'center',
-  },
-  countBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  countBtnText: { ...typography.body, fontWeight: '700', color: colors.textSecondary },
-  countBtnTextActive: { color: '#fff' },
+    countRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
+    countBtn: {
+      flex: 1, paddingVertical: spacing.sm, borderRadius: radius.md,
+      backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.border,
+      alignItems: 'center',
+    },
+    countBtnActive: { backgroundColor: C.primary, borderColor: C.primary },
+    countBtnText: { ...typography.body, fontWeight: '700', color: C.textSecondary },
+    countBtnTextActive: { color: '#fff' },
 
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  nameEmoji: { width: 44, height: 44, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  nameInput: {
-    flex: 1, ...typography.body, color: colors.text,
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-  },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+    nameEmoji: { width: 44, height: 44, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+    nameInput: {
+      flex: 1, ...typography.body, color: C.text,
+      backgroundColor: C.surface, borderRadius: radius.md,
+      borderWidth: 1, borderColor: C.border,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    },
 
-  stakeInput: {
-    ...typography.body, color: colors.text,
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    borderWidth: 1.5, borderColor: colors.border,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    minHeight: 60, textAlignVertical: 'top',
-    marginBottom: spacing.sm,
-  },
+    stakeInput: {
+      ...typography.body, color: C.text,
+      backgroundColor: C.surface, borderRadius: radius.md,
+      borderWidth: 1.5, borderColor: C.border,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      minHeight: 60, textAlignVertical: 'top',
+      marginBottom: spacing.sm,
+    },
 
-  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs },
-  stepBtn: {
-    width: 44, height: 44, borderRadius: radius.full,
-    backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  stepBtnText: { fontSize: 22, color: colors.text, fontWeight: '700' },
-  stepValue: {
-    flex: 1, alignItems: 'center', backgroundColor: colors.surface,
-    borderRadius: radius.md, paddingVertical: spacing.sm,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  stepValueText: { ...typography.body, fontWeight: '700', color: colors.text },
+    stepperRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs },
+    stepBtn: {
+      width: 44, height: 44, borderRadius: radius.full,
+      backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.border,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    stepBtnText: { fontSize: 22, color: C.text, fontWeight: '700' },
+    stepValue: {
+      flex: 1, alignItems: 'center', backgroundColor: C.surface,
+      borderRadius: radius.md, paddingVertical: spacing.sm,
+      borderWidth: 1, borderColor: C.border,
+    },
+    stepValueText: { ...typography.body, fontWeight: '700', color: C.text },
 
-  spiceRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
-  spiceBtn: {
-    flex: 1, alignItems: 'center', paddingVertical: spacing.sm,
-    borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border,
-    backgroundColor: colors.surface, gap: spacing.xs,
-  },
-  spiceEmoji: { fontSize: 22 },
-  spiceLabel: { ...typography.caption, fontWeight: '700', color: colors.textSecondary },
+    spiceRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
+    spiceBtn: {
+      flex: 1, alignItems: 'center', paddingVertical: spacing.sm,
+      borderRadius: radius.md, borderWidth: 1.5, borderColor: C.border,
+      backgroundColor: C.surface, gap: spacing.xs,
+    },
+    spiceEmoji: { fontSize: 22 },
+    spiceLabel: { ...typography.caption, fontWeight: '700', color: C.textSecondary },
 
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm, marginTop: spacing.sm },
-  toggleLabel: { ...typography.body, fontWeight: '700', color: colors.text },
-  toggleSub: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
+    toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm, marginTop: spacing.sm },
+    toggleLabel: { ...typography.body, fontWeight: '700', color: C.text },
+    toggleSub: { ...typography.small, color: C.textSecondary, marginTop: 2 },
 
-  previewCard: {
-    backgroundColor: colors.secondary + '10', borderRadius: radius.lg,
-    borderWidth: 1.5, borderColor: colors.secondary + '30',
-    padding: spacing.md, marginTop: spacing.lg, gap: spacing.xs,
-  },
-  previewTitle: { ...typography.caption, fontWeight: '800', color: colors.secondary, marginBottom: spacing.xs },
-  previewLine:  { ...typography.body, color: colors.text, lineHeight: 22 },
+    previewCard: {
+      backgroundColor: C.secondary + '10', borderRadius: radius.lg,
+      borderWidth: 1.5, borderColor: C.secondary + '30',
+      padding: spacing.md, marginTop: spacing.lg, gap: spacing.xs,
+    },
+    previewTitle: { ...typography.caption, fontWeight: '800', color: C.secondary, marginBottom: spacing.xs },
+    previewLine:  { ...typography.body, color: C.text, lineHeight: 22 },
 
-  startBtn: {
-    backgroundColor: colors.primary, borderRadius: radius.lg,
-    paddingVertical: spacing.md, alignItems: 'center',
-    marginTop: spacing.xl,
-    ...shadows.card,
-  },
-  startBtnDisabled: { opacity: 0.4 },
-  startBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
-});
+    startBtn: {
+      backgroundColor: C.primary, borderRadius: radius.lg,
+      paddingVertical: spacing.md, alignItems: 'center',
+      marginTop: spacing.xl,
+      ...shadows.card,
+    },
+    startBtnDisabled: { opacity: 0.4 },
+    startBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
+  });
+}
 
-const sb = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg,
-    padding: spacing.lg, paddingBottom: spacing.xxl,
-  },
-  title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: spacing.lg, textAlign: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
-  rank: { fontSize: 22, width: 36 },
-  emoji: { fontSize: 24, width: 32 },
-  name: { ...typography.body, fontWeight: '700', color: colors.text },
-  stats: { ...typography.small, color: colors.textSecondary },
-  coins: { ...typography.body, fontWeight: '700', color: colors.warning },
-  closeBtn: {
-    marginTop: spacing.lg, backgroundColor: colors.surface, borderRadius: radius.lg,
-    paddingVertical: spacing.sm, alignItems: 'center', borderWidth: 1, borderColor: colors.border,
-  },
-  closeBtnText: { ...typography.body, fontWeight: '700', color: colors.textSecondary },
-});
+function makeSbStyles(C: AppColors) {
+  return StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    sheet: {
+      backgroundColor: C.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg,
+      padding: spacing.lg, paddingBottom: spacing.xxl,
+    },
+    title: { fontSize: 20, fontWeight: '800', color: C.text, marginBottom: spacing.lg, textAlign: 'center' },
+    row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+    rank: { fontSize: 22, width: 36 },
+    emoji: { fontSize: 24, width: 32 },
+    name: { ...typography.body, fontWeight: '700', color: C.text },
+    stats: { ...typography.small, color: C.textSecondary },
+    coins: { ...typography.body, fontWeight: '700', color: C.warning },
+    closeBtn: {
+      marginTop: spacing.lg, backgroundColor: C.surface, borderRadius: radius.lg,
+      paddingVertical: spacing.sm, alignItems: 'center', borderWidth: 1, borderColor: C.border,
+    },
+    closeBtnText: { ...typography.body, fontWeight: '700', color: C.textSecondary },
+  });
+}
 
-const game_s = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+function makeGameStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
 
-  passScreen: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl,
-    backgroundColor: '#1A1A2E',
-  },
-  passEmoji: { fontSize: 64, marginBottom: spacing.md },
-  passTitle: { fontSize: 18, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
-  passName:  { fontSize: 32, fontWeight: '900', color: '#fff', marginBottom: spacing.xs },
-  passCoins: { fontSize: 18, color: colors.warning, marginBottom: spacing.xl, fontWeight: '700' },
-  passBtn: {
-    backgroundColor: colors.primary, borderRadius: radius.lg,
-    paddingVertical: spacing.md, paddingHorizontal: spacing.xl,
-    ...shadows.card,
-  },
-  passBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
+    passScreen: {
+      flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl,
+      backgroundColor: '#1A1A2E',
+    },
+    passEmoji: { fontSize: 64, marginBottom: spacing.md },
+    passTitle: { fontSize: 18, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
+    passName:  { fontSize: 32, fontWeight: '900', color: '#fff', marginBottom: spacing.xs },
+    passCoins: { fontSize: 18, color: C.warning, marginBottom: spacing.xl, fontWeight: '700' },
+    passBtn: {
+      backgroundColor: C.primary, borderRadius: radius.lg,
+      paddingVertical: spacing.md, paddingHorizontal: spacing.xl,
+      ...shadows.card,
+    },
+    passBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  endBtn: { paddingHorizontal: spacing.sm },
-  endBtnText: { ...typography.caption, color: colors.error, fontWeight: '700' },
-  headerCenter: { alignItems: 'center' },
-  headerName: { ...typography.body, fontWeight: '700', color: colors.text },
-  headerRound: { ...typography.small, color: colors.textSecondary },
-  scoreBtn: { paddingHorizontal: spacing.sm },
-  scoreBtnText: { fontSize: 22 },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+      backgroundColor: C.background,
+    },
+    endBtn: { paddingHorizontal: spacing.sm },
+    endBtnText: { ...typography.caption, color: C.error, fontWeight: '700' },
+    headerCenter: { alignItems: 'center' },
+    headerName: { ...typography.body, fontWeight: '700', color: C.text },
+    headerRound: { ...typography.small, color: C.textSecondary },
+    scoreBtn: { paddingHorizontal: spacing.sm },
+    scoreBtnText: { fontSize: 22 },
 
-  scroll: { padding: spacing.lg, paddingBottom: spacing.xxl, alignItems: 'center' },
+    scroll: { padding: spacing.lg, paddingBottom: spacing.xxl, alignItems: 'center' },
 
-  card: {
-    width: '100%', minHeight: 240, borderRadius: radius.lg,
-    justifyContent: 'center', alignItems: 'center', padding: spacing.lg,
-    marginBottom: spacing.lg,
-    ...shadows.modal,
-  },
-  cardInner: { alignItems: 'center', gap: spacing.md },
-  cardQuestion: { fontSize: 80, color: 'rgba(255,255,255,0.7)', fontWeight: '900' },
-  cardTap: { fontSize: 16, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
-  cardType: { fontSize: 26, fontWeight: '900', letterSpacing: 1, textAlign: 'center' },
-  cardPrompt: { fontSize: 18, fontWeight: '600', textAlign: 'center', lineHeight: 26 },
+    card: {
+      width: '100%', minHeight: 240, borderRadius: radius.lg,
+      justifyContent: 'center', alignItems: 'center', padding: spacing.lg,
+      marginBottom: spacing.lg,
+      ...shadows.modal,
+    },
+    cardInner: { alignItems: 'center', gap: spacing.md },
+    cardQuestion: { fontSize: 80, color: 'rgba(255,255,255,0.7)', fontWeight: '900' },
+    cardTap: { fontSize: 16, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
+    cardType: { fontSize: 26, fontWeight: '900', letterSpacing: 1, textAlign: 'center' },
+    cardPrompt: { fontSize: 18, fontWeight: '600', textAlign: 'center', lineHeight: 26 },
 
-  stakeReminder: {
-    width: '100%', backgroundColor: colors.surface, borderRadius: radius.md,
-    padding: spacing.md, borderWidth: 1.5, borderColor: colors.border,
-    marginBottom: spacing.md,
-  },
-  stakeReminderLabel: { ...typography.small, fontWeight: '800', color: colors.textSecondary, marginBottom: 4 },
-  stakeReminderText: { ...typography.body, color: colors.text, fontWeight: '600' },
+    stakeReminder: {
+      width: '100%', backgroundColor: C.surface, borderRadius: radius.md,
+      padding: spacing.md, borderWidth: 1.5, borderColor: C.border,
+      marginBottom: spacing.md,
+    },
+    stakeReminderLabel: { ...typography.small, fontWeight: '800', color: C.textSecondary, marginBottom: 4 },
+    stakeReminderText: { ...typography.body, color: C.text, fontWeight: '600' },
 
-  wagerRow: {
-    backgroundColor: colors.warning + '25', borderRadius: radius.full,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-    marginBottom: spacing.md,
-  },
-  wagerText: { ...typography.body, fontWeight: '700', color: '#B7791F' },
+    wagerRow: {
+      backgroundColor: C.warning + '25', borderRadius: radius.full,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+      marginBottom: spacing.md,
+    },
+    wagerText: { ...typography.body, fontWeight: '700', color: '#B7791F' },
 
-  actionBlock: { width: '100%', gap: spacing.sm },
-  raiseBtn: {
-    backgroundColor: '#FDCB6E', borderRadius: radius.lg,
-    paddingVertical: spacing.sm, alignItems: 'center',
-    borderWidth: 2, borderColor: '#B7791F',
-  },
-  raiseBtnText: { fontSize: 15, fontWeight: '800', color: '#1A1A2E' },
-  acceptRaiseBtn: {
-    backgroundColor: colors.success + '20', borderRadius: radius.lg,
-    paddingVertical: spacing.sm, alignItems: 'center',
-    borderWidth: 1.5, borderColor: colors.success,
-  },
-  acceptRaiseBtnText: { ...typography.body, fontWeight: '700', color: colors.success },
-  completedBtn: {
-    backgroundColor: colors.success, borderRadius: radius.lg,
-    paddingVertical: spacing.md, alignItems: 'center',
-    ...shadows.card,
-  },
-  completedBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
-  refuseBtn: {
-    backgroundColor: colors.error + '15', borderRadius: radius.lg,
-    paddingVertical: spacing.md, alignItems: 'center',
-    borderWidth: 1.5, borderColor: colors.error,
-  },
-  refuseBtnText: { fontSize: 17, fontWeight: '800', color: colors.error },
-});
+    actionBlock: { width: '100%', gap: spacing.sm },
+    raiseBtn: {
+      backgroundColor: '#FDCB6E', borderRadius: radius.lg,
+      paddingVertical: spacing.sm, alignItems: 'center',
+      borderWidth: 2, borderColor: '#B7791F',
+    },
+    raiseBtnText: { fontSize: 15, fontWeight: '800', color: '#1A1A2E' },
+    acceptRaiseBtn: {
+      backgroundColor: C.success + '20', borderRadius: radius.lg,
+      paddingVertical: spacing.sm, alignItems: 'center',
+      borderWidth: 1.5, borderColor: C.success,
+    },
+    acceptRaiseBtnText: { ...typography.body, fontWeight: '700', color: C.success },
+    completedBtn: {
+      backgroundColor: C.success, borderRadius: radius.lg,
+      paddingVertical: spacing.md, alignItems: 'center',
+      ...shadows.card,
+    },
+    completedBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
+    refuseBtn: {
+      backgroundColor: C.error + '15', borderRadius: radius.lg,
+      paddingVertical: spacing.md, alignItems: 'center',
+      borderWidth: 1.5, borderColor: C.error,
+    },
+    refuseBtnText: { fontSize: 17, fontWeight: '800', color: C.error },
+  });
+}
 
-const over = StyleSheet.create({
-  container: { padding: spacing.lg, paddingBottom: spacing.xxl, alignItems: 'center' },
-  confetti: { fontSize: 36, marginBottom: spacing.sm },
-  title:    { ...typography.heading, fontWeight: '800', color: colors.text, marginBottom: spacing.sm },
-  winnerEmoji: { fontSize: 64, marginBottom: spacing.xs },
-  winnerName:  { fontSize: 28, fontWeight: '900', color: colors.warning },
-  winnerCoins: { fontSize: 20, fontWeight: '700', color: colors.warning, marginBottom: spacing.lg },
+function makeOverStyles(C: AppColors) {
+  return StyleSheet.create({
+    container: { padding: spacing.lg, paddingBottom: spacing.xxl, alignItems: 'center' },
+    confetti: { fontSize: 36, marginBottom: spacing.sm },
+    title:    { ...typography.heading, fontWeight: '800', color: C.text, marginBottom: spacing.sm },
+    winnerEmoji: { fontSize: 64, marginBottom: spacing.xs },
+    winnerName:  { fontSize: 28, fontWeight: '900', color: C.warning },
+    winnerCoins: { fontSize: 20, fontWeight: '700', color: C.warning, marginBottom: spacing.lg },
 
-  divider: { width: '100%', height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
-  sectionLabel: { ...typography.small, fontWeight: '800', color: colors.textSecondary, letterSpacing: 1.2, alignSelf: 'flex-start', marginBottom: spacing.sm },
+    divider: { width: '100%', height: 1, backgroundColor: C.border, marginVertical: spacing.lg },
+    sectionLabel: { ...typography.small, fontWeight: '800', color: C.textSecondary, letterSpacing: 1.2, alignSelf: 'flex-start', marginBottom: spacing.sm },
 
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm, width: '100%' },
-  rank: { fontSize: 22, width: 36 },
-  pEmoji: { fontSize: 24, width: 32 },
-  pName: { ...typography.body, fontWeight: '700', color: colors.text },
-  pStats: { ...typography.small, color: colors.textSecondary },
-  pCoins: { ...typography.body, fontWeight: '700', color: colors.warning },
+    row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm, width: '100%' },
+    rank: { fontSize: 22, width: 36 },
+    pEmoji: { fontSize: 24, width: 32 },
+    pName: { ...typography.body, fontWeight: '700', color: C.text },
+    pStats: { ...typography.small, color: C.textSecondary },
+    pCoins: { ...typography.body, fontWeight: '700', color: C.warning },
 
-  fact: { ...typography.body, color: colors.text, alignSelf: 'flex-start', marginBottom: spacing.xs },
+    fact: { ...typography.body, color: C.text, alignSelf: 'flex-start', marginBottom: spacing.xs },
 
-  playAgainBtn: {
-    width: '100%', backgroundColor: colors.primary, borderRadius: radius.lg,
-    paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl,
-    ...shadows.card,
-  },
-  playAgainBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
-  backBtn: {
-    width: '100%', borderRadius: radius.lg,
-    paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm,
-    borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface,
-  },
-  backBtnText: { ...typography.body, fontWeight: '700', color: colors.textSecondary },
-});
+    playAgainBtn: {
+      width: '100%', backgroundColor: C.primary, borderRadius: radius.lg,
+      paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl,
+      ...shadows.card,
+    },
+    playAgainBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
+    backBtn: {
+      width: '100%', borderRadius: radius.lg,
+      paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm,
+      borderWidth: 1.5, borderColor: C.border, backgroundColor: C.surface,
+    },
+    backBtnText: { ...typography.body, fontWeight: '700', color: C.textSecondary },
+  });
+}

@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Dimensions,
   FlatList,
   Image,
   Modal,
@@ -14,6 +13,7 @@ import {
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,23 +24,23 @@ import { useAuthStore } from '../../store/authStore';
 import {
   getPosts,
   togglePostLike,
-  togglePostReaction,
   toggleBookmark,
   addPostComment,
   getPostComments,
+  castPollVote,
   subscribeToConnections,
   getUserProfile,
+  getActiveStatuses,
   sendMessage,
 } from '../../utils/firestore-helpers';
 import { formatRelativeTime } from '../../utils/helpers';
 import Avatar from '../../components/Avatar';
 import EmptyState from '../../components/EmptyState';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
+import { spacing, radius, typography, shadows } from '../../utils/theme';
 import { Connection, FeedStackParamList, Message, Post, PostComment, PostType, UserProfile } from '../../types';
 
 type Nav = NativeStackNavigationProp<FeedStackParamList>;
-
-const SCREEN_WIDTH = Dimensions.get('window').width;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,39 +75,47 @@ const POST_TYPE_CONFIG: Record<string, PostTypeConfig> = {
   poll:   { label: 'Poll',   emoji: '📊', color: '#00B894' },
 };
 
-// ─── Mock stories ─────────────────────────────────────────────────────────────
+// ─── Connection story item ────────────────────────────────────────────────────
 
-interface StoryItem {
-  id: string;
+interface ConnectionStoryItem {
+  uid: string;
   name: string;
-  initial: string;
-  color: string;
-  hasStory: boolean;
-  isUser?: boolean;
+  photoURL?: string;
+  hasStatus: boolean;
 }
-
-const MOCK_STORIES: StoryItem[] = [
-  { id: 'priya',  name: 'Priya',  initial: 'P', color: '#E17055', hasStory: true },
-  { id: 'rahul',  name: 'Rahul',  initial: 'R', color: '#0984E3', hasStory: true },
-  { id: 'anjali', name: 'Anjali', initial: 'A', color: '#6C5CE7', hasStory: true },
-  { id: 'dev',    name: 'Dev',    initial: 'D', color: '#00B894', hasStory: false },
-  { id: 'mia',    name: 'Mia',    initial: 'M', color: '#FDCB6E', hasStory: true },
-  { id: 'arjun',  name: 'Arjun',  initial: 'A', color: '#FF4B6E', hasStory: true },
-];
 
 // ─── Stories bar ──────────────────────────────────────────────────────────────
 
-function StoriesBar({ userName, userPhotoURL }: { userName: string; userPhotoURL?: string }) {
-  const items: StoryItem[] = [
+function StoriesBar({
+  userName,
+  userPhotoURL,
+  connectionStories,
+}: {
+  userName: string;
+  userPhotoURL?: string;
+  connectionStories: ConnectionStoryItem[];
+}) {
+  const { C } = useTheme();
+  const sb = makeSbStyles(C);
+
+  const items: Array<{ id: string; name: string; initial: string; color: string; hasStory: boolean; isUser?: boolean; photoURL?: string }> = [
     {
       id: 'me',
       name: 'Your Story',
       initial: userName ? userName[0].toUpperCase() : '?',
-      color: colors.primary,
+      color: C.primary,
       hasStory: false,
       isUser: true,
+      photoURL: userPhotoURL,
     },
-    ...MOCK_STORIES,
+    ...connectionStories.map((s) => ({
+      id: s.uid,
+      name: s.name.split(' ')[0],
+      initial: s.name ? s.name[0].toUpperCase() : '?',
+      color: C.secondary,
+      hasStory: s.hasStatus,
+      photoURL: s.photoURL,
+    })),
   ];
 
   return (
@@ -122,8 +130,8 @@ function StoriesBar({ userName, userPhotoURL }: { userName: string; userPhotoURL
           <TouchableOpacity style={sb.item} activeOpacity={0.8}>
             <View style={[sb.ring, item.hasStory ? sb.ringActive : sb.ringInactive]}>
               <View style={[sb.circle, { backgroundColor: item.color }]}>
-                {item.isUser && userPhotoURL ? (
-                  <Image source={{ uri: userPhotoURL }} style={sb.photo} />
+                {item.isUser && item.photoURL ? (
+                  <Image source={{ uri: item.photoURL }} style={sb.photo} />
                 ) : (
                   <Text style={sb.initial}>{item.initial}</Text>
                 )}
@@ -142,40 +150,42 @@ function StoriesBar({ userName, userPhotoURL }: { userName: string; userPhotoURL
   );
 }
 
-const sb = StyleSheet.create({
-  wrap: {
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingVertical: spacing.sm,
-  },
-  list: { paddingHorizontal: spacing.md, gap: spacing.md },
-  item: { alignItems: 'center', width: 66 },
-  ring: {
-    width: 64, height: 64, borderRadius: 32,
-    borderWidth: 2.5, padding: 2,
-  },
-  ringActive:   { borderColor: colors.primary },
-  ringInactive: { borderColor: colors.border },
-  circle: {
-    flex: 1, borderRadius: 28,
-    alignItems: 'center', justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  photo:   { width: '100%', height: '100%' },
-  initial: { fontSize: 20, fontWeight: '700', color: '#fff' },
-  addBadge: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: '#fff',
-  },
-  name: {
-    ...typography.small, color: colors.textSecondary,
-    marginTop: spacing.xs, textAlign: 'center', maxWidth: 62,
-  },
-});
+function makeSbStyles(C: AppColors) {
+  return StyleSheet.create({
+    wrap: {
+      backgroundColor: C.background,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+      paddingVertical: spacing.sm,
+    },
+    list: { paddingHorizontal: spacing.md, gap: spacing.md },
+    item: { alignItems: 'center', width: 66 },
+    ring: {
+      width: 64, height: 64, borderRadius: 32,
+      borderWidth: 2.5, padding: 2,
+    },
+    ringActive:   { borderColor: C.primary },
+    ringInactive: { borderColor: C.border },
+    circle: {
+      flex: 1, borderRadius: 28,
+      alignItems: 'center', justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    photo:   { width: '100%', height: '100%' },
+    initial: { fontSize: 20, fontWeight: '700', color: '#fff' },
+    addBadge: {
+      position: 'absolute', bottom: 0, right: 0,
+      width: 18, height: 18, borderRadius: 9,
+      backgroundColor: C.primary,
+      alignItems: 'center', justifyContent: 'center',
+      borderWidth: 1.5, borderColor: '#fff',
+    },
+    name: {
+      ...typography.small, color: C.textSecondary,
+      marginTop: spacing.xs, textAlign: 'center', maxWidth: 62,
+    },
+  });
+}
 
 // ─── Hashtag-highlighted caption ──────────────────────────────────────────────
 
@@ -188,13 +198,14 @@ function HighlightedCaption({
   style?: object;
   numberOfLines?: number;
 }) {
+  const { C } = useTheme();
   // Split on hashtags so we can colour them
   const parts = text.split(/(#\w+)/g);
   return (
     <Text style={style} numberOfLines={numberOfLines}>
       {parts.map((part, i) =>
         part.startsWith('#') ? (
-          <Text key={i} style={{ color: colors.primary, fontWeight: '600' }}>
+          <Text key={i} style={{ color: C.primary, fontWeight: '600' }}>
             {part}
           </Text>
         ) : (
@@ -208,6 +219,9 @@ function HighlightedCaption({
 // ─── Poll content ─────────────────────────────────────────────────────────────
 
 function PollContent({ post, uid }: { post: Post; uid: string }) {
+  const { C } = useTheme();
+  const poll = makePollStyles(C);
+
   const rawOptions = post.pollOptions ?? [];
 
   // Normalise: legacy options may lack an `id` field
@@ -224,21 +238,21 @@ function PollContent({ post, uid }: { post: Post; uid: string }) {
 
   function handleVote(idx: number) {
     if (!uid) return;
-    setLocalOptions((prev) =>
-      prev.map((opt, i) => {
-        if (i !== idx) {
-          // single-choice: clear votes from other options
-          return { ...opt, votes: opt.votes.filter((u) => u !== uid) };
-        }
-        const alreadyVoted = opt.votes.includes(uid);
-        return {
-          ...opt,
-          votes: alreadyVoted
-            ? opt.votes.filter((u) => u !== uid)
-            : [...opt.votes, uid],
-        };
-      }),
-    );
+    const nextOptions = localOptions.map((opt, i) => {
+      if (i !== idx) {
+        return { ...opt, votes: opt.votes.filter((u) => u !== uid) };
+      }
+      const alreadyVoted = opt.votes.includes(uid);
+      return {
+        ...opt,
+        votes: alreadyVoted ? opt.votes.filter((u) => u !== uid) : [...opt.votes, uid],
+      };
+    });
+    setLocalOptions(nextOptions);
+    castPollVote(post.id, nextOptions).catch(() => {
+      // Revert on failure
+      setLocalOptions(localOptions);
+    });
   }
 
   return (
@@ -274,31 +288,36 @@ function PollContent({ post, uid }: { post: Post; uid: string }) {
   );
 }
 
-const poll = StyleSheet.create({
-  container: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
-  option: {
-    borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border,
-    paddingHorizontal: spacing.md, paddingVertical: 12,
-    overflow: 'hidden', position: 'relative', minHeight: 46,
-    justifyContent: 'center', backgroundColor: colors.surface,
-  },
-  optionVoted: { borderColor: colors.primary },
-  bar: {
-    position: 'absolute', left: 0, top: 0, bottom: 0,
-    backgroundColor: colors.primary + '1A',
-  },
-  optionText: { ...typography.body, color: colors.text, fontWeight: '500', zIndex: 1 },
-  optionTextVoted: { color: colors.primary, fontWeight: '700' },
-  pct: {
-    position: 'absolute', right: spacing.md,
-    ...typography.small, color: colors.textSecondary, fontWeight: '600',
-  },
-  meta: { ...typography.small, color: colors.textSecondary, marginTop: spacing.xs },
-});
+function makePollStyles(C: AppColors) {
+  return StyleSheet.create({
+    container: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
+    option: {
+      borderRadius: radius.md, borderWidth: 1.5, borderColor: C.border,
+      paddingHorizontal: spacing.md, paddingVertical: 12,
+      overflow: 'hidden', position: 'relative', minHeight: 46,
+      justifyContent: 'center', backgroundColor: C.surface,
+    },
+    optionVoted: { borderColor: C.primary },
+    bar: {
+      position: 'absolute', left: 0, top: 0, bottom: 0,
+      backgroundColor: C.primary + '1A',
+    },
+    optionText: { ...typography.body, color: C.text, fontWeight: '500', zIndex: 1 },
+    optionTextVoted: { color: C.primary, fontWeight: '700' },
+    pct: {
+      position: 'absolute', right: spacing.md,
+      ...typography.small, color: C.textSecondary, fontWeight: '600',
+    },
+    meta: { ...typography.small, color: C.textSecondary, marginTop: spacing.xs },
+  });
+}
 
 // ─── Thread content ───────────────────────────────────────────────────────────
 
 function ThreadContent({ lines, caption }: { lines?: string[]; caption: string }) {
+  const { C } = useTheme();
+  const thread = makeThreadStyles(C);
+
   const [expanded, setExpanded] = useState(false);
   const allLines = lines && lines.length > 0 ? lines : [caption];
   const visibleLines = expanded ? allLines : allLines.slice(0, 3);
@@ -329,19 +348,21 @@ function ThreadContent({ lines, caption }: { lines?: string[]; caption: string }
   );
 }
 
-const thread = StyleSheet.create({
-  container: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
-  waveBar: {
-    width: 3, borderRadius: 2,
-    backgroundColor: colors.primary + '40',
-    marginRight: spacing.sm,
-  },
-  content: { flex: 1 },
-  segment: { marginBottom: spacing.sm },
-  line: { ...typography.body, color: colors.text, lineHeight: 26, fontSize: 16 },
-  readMore: { marginTop: spacing.xs },
-  readMoreText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
-});
+function makeThreadStyles(C: AppColors) {
+  return StyleSheet.create({
+    container: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+    waveBar: {
+      width: 3, borderRadius: 2,
+      backgroundColor: C.primary + '40',
+      marginRight: spacing.sm,
+    },
+    content: { flex: 1 },
+    segment: { marginBottom: spacing.sm },
+    line: { ...typography.body, color: C.text, lineHeight: 26, fontSize: 16 },
+    readMore: { marginTop: spacing.xs },
+    readMoreText: { ...typography.caption, color: C.primary, fontWeight: '700' },
+  });
+}
 
 // ─── Comments modal ───────────────────────────────────────────────────────────
 
@@ -362,21 +383,54 @@ function CommentsModal({
   onClose: () => void;
   onCommentAdded: () => void;
 }) {
+  const { C } = useTheme();
+  const cm = makeCmStyles(C);
+
   const [comments, setComments]       = useState<PostComment[]>([]);
   const [text, setText]               = useState('');
   const [loading, setLoading]         = useState(false);
   const [posting, setPosting]         = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore]         = useState(false);
   const [replyingTo, setReplyingTo]   = useState<{ id: string; userName: string } | null>(null);
   const inputRef                       = useRef<TextInput>(null);
+  const lastTimestampRef               = useRef<number | null>(null);
+  const PAGE_SIZE = 30;
 
   useEffect(() => {
     if (!visible) return;
     setLoading(true);
-    getPostComments(post.id)
-      .then(setComments)
+    setHasMore(false);
+    lastTimestampRef.current = null;
+    getPostComments(post.id, PAGE_SIZE)
+      .then(({ comments: data, hasMore: more, lastTimestamp }) => {
+        setComments(data);
+        setHasMore(more);
+        lastTimestampRef.current = lastTimestamp;
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [visible, post.id]);
+
+  async function loadMore() {
+    if (loadingMore || !hasMore || lastTimestampRef.current === null) return;
+    setLoadingMore(true);
+    try {
+      const { comments: more, hasMore: stillMore, lastTimestamp } = await getPostComments(
+        post.id,
+        PAGE_SIZE,
+        lastTimestampRef.current,
+      );
+      if (!stillMore) setHasMore(false);
+      lastTimestampRef.current = lastTimestamp;
+      setComments((prev) => {
+        const existing = new Set(prev.map((c) => c.id));
+        return [...prev, ...more.filter((c) => !existing.has(c.id))];
+      });
+    } catch {/* silent */} finally {
+      setLoadingMore(false);
+    }
+  }
 
   function startReply(c: PostComment) {
     setReplyingTo({ id: c.id, userName: c.userName });
@@ -415,9 +469,7 @@ function CommentsModal({
     }
   }
 
-  // Group top-level comments and their replies
-  const topLevel = comments.filter((c) => !c.replyTo);
-  const replies  = comments.filter((c) => !!c.replyTo);
+
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -429,20 +481,35 @@ function CommentsModal({
           <View style={cm.header}>
             <Text style={cm.title}>Comments ({comments.length})</Text>
             <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={22} color={colors.textSecondary} />
+              <Ionicons name="close" size={22} color={C.textSecondary} />
             </TouchableOpacity>
           </View>
 
           {loading ? (
-            <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.lg }} />
+            <ActivityIndicator color={C.primary} style={{ marginTop: spacing.lg }} />
           ) : comments.length === 0 ? (
             <Text style={cm.empty}>No comments yet — be the first! 💬</Text>
           ) : (
-            <ScrollView style={cm.list} showsVerticalScrollIndicator={false}>
-              {topLevel.map((c) => {
-                const cReplies = replies.filter((r) => r.replyTo?.id === c.id);
+            <FlatList
+              data={comments.filter((c) => !c.replyTo)}
+              keyExtractor={(c) => c.id}
+              style={cm.list}
+              showsVerticalScrollIndicator={false}
+              onEndReached={loadMore}
+              onEndReachedThreshold={0.3}
+              ListFooterComponent={
+                loadingMore ? (
+                  <ActivityIndicator color={C.primary} style={{ marginVertical: spacing.sm }} />
+                ) : hasMore ? (
+                  <TouchableOpacity onPress={loadMore} style={cm.loadMoreBtn}>
+                    <Text style={cm.loadMoreText}>Load more comments</Text>
+                  </TouchableOpacity>
+                ) : null
+              }
+              renderItem={({ item: c }) => {
+                const cReplies = comments.filter((r) => r.replyTo?.id === c.id);
                 return (
-                  <View key={c.id}>
+                  <View>
                     {/* Top-level comment */}
                     <View style={cm.row}>
                       <Avatar name={c.userName} photoURL={c.userPhotoURL} size={34} />
@@ -453,7 +520,7 @@ function CommentsModal({
                         </View>
                         <Text style={cm.bubbleText}>{c.text}</Text>
                         <TouchableOpacity onPress={() => startReply(c)} style={cm.replyBtn}>
-                          <Ionicons name="return-down-forward-outline" size={13} color={colors.primary} />
+                          <Ionicons name="return-down-forward-outline" size={13} color={C.primary} />
                           <Text style={cm.replyBtnText}>Reply</Text>
                         </TouchableOpacity>
                       </View>
@@ -475,8 +542,8 @@ function CommentsModal({
                     ))}
                   </View>
                 );
-              })}
-            </ScrollView>
+              }}
+            />
           )}
 
           {/* Reply banner */}
@@ -486,7 +553,7 @@ function CommentsModal({
                 Replying to <Text style={{ fontWeight: '700' }}>@{replyingTo.userName}</Text>
               </Text>
               <TouchableOpacity onPress={cancelReply}>
-                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                <Ionicons name="close-circle" size={18} color={C.textSecondary} />
               </TouchableOpacity>
             </View>
           )}
@@ -499,7 +566,7 @@ function CommentsModal({
               value={text}
               onChangeText={setText}
               placeholder={replyingTo ? `Reply to @${replyingTo.userName}…` : 'Add a comment…'}
-              placeholderTextColor={colors.textSecondary}
+              placeholderTextColor={C.textSecondary}
               multiline
               maxLength={300}
             />
@@ -521,57 +588,61 @@ function CommentsModal({
   );
 }
 
-const cm = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg,
-    maxHeight: '85%', paddingBottom: 28,
-  },
-  handle: {
-    width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border,
-    alignSelf: 'center', marginTop: spacing.sm,
-  },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  title:       { ...typography.body, fontWeight: '700', color: colors.text },
-  empty:       { ...typography.body, color: colors.textSecondary, textAlign: 'center', padding: spacing.xl },
-  list:        { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, maxHeight: 380 },
-  row:         { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm, alignItems: 'flex-start' },
-  replyRow:    { flexDirection: 'row', gap: spacing.xs, marginLeft: 44, marginBottom: spacing.sm, alignItems: 'flex-start' },
-  replyLine:   { width: 2, backgroundColor: colors.border, alignSelf: 'stretch', marginRight: 4, borderRadius: 1 },
-  bubble:      { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.sm },
-  bubbleTop:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  bubbleName:  { ...typography.small, fontWeight: '700', color: colors.text },
-  bubbleText:  { ...typography.body, color: colors.text, marginTop: 2, lineHeight: 22 },
-  bubbleTime:  { ...typography.small, color: colors.textSecondary },
-  replyBtn:    { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: spacing.xs },
-  replyBtnText:{ ...typography.small, color: colors.primary, fontWeight: '600' },
-  replyTag:    { ...typography.small, color: colors.primary, fontWeight: '600', marginBottom: 2 },
-  replyBanner: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: `${colors.primary}10`,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-    borderTopWidth: 1, borderTopColor: `${colors.primary}20`,
-  },
-  replyBannerText: { ...typography.small, color: colors.textSecondary },
-  inputRow: {
-    flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm,
-    paddingHorizontal: spacing.md, paddingTop: spacing.sm,
-    borderTopWidth: 1, borderTopColor: colors.border,
-  },
-  input: {
-    flex: 1, ...typography.body, color: colors.text,
-    backgroundColor: colors.surface, borderRadius: radius.lg,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderWidth: 1, borderColor: colors.border, maxHeight: 100,
-  },
-  sendBtn:         { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  sendBtnDisabled: { opacity: 0.4 },
-});
+function makeCmStyles(C: AppColors) {
+  return StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+    sheet: {
+      backgroundColor: C.background,
+      borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg,
+      maxHeight: '85%', paddingBottom: 28,
+    },
+    handle: {
+      width: 40, height: 4, borderRadius: 2, backgroundColor: C.border,
+      alignSelf: 'center', marginTop: spacing.sm,
+    },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    title:       { ...typography.body, fontWeight: '700', color: C.text },
+    empty:       { ...typography.body, color: C.textSecondary, textAlign: 'center', padding: spacing.xl },
+    list:        { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, maxHeight: 380 },
+    row:         { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm, alignItems: 'flex-start' },
+    replyRow:    { flexDirection: 'row', gap: spacing.xs, marginLeft: 44, marginBottom: spacing.sm, alignItems: 'flex-start' },
+    replyLine:   { width: 2, backgroundColor: C.border, alignSelf: 'stretch', marginRight: 4, borderRadius: 1 },
+    bubble:      { flex: 1, backgroundColor: C.surface, borderRadius: radius.md, padding: spacing.sm },
+    bubbleTop:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    bubbleName:  { ...typography.small, fontWeight: '700', color: C.text },
+    bubbleText:  { ...typography.body, color: C.text, marginTop: 2, lineHeight: 22 },
+    bubbleTime:  { ...typography.small, color: C.textSecondary },
+    replyBtn:    { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: spacing.xs },
+    replyBtnText:{ ...typography.small, color: C.primary, fontWeight: '600' },
+    replyTag:    { ...typography.small, color: C.primary, fontWeight: '600', marginBottom: 2 },
+    replyBanner: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      backgroundColor: `${C.primary}10`,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+      borderTopWidth: 1, borderTopColor: `${C.primary}20`,
+    },
+    replyBannerText: { ...typography.small, color: C.textSecondary },
+    inputRow: {
+      flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm,
+      paddingHorizontal: spacing.md, paddingTop: spacing.sm,
+      borderTopWidth: 1, borderTopColor: C.border,
+    },
+    input: {
+      flex: 1, ...typography.body, color: C.text,
+      backgroundColor: C.surface, borderRadius: radius.lg,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderWidth: 1, borderColor: C.border, maxHeight: 100,
+    },
+    sendBtn:         { width: 38, height: 38, borderRadius: 19, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
+    sendBtnDisabled: { opacity: 0.4 },
+    loadMoreBtn:     { alignItems: 'center', paddingVertical: spacing.sm },
+    loadMoreText:    { ...typography.small, color: C.primary, fontWeight: '700' },
+  });
+}
 
 // ─── Share to connections modal ───────────────────────────────────────────────
 
@@ -579,15 +650,16 @@ function ShareModal({
   post,
   visible,
   uid,
-  userName,
   onClose,
 }: {
   post: Post;
   visible: boolean;
   uid: string;
-  userName: string;
   onClose: () => void;
 }) {
+  const { C } = useTheme();
+  const sh = makeShStyles(C);
+
   const [connections, setConnections]   = useState<Connection[]>([]);
   const [profiles, setProfiles]         = useState<Record<string, UserProfile>>({});
   const [sending, setSending]           = useState<string | null>(null);
@@ -641,7 +713,7 @@ function ShareModal({
           <View style={sh.header}>
             <Text style={sh.title}>Share to Connections</Text>
             <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={22} color={colors.textSecondary} />
+              <Ionicons name="close" size={22} color={C.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -691,21 +763,23 @@ function ShareModal({
   );
 }
 
-const sh = StyleSheet.create({
-  overlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet:        { backgroundColor: colors.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, maxHeight: '70%', paddingBottom: 32 },
-  handle:       { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: spacing.sm },
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  title:        { ...typography.body, fontWeight: '700', color: colors.text },
-  empty:        { ...typography.body, color: colors.textSecondary, textAlign: 'center', padding: spacing.xl },
-  list:         { padding: spacing.md },
-  row:          { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
-  rowInfo:      { flex: 1 },
-  rowName:      { ...typography.body, fontWeight: '600', color: colors.text },
-  rowMeta:      { ...typography.small, color: colors.textSecondary },
-  sendBtn:      { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  sendBtnSent:  { backgroundColor: colors.success },
-});
+function makeShStyles(C: AppColors) {
+  return StyleSheet.create({
+    overlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+    sheet:        { backgroundColor: C.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, maxHeight: '70%', paddingBottom: 32 },
+    handle:       { width: 40, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: 'center', marginTop: spacing.sm },
+    header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: C.border },
+    title:        { ...typography.body, fontWeight: '700', color: C.text },
+    empty:        { ...typography.body, color: C.textSecondary, textAlign: 'center', padding: spacing.xl },
+    list:         { padding: spacing.md },
+    row:          { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
+    rowInfo:      { flex: 1 },
+    rowName:      { ...typography.body, fontWeight: '600', color: C.text },
+    rowMeta:      { ...typography.small, color: C.textSecondary },
+    sendBtn:      { width: 40, height: 40, borderRadius: 20, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
+    sendBtnSent:  { backgroundColor: C.success },
+  });
+}
 
 // ─── Post card ────────────────────────────────────────────────────────────────
 
@@ -724,6 +798,10 @@ function PostCard({
   onCommentOpen: () => void;
   onShare: () => void;
 }) {
+  const { C } = useTheme();
+  const card = makeCardStyles(C);
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+
   const liked        = post.likes.includes(uid);
   const saved        = (post.savedBy ?? []).includes(uid);
   const effectiveType = resolvePostType(post);
@@ -776,7 +854,7 @@ function PostCard({
           <Text style={[card.badgeLabel, { color: typeCfg.color }]}>{typeCfg.label}</Text>
         </View>
         <TouchableOpacity style={card.moreBtn}>
-          <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
+          <Ionicons name="ellipsis-horizontal" size={18} color={C.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -873,11 +951,11 @@ function PostCard({
             <Ionicons
               name={liked ? 'heart' : 'heart-outline'}
               size={24}
-              color={liked ? colors.primary : colors.textSecondary}
+              color={liked ? C.primary : C.textSecondary}
             />
           </Animated.View>
           {post.likes.length > 0 && (
-            <Text style={[card.actionCount, liked && { color: colors.primary }]}>
+            <Text style={[card.actionCount, liked && { color: C.primary }]}>
               {post.likes.length}
             </Text>
           )}
@@ -885,7 +963,7 @@ function PostCard({
 
         {/* Comment */}
         <TouchableOpacity style={card.actionBtn} onPress={onCommentOpen} activeOpacity={0.75}>
-          <Ionicons name="chatbubble-outline" size={22} color={colors.textSecondary} />
+          <Ionicons name="chatbubble-outline" size={22} color={C.textSecondary} />
           {commentCount > 0 && (
             <Text style={card.actionCount}>{commentCount}</Text>
           )}
@@ -897,7 +975,7 @@ function PostCard({
           onPress={onShare}
           activeOpacity={0.75}
         >
-          <Ionicons name="paper-plane-outline" size={22} color={colors.textSecondary} />
+          <Ionicons name="paper-plane-outline" size={22} color={C.textSecondary} />
           {(post.shareCount ?? 0) > 0 && (
             <Text style={card.actionCount}>{post.shareCount}</Text>
           )}
@@ -911,7 +989,7 @@ function PostCard({
           <Ionicons
             name={saved ? 'bookmark' : 'bookmark-outline'}
             size={22}
-            color={saved ? colors.secondary : colors.textSecondary}
+            color={saved ? C.secondary : C.textSecondary}
           />
         </TouchableOpacity>
       </View>
@@ -919,90 +997,96 @@ function PostCard({
   );
 }
 
-const card = StyleSheet.create({
-  container: {
-    backgroundColor: colors.background,
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    ...shadows.card,
-  },
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.md, paddingTop: spacing.md,
-    paddingBottom: spacing.xs, gap: spacing.sm,
-  },
-  headerMeta: { flex: 1 },
-  username:   { ...typography.caption, fontWeight: '700', color: colors.text },
-  time:       { ...typography.small, color: colors.textSecondary, marginTop: 1 },
-  badge: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingHorizontal: spacing.sm, paddingVertical: 3,
-    borderRadius: radius.full, borderWidth: 1,
-  },
-  badgeEmoji: { fontSize: 11 },
-  badgeLabel: { ...typography.small, fontWeight: '700', letterSpacing: 0.2, fontSize: 11 },
-  moreBtn:    { padding: spacing.xs },
-  caption: {
-    ...typography.body, color: colors.text, lineHeight: 24,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs, paddingBottom: spacing.sm,
-  },
-  imageWrap: {
-    overflow: 'hidden',
-    position: 'relative',
-    marginBottom: spacing.xs,
-  },
-  image:       { width: '100%', height: '100%' },
-  heartOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  heartEmoji: { fontSize: 80 },
-  tagsRow: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs,
-    paddingHorizontal: spacing.md, paddingBottom: spacing.sm,
-  },
-  tag: {
-    backgroundColor: colors.secondary + '12',
-    paddingHorizontal: spacing.sm, paddingVertical: 2,
-    borderRadius: radius.full,
-  },
-  tagText: { ...typography.small, color: colors.secondary, fontWeight: '600' },
-  likesRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-  },
-  likesText:    { ...typography.small, color: colors.text, fontWeight: '700' },
-  viewComments: { ...typography.small, color: colors.textSecondary, fontWeight: '500' },
-  actions: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderTopWidth: 1, borderTopColor: colors.border,
-    gap: spacing.md,
-  },
-  actionBtn:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  actionCount: { ...typography.small, color: colors.textSecondary, fontWeight: '600' },
-});
+function makeCardStyles(C: AppColors) {
+  return StyleSheet.create({
+    container: {
+      backgroundColor: C.background,
+      marginHorizontal: spacing.md,
+      marginBottom: spacing.sm,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: C.border,
+      overflow: 'hidden',
+      ...shadows.card,
+    },
+    header: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: spacing.md, paddingTop: spacing.md,
+      paddingBottom: spacing.xs, gap: spacing.sm,
+    },
+    headerMeta: { flex: 1 },
+    username:   { ...typography.caption, fontWeight: '700', color: C.text },
+    time:       { ...typography.small, color: C.textSecondary, marginTop: 1 },
+    badge: {
+      flexDirection: 'row', alignItems: 'center', gap: 3,
+      paddingHorizontal: spacing.sm, paddingVertical: 3,
+      borderRadius: radius.full, borderWidth: 1,
+    },
+    badgeEmoji: { fontSize: 11 },
+    badgeLabel: { ...typography.small, fontWeight: '700', letterSpacing: 0.2, fontSize: 11 },
+    moreBtn:    { padding: spacing.xs },
+    caption: {
+      ...typography.body, color: C.text, lineHeight: 24,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.xs, paddingBottom: spacing.sm,
+    },
+    imageWrap: {
+      overflow: 'hidden',
+      position: 'relative',
+      marginBottom: spacing.xs,
+    },
+    image:       { width: '100%', height: '100%' },
+    heartOverlay: {
+      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    heartEmoji: { fontSize: 80 },
+    tagsRow: {
+      flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs,
+      paddingHorizontal: spacing.md, paddingBottom: spacing.sm,
+    },
+    tag: {
+      backgroundColor: C.secondary + '12',
+      paddingHorizontal: spacing.sm, paddingVertical: 2,
+      borderRadius: radius.full,
+    },
+    tagText: { ...typography.small, color: C.secondary, fontWeight: '600' },
+    likesRow: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+    },
+    likesText:    { ...typography.small, color: C.text, fontWeight: '700' },
+    viewComments: { ...typography.small, color: C.textSecondary, fontWeight: '500' },
+    actions: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderTopWidth: 1, borderTopColor: C.border,
+      gap: spacing.md,
+    },
+    actionBtn:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    actionCount: { ...typography.small, color: C.textSecondary, fontWeight: '600' },
+  });
+}
 
 // ─── Main Feed Screen ─────────────────────────────────────────────────────────
 
 export default function FeedScreen() {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
+
   const navigation   = useNavigation<Nav>();
   const { firebaseUser, userProfile } = useAuthStore();
   const uid          = firebaseUser?.uid ?? '';
   const userName     = userProfile?.name ?? '';
   const userPhotoURL = userProfile?.photoURL;
 
-  const [posts, setPosts]             = useState<Post[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [refreshing, setRefreshing]   = useState(false);
-  const [pageLoading, setPageLoading] = useState(false);
-  const [commentPost, setCommentPost] = useState<Post | null>(null);
-  const [sharePost, setSharePost]     = useState<Post | null>(null);
+  const [posts, setPosts]                         = useState<Post[]>([]);
+  const [loading, setLoading]                     = useState(true);
+  const [refreshing, setRefreshing]               = useState(false);
+  const [pageLoading, setPageLoading]             = useState(false);
+  const [commentPost, setCommentPost]             = useState<Post | null>(null);
+  const [sharePost, setSharePost]                 = useState<Post | null>(null);
+  const [connectionStories, setConnectionStories] = useState<ConnectionStoryItem[]>([]);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
@@ -1018,7 +1102,32 @@ export default function FeedScreen() {
   }
 
   useFocusEffect(useCallback(() => { load(true); }, []));
-  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (!uid) return;
+    const unsub = subscribeToConnections(uid, async (connections: Connection[]) => {
+      if (connections.length === 0) { setConnectionStories([]); return; }
+      const otherUids = connections.map((c) =>
+        c.users[0] === uid ? c.users[1] : c.users[0],
+      ).slice(0, 10);
+      try {
+        const [statuses, profiles] = await Promise.all([
+          getActiveStatuses(otherUids),
+          Promise.all(otherUids.map((u) => getUserProfile(u))),
+        ]);
+        const activeSet = new Set(statuses.map((s) => s.uid));
+        setConnectionStories(
+          (profiles.filter((p): p is UserProfile => p !== null)).map((p) => ({
+            uid: p.uid,
+            name: p.name,
+            photoURL: p.photoURL,
+            hasStatus: activeSet.has(p.uid),
+          })),
+        );
+      } catch { /* non-critical */ }
+    });
+    return unsub;
+  }, [uid]);
 
   // ── Optimistic like ──
   function handleLike(post: Post) {
@@ -1056,7 +1165,7 @@ export default function FeedScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={C.primary} />
       </View>
     );
   }
@@ -1069,7 +1178,6 @@ export default function FeedScreen() {
           post={sharePost}
           visible={!!sharePost}
           uid={uid}
-          userName={userName}
           onClose={() => setSharePost(null)}
         />
       )}
@@ -1107,13 +1215,12 @@ export default function FeedScreen() {
             style={styles.iconBtn}
             onPress={() => navigation.navigate('CreatePost')}
           >
-            <Ionicons name="camera-outline" size={24} color={colors.text} />
+            <Ionicons name="camera-outline" size={24} color={C.text} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* ── Stories ── */}
-      <StoriesBar userName={userName} userPhotoURL={userPhotoURL} />
+      {/* ── Stories moved to Discover tab ── */}
 
       {/* ── Feed ── */}
       <FlatList
@@ -1125,7 +1232,7 @@ export default function FeedScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => { setRefreshing(true); load(true); }}
-            tintColor={colors.primary}
+            tintColor={C.primary}
           />
         }
         onEndReachedThreshold={0.4}
@@ -1146,7 +1253,7 @@ export default function FeedScreen() {
         ListFooterComponent={
           pageLoading ? (
             <ActivityIndicator
-              color={colors.primary}
+              color={C.primary}
               style={{ marginVertical: spacing.lg }}
             />
           ) : null
@@ -1177,32 +1284,34 @@ export default function FeedScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  flex:    { flex: 1, backgroundColor: colors.surface },
-  centered: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-    backgroundColor: colors.background,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  wordmark: { fontSize: 26, fontWeight: '800', color: colors.primary, letterSpacing: -0.5 },
-  headerRight: { flexDirection: 'row', gap: spacing.xs },
-  iconBtn: { padding: spacing.sm },
-  list:           { paddingTop: spacing.md, paddingBottom: 120 },
-  emptyContainer: { flex: 1 },
-  fab: {
-    position: 'absolute', bottom: 90, right: 20,
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-    elevation: 8,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-  },
-});
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex:    { flex: 1, backgroundColor: C.surface },
+    centered: {
+      flex: 1, alignItems: 'center', justifyContent: 'center',
+      backgroundColor: C.background,
+    },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+      backgroundColor: C.background,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    wordmark: { fontSize: 26, fontWeight: '800', color: C.primary, letterSpacing: -0.5 },
+    headerRight: { flexDirection: 'row', gap: spacing.xs },
+    iconBtn: { padding: spacing.sm },
+    list:           { paddingTop: spacing.md, paddingBottom: 120 },
+    emptyContainer: { flex: 1 },
+    fab: {
+      position: 'absolute', bottom: 90, right: 20,
+      width: 56, height: 56, borderRadius: 28,
+      backgroundColor: C.primary,
+      alignItems: 'center', justifyContent: 'center',
+      elevation: 8,
+      shadowColor: C.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.4,
+      shadowRadius: 8,
+    },
+  });
+}

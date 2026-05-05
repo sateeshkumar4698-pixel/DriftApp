@@ -23,7 +23,8 @@ import {
   joinGameRoom,
 } from '../../utils/firestore-helpers';
 import { formatRelativeTime } from '../../utils/helpers';
-import { colors, spacing, typography, radius } from '../../utils/theme';
+import { spacing, typography, radius } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { AppNotification, DiscoverStackParamList, GameRoomPlayer } from '../../types';
 
 type Nav = NativeStackNavigationProp<DiscoverStackParamList>;
@@ -53,6 +54,8 @@ function NotifRow({
   onAccept?: () => void;
   onDecline?: () => void;
 }) {
+  const { C } = useTheme();
+  const styles = makeStyles(C);
   const cfg = NOTIF_CONFIG[item.type] ?? NOTIF_CONFIG.system;
   const isActionable =
     (item.type === 'connection_request' ||
@@ -62,7 +65,7 @@ function NotifRow({
 
   return (
     <TouchableOpacity
-      style={[styles.row, !item.read && styles.rowUnread, { backgroundColor: item.read ? colors.background : cfg.bg }]}
+      style={[styles.row, !item.read && styles.rowUnread, { backgroundColor: item.read ? C.background : cfg.bg }]}
       onPress={onPress}
       activeOpacity={0.85}
     >
@@ -104,6 +107,9 @@ export default function NotificationsScreen() {
   const navigation = useNavigation<Nav>();
   const { firebaseUser, userProfile } = useAuthStore();
   const uid = firebaseUser?.uid ?? '';
+
+  const { C, isDark } = useTheme();
+  const styles = makeStyles(C);
 
   const [notifs, setNotifs]   = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -284,7 +290,7 @@ export default function NotificationsScreen() {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} size="large" />
+          <ActivityIndicator color={C.primary} size="large" />
         </View>
       ) : notifs.length === 0 ? (
         <View style={styles.center}>
@@ -315,63 +321,65 @@ export default function NotificationsScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.sm,
-  },
-  backBtn: { padding: spacing.xs },
-  backIcon: { fontSize: 22, color: colors.text },
-  headerTitle: { flex: 1, ...typography.heading, color: colors.text },
-  markAllBtn: { ...typography.small, color: colors.primary, fontWeight: '600' },
+    header: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderBottomWidth: 1, borderBottomColor: C.border, gap: spacing.sm,
+    },
+    backBtn: { padding: spacing.xs },
+    backIcon: { fontSize: 22, color: C.text },
+    headerTitle: { flex: 1, ...typography.heading, color: C.text },
+    markAllBtn: { ...typography.small, color: C.primary, fontWeight: '600' },
 
-  center: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: spacing.xl, gap: spacing.sm,
-  },
-  emptyEmoji: { fontSize: 56, marginBottom: spacing.sm },
-  emptyTitle: { ...typography.title, color: colors.text, textAlign: 'center' },
-  emptySub: {
-    ...typography.body, color: colors.textSecondary,
-    textAlign: 'center', lineHeight: 24,
-  },
+    center: {
+      flex: 1, alignItems: 'center', justifyContent: 'center',
+      paddingHorizontal: spacing.xl, gap: spacing.sm,
+    },
+    emptyEmoji: { fontSize: 56, marginBottom: spacing.sm },
+    emptyTitle: { ...typography.title, color: C.text, textAlign: 'center' },
+    emptySub: {
+      ...typography.body, color: C.textSecondary,
+      textAlign: 'center', lineHeight: 24,
+    },
 
-  separator: { height: 1, backgroundColor: colors.border, marginLeft: 72 },
+    separator: { height: 1, backgroundColor: C.border, marginLeft: 72 },
 
-  row: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.md,
-    gap: spacing.md,
-  },
-  rowUnread: { borderLeftWidth: 3, borderLeftColor: colors.primary },
-  unreadDot: {
-    position: 'absolute', top: spacing.md + 4, right: spacing.md,
-    width: 8, height: 8, borderRadius: 4,
-  },
-  iconWrap: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  iconEmoji: { fontSize: 22 },
+    row: {
+      flexDirection: 'row', alignItems: 'flex-start',
+      paddingHorizontal: spacing.md, paddingVertical: spacing.md,
+      gap: spacing.md,
+    },
+    rowUnread: { borderLeftWidth: 3, borderLeftColor: C.primary },
+    unreadDot: {
+      position: 'absolute', top: spacing.md + 4, right: spacing.md,
+      width: 8, height: 8, borderRadius: 4,
+    },
+    iconWrap: {
+      width: 44, height: 44, borderRadius: 22,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    iconEmoji: { fontSize: 22 },
 
-  content: { flex: 1, gap: 2 },
-  title: { ...typography.body, color: colors.textSecondary, fontWeight: '500' },
-  titleUnread: { color: colors.text, fontWeight: '700' },
-  body: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
-  time: { ...typography.small, color: colors.textSecondary, marginTop: 4 },
+    content: { flex: 1, gap: 2 },
+    title: { ...typography.body, color: C.textSecondary, fontWeight: '500' },
+    titleUnread: { color: C.text, fontWeight: '700' },
+    body: { ...typography.caption, color: C.textSecondary, lineHeight: 18 },
+    time: { ...typography.small, color: C.textSecondary, marginTop: 4 },
 
-  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  acceptBtn: {
-    paddingHorizontal: spacing.md, paddingVertical: 6,
-    backgroundColor: colors.primary, borderRadius: radius.full,
-  },
-  acceptText: { ...typography.small, color: '#fff', fontWeight: '700' },
-  declineBtn: {
-    paddingHorizontal: spacing.md, paddingVertical: 6,
-    borderWidth: 1, borderColor: colors.border, borderRadius: radius.full,
-  },
-  declineText: { ...typography.small, color: colors.textSecondary, fontWeight: '600' },
-});
+    actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+    acceptBtn: {
+      paddingHorizontal: spacing.md, paddingVertical: 6,
+      backgroundColor: C.primary, borderRadius: radius.full,
+    },
+    acceptText: { ...typography.small, color: '#fff', fontWeight: '700' },
+    declineBtn: {
+      paddingHorizontal: spacing.md, paddingVertical: 6,
+      borderWidth: 1, borderColor: C.border, borderRadius: radius.full,
+    },
+    declineText: { ...typography.small, color: C.textSecondary, fontWeight: '600' },
+  });
+}

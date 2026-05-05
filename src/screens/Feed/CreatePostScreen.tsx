@@ -19,7 +19,8 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../../config/firebase';
 import { useAuthStore } from '../../store/authStore';
 import { createPost } from '../../utils/firestore-helpers';
-import { colors, spacing, typography, radius } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
+import { spacing, radius, typography } from '../../utils/theme';
 import Avatar from '../../components/Avatar';
 import { Post, PollOption } from '../../types';
 
@@ -31,14 +32,15 @@ interface TabConfig {
   id: TabId;
   label: string;
   emoji: string;
-  color: string;
+  colorKey: 'secondary' | 'success';
+  staticColor?: string;
 }
 
-const TABS: TabConfig[] = [
-  { id: 'text',   label: 'Text',   emoji: '📝', color: colors.secondary },
-  { id: 'image',  label: 'Photo',  emoji: '📷', color: '#0984E3' },
-  { id: 'thread', label: 'Waves',  emoji: '🧵', color: '#E17055' },
-  { id: 'poll',   label: 'Poll',   emoji: '📊', color: colors.success },
+const TAB_DEFS: { id: TabId; label: string; emoji: string; colorFn: (C: AppColors) => string }[] = [
+  { id: 'text',   label: 'Text',   emoji: '📝', colorFn: (C) => C.secondary },
+  { id: 'image',  label: 'Photo',  emoji: '📷', colorFn: () => '#0984E3' },
+  { id: 'thread', label: 'Waves',  emoji: '🧵', colorFn: () => '#E17055' },
+  { id: 'poll',   label: 'Poll',   emoji: '📊', colorFn: (C) => C.success },
 ];
 
 // ─── Poll duration options ─────────────────────────────────────────────────────
@@ -60,21 +62,27 @@ const TRENDING_TAGS = [
 // ─── Char counter ──────────────────────────────────────────────────────────────
 
 function CharCounter({ count, max }: { count: number; max: number }) {
+  const { C } = useTheme();
   const left = max - count;
   const color =
-    left < 20 ? colors.error :
-    left < 60 ? colors.warning :
-    colors.textSecondary;
-  return <Text style={[cc.text, { color }]}>{left}</Text>;
+    left < 20 ? C.error :
+    left < 60 ? C.warning :
+    C.textSecondary;
+  return <Text style={[makeCcStyles(C).text, { color }]}>{left}</Text>;
 }
 
-const cc = StyleSheet.create({
-  text: { ...typography.small, fontWeight: '600', textAlign: 'right' },
-});
+function makeCcStyles(C: AppColors) {
+  return StyleSheet.create({
+    text: { ...typography.small, fontWeight: '600', textAlign: 'right' },
+  });
+}
 
 // ─── Hashtag suggestion bar ────────────────────────────────────────────────────
 
 function HashtagSuggestions({ query, onSelect }: { query: string; onSelect: (t: string) => void }) {
+  const { C } = useTheme();
+  const hs = makeHsStyles(C);
+
   const q       = query.toLowerCase();
   const matches = TRENDING_TAGS.filter((t) => t.includes(q)).slice(0, 8);
   if (matches.length === 0) return null;
@@ -92,16 +100,18 @@ function HashtagSuggestions({ query, onSelect }: { query: string; onSelect: (t: 
   );
 }
 
-const hs = StyleSheet.create({
-  wrap: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background },
-  row:  { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm },
-  pill: {
-    backgroundColor: colors.primary + '12', borderRadius: radius.full,
-    paddingHorizontal: spacing.sm, paddingVertical: 4,
-    borderWidth: 1, borderColor: colors.primary + '30',
-  },
-  text: { ...typography.small, color: colors.primary, fontWeight: '700' },
-});
+function makeHsStyles(C: AppColors) {
+  return StyleSheet.create({
+    wrap: { borderTopWidth: 1, borderTopColor: C.border, backgroundColor: C.background },
+    row:  { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm },
+    pill: {
+      backgroundColor: C.primary + '12', borderRadius: radius.full,
+      paddingHorizontal: spacing.sm, paddingVertical: 4,
+      borderWidth: 1, borderColor: C.primary + '30',
+    },
+    text: { ...typography.small, color: C.primary, fontWeight: '700' },
+  });
+}
 
 // ─── Poll builder ──────────────────────────────────────────────────────────────
 
@@ -122,6 +132,9 @@ function PollBuilder({
   onOptionsChange: (opts: { text: string }[]) => void;
   onDurationChange: (h: number) => void;
 }) {
+  const { C } = useTheme();
+  const pb = makePbStyles(C);
+
   function updateOption(idx: number, text: string) {
     onOptionsChange(options.map((o, i) => (i === idx ? { text } : o)));
   }
@@ -143,7 +156,7 @@ function PollBuilder({
           value={question}
           onChangeText={onQuestionChange}
           placeholder="Ask your question…"
-          placeholderTextColor={colors.textSecondary}
+          placeholderTextColor={C.textSecondary}
           maxLength={200}
           multiline
         />
@@ -156,12 +169,12 @@ function PollBuilder({
             value={opt.text}
             onChangeText={(t) => updateOption(idx, t)}
             placeholder={`Option ${idx + 1}${idx < 2 ? ' *' : ''}`}
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={C.textSecondary}
             maxLength={80}
           />
           {options.length > 2 && (
             <TouchableOpacity onPress={() => removeOption(idx)} style={pb.removeBtn}>
-              <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+              <Ionicons name="close-circle" size={20} color={C.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -198,41 +211,43 @@ function PollBuilder({
   );
 }
 
-const pb = StyleSheet.create({
-  container: { paddingHorizontal: 0, paddingBottom: spacing.md },
-  sectionLabel: {
-    ...typography.small, fontWeight: '800', color: colors.textSecondary,
-    letterSpacing: 1.1, marginTop: spacing.md, marginBottom: spacing.sm,
-  },
-  questionWrap: {
-    borderWidth: 1.5, borderRadius: radius.md, backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 80,
-  },
-  questionInput: { ...typography.body, color: colors.text, lineHeight: 24, textAlignVertical: 'top' },
-  optionRow: {
-    flexDirection: 'row', alignItems: 'center',
-    borderWidth: 1.5, borderRadius: radius.md,
-    marginBottom: spacing.sm, paddingRight: spacing.sm,
-    backgroundColor: colors.surface,
-  },
-  optionInput: { flex: 1, ...typography.body, color: colors.text, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  removeBtn:  { padding: spacing.xs },
-  addBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.md,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    justifyContent: 'center', marginBottom: spacing.md,
-  },
-  addBtnText:  { ...typography.body, fontWeight: '600' },
-  durationRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  durationPill: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  durationText:       { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
-  durationTextActive: { color: '#fff', fontWeight: '700' },
-});
+function makePbStyles(C: AppColors) {
+  return StyleSheet.create({
+    container: { paddingHorizontal: 0, paddingBottom: spacing.md },
+    sectionLabel: {
+      ...typography.small, fontWeight: '800', color: C.textSecondary,
+      letterSpacing: 1.1, marginTop: spacing.md, marginBottom: spacing.sm,
+    },
+    questionWrap: {
+      borderWidth: 1.5, borderRadius: radius.md, backgroundColor: C.surface,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 80,
+    },
+    questionInput: { ...typography.body, color: C.text, lineHeight: 24, textAlignVertical: 'top' },
+    optionRow: {
+      flexDirection: 'row', alignItems: 'center',
+      borderWidth: 1.5, borderRadius: radius.md,
+      marginBottom: spacing.sm, paddingRight: spacing.sm,
+      backgroundColor: C.surface,
+    },
+    optionInput: { flex: 1, ...typography.body, color: C.text, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+    removeBtn:  { padding: spacing.xs },
+    addBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+      borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.md,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      justifyContent: 'center', marginBottom: spacing.md,
+    },
+    addBtnText:  { ...typography.body, fontWeight: '600' },
+    durationRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+    durationPill: {
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderRadius: radius.full, borderWidth: 1.5, borderColor: C.border,
+      backgroundColor: C.surface,
+    },
+    durationText:       { ...typography.caption, color: C.textSecondary, fontWeight: '600' },
+    durationTextActive: { color: '#fff', fontWeight: '700' },
+  });
+}
 
 // ─── Thread / Waves builder ────────────────────────────────────────────────────
 
@@ -245,6 +260,9 @@ function WavesBuilder({
   accentColor: string;
   onLinesChange: (l: string[]) => void;
 }) {
+  const { C } = useTheme();
+  const wv = makeWvStyles(C);
+
   function updateLine(idx: number, text: string) {
     onLinesChange(lines.map((l, i) => (i === idx ? text : l)));
   }
@@ -274,7 +292,7 @@ function WavesBuilder({
               value={line}
               onChangeText={(t) => updateLine(idx, t)}
               placeholder={idx === 0 ? 'Start your wave…' : `Continue wave ${idx + 1}…`}
-              placeholderTextColor={colors.textSecondary}
+              placeholderTextColor={C.textSecondary}
               multiline
               maxLength={500}
               textAlignVertical="top"
@@ -283,7 +301,7 @@ function WavesBuilder({
               <Text style={wv.charCount}>{500 - line.length}</Text>
               {lines.length > 1 && (
                 <TouchableOpacity onPress={() => removeSegment(idx)}>
-                  <Ionicons name="trash-outline" size={16} color={colors.textSecondary} />
+                  <Ionicons name="trash-outline" size={16} color={C.textSecondary} />
                 </TouchableOpacity>
               )}
             </View>
@@ -306,38 +324,43 @@ function WavesBuilder({
   );
 }
 
-const wv = StyleSheet.create({
-  container: { paddingHorizontal: 0, paddingBottom: spacing.md },
-  hint:      { ...typography.small, color: colors.textSecondary, marginBottom: spacing.md },
-  cardRow:   { flexDirection: 'row', marginBottom: spacing.sm },
-  connector: { alignItems: 'center', marginRight: spacing.sm, paddingTop: 6, width: 12 },
-  dot:       { width: 10, height: 10, borderRadius: 5 },
-  vertLine:  { flex: 1, width: 2, marginTop: 4 },
-  card: {
-    flex: 1, borderWidth: 1.5, borderRadius: radius.md,
-    backgroundColor: colors.surface, paddingHorizontal: spacing.md, paddingTop: spacing.sm,
-  },
-  input: {
-    ...typography.body, color: colors.text, lineHeight: 24,
-    minHeight: 72, textAlignVertical: 'top',
-  },
-  cardFooter: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: spacing.xs,
-  },
-  charCount:  { ...typography.small, color: colors.textSecondary },
-  addBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.md,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    justifyContent: 'center', marginTop: spacing.xs,
-  },
-  addBtnText: { ...typography.body, fontWeight: '600' },
-});
+function makeWvStyles(C: AppColors) {
+  return StyleSheet.create({
+    container: { paddingHorizontal: 0, paddingBottom: spacing.md },
+    hint:      { ...typography.small, color: C.textSecondary, marginBottom: spacing.md },
+    cardRow:   { flexDirection: 'row', marginBottom: spacing.sm },
+    connector: { alignItems: 'center', marginRight: spacing.sm, paddingTop: 6, width: 12 },
+    dot:       { width: 10, height: 10, borderRadius: 5 },
+    vertLine:  { flex: 1, width: 2, marginTop: 4 },
+    card: {
+      flex: 1, borderWidth: 1.5, borderRadius: radius.md,
+      backgroundColor: C.surface, paddingHorizontal: spacing.md, paddingTop: spacing.sm,
+    },
+    input: {
+      ...typography.body, color: C.text, lineHeight: 24,
+      minHeight: 72, textAlignVertical: 'top',
+    },
+    cardFooter: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      paddingVertical: spacing.xs,
+    },
+    charCount:  { ...typography.small, color: C.textSecondary },
+    addBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+      borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radius.md,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      justifyContent: 'center', marginTop: spacing.xs,
+    },
+    addBtnText: { ...typography.body, fontWeight: '600' },
+  });
+}
 
 // ─── Main screen ───────────────────────────────────────────────────────────────
 
 export default function CreatePostScreen() {
+  const { C, isDark } = useTheme();
+  const styles = makeStyles(C);
+
   const navigation                    = useNavigation();
   const { firebaseUser, userProfile } = useAuthStore();
 
@@ -364,8 +387,8 @@ export default function CreatePostScreen() {
 
   const [loading, setLoading] = useState(false);
 
-  const tabCfg = TABS.find((t) => t.id === activeTab) ?? TABS[0];
-  const accent = tabCfg.color;
+  const tabCfg = TAB_DEFS.find((t) => t.id === activeTab) ?? TAB_DEFS[0];
+  const accent = tabCfg.colorFn(C);
 
   // ── Caption hashtag tracking ──
   function handleCaptionChange(text: string) {
@@ -493,7 +516,7 @@ export default function CreatePostScreen() {
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
-          <Ionicons name="close" size={26} color={colors.text} />
+          <Ionicons name="close" size={26} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New Post</Text>
         <TouchableOpacity
@@ -512,16 +535,17 @@ export default function CreatePostScreen() {
 
       {/* ── Tab selector ── */}
       <View style={styles.tabsWrap}>
-        {TABS.map((tab) => {
+        {TAB_DEFS.map((tab) => {
           const active = activeTab === tab.id;
+          const tabColor = tab.colorFn(C);
           return (
             <TouchableOpacity
               key={tab.id}
               style={[
                 styles.tab,
                 active
-                  ? { backgroundColor: tab.color, borderColor: tab.color }
-                  : { borderColor: colors.border },
+                  ? { backgroundColor: tabColor, borderColor: tabColor }
+                  : { borderColor: C.border },
               ]}
               onPress={() => switchTab(tab.id)}
               activeOpacity={0.8}
@@ -556,7 +580,7 @@ export default function CreatePostScreen() {
                   value={caption}
                   onChangeText={handleCaptionChange}
                   placeholder="What's on your mind?"
-                  placeholderTextColor={colors.textSecondary}
+                  placeholderTextColor={C.textSecondary}
                   multiline
                   maxLength={500}
                   autoFocus
@@ -604,7 +628,7 @@ export default function CreatePostScreen() {
                     value={caption}
                     onChangeText={handleCaptionChange}
                     placeholder="Write a caption…"
-                    placeholderTextColor={colors.textSecondary}
+                    placeholderTextColor={C.textSecondary}
                     multiline
                     maxLength={500}
                     textAlignVertical="top"
@@ -621,7 +645,7 @@ export default function CreatePostScreen() {
                   value={location}
                   onChangeText={setLocation}
                   placeholder="Add location…"
-                  placeholderTextColor={colors.textSecondary}
+                  placeholderTextColor={C.textSecondary}
                   maxLength={80}
                 />
               </View>
@@ -695,89 +719,91 @@ export default function CreatePostScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  closeBtn:            { padding: spacing.xs },
-  headerTitle:         { ...typography.body, fontWeight: '700', color: colors.text },
-  postBtn: {
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-    borderRadius: radius.full, minWidth: 64, alignItems: 'center',
-  },
-  postBtnDisabled:     { backgroundColor: colors.border },
-  postBtnText:         { ...typography.caption, fontWeight: '700', color: '#fff' },
-  postBtnTextDisabled: { color: colors.textSecondary },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    closeBtn:            { padding: spacing.xs },
+    headerTitle:         { ...typography.body, fontWeight: '700', color: C.text },
+    postBtn: {
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+      borderRadius: radius.full, minWidth: 64, alignItems: 'center',
+    },
+    postBtnDisabled:     { backgroundColor: C.border },
+    postBtnText:         { ...typography.caption, fontWeight: '700', color: '#fff' },
+    postBtnTextDisabled: { color: C.textSecondary },
 
-  tabsWrap: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    gap: spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  tab: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 4, paddingVertical: 8, borderRadius: radius.md, borderWidth: 1.5,
-    backgroundColor: colors.surface,
-  },
-  tabEmoji:       { fontSize: 14 },
-  tabLabel:       { ...typography.small, fontWeight: '600', color: colors.textSecondary },
-  tabLabelActive: { color: '#fff', fontWeight: '700' },
+    tabsWrap: {
+      flexDirection: 'row',
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      gap: spacing.sm,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+      backgroundColor: C.background,
+    },
+    tab: {
+      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+      gap: 4, paddingVertical: 8, borderRadius: radius.md, borderWidth: 1.5,
+      backgroundColor: C.surface,
+    },
+    tabEmoji:       { fontSize: 14 },
+    tabLabel:       { ...typography.small, fontWeight: '600', color: C.textSecondary },
+    tabLabelActive: { color: '#fff', fontWeight: '700' },
 
-  scroll: { padding: spacing.md, paddingBottom: spacing.xxl },
+    scroll: { padding: spacing.md, paddingBottom: spacing.xxl },
 
-  composeRow:  { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', marginBottom: spacing.md },
-  composeRight: { flex: 1 },
-  displayName:  { ...typography.caption, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
+    composeRow:  { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', marginBottom: spacing.md },
+    composeRight: { flex: 1 },
+    displayName:  { ...typography.caption, fontWeight: '700', color: C.text, marginBottom: spacing.xs },
 
-  captionInput: {
-    borderWidth: 1.5, borderRadius: radius.md, backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 120,
-    ...typography.body, color: colors.text, lineHeight: 24, textAlignVertical: 'top',
-  },
-  charRow: { alignItems: 'flex-end', marginTop: spacing.xs },
+    captionInput: {
+      borderWidth: 1.5, borderRadius: radius.md, backgroundColor: C.surface,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 120,
+      ...typography.body, color: C.text, lineHeight: 24, textAlignVertical: 'top',
+    },
+    charRow: { alignItems: 'flex-end', marginTop: spacing.xs },
 
-  imagePicker: {
-    height: 200, borderRadius: radius.lg, borderWidth: 2, borderStyle: 'dashed',
-    backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
-    gap: spacing.sm, marginBottom: spacing.md,
-  },
-  imagePickerText: { ...typography.body, fontWeight: '600' },
-  imagePreviewWrap: {
-    height: 280, borderRadius: radius.lg, overflow: 'hidden',
-    marginBottom: spacing.md, position: 'relative',
-  },
-  imagePreview: { width: '100%', height: '100%' },
-  removeImageBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm },
-  removeBadge: {
-    width: 26, height: 26, borderRadius: 13,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  changeImageBtn: {
-    position: 'absolute', bottom: spacing.sm, right: spacing.sm,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: spacing.sm, paddingVertical: 4,
-    borderRadius: radius.full,
-  },
-  changeImageText: { ...typography.small, color: '#fff', fontWeight: '600' },
+    imagePicker: {
+      height: 200, borderRadius: radius.lg, borderWidth: 2, borderStyle: 'dashed',
+      backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center',
+      gap: spacing.sm, marginBottom: spacing.md,
+    },
+    imagePickerText: { ...typography.body, fontWeight: '600' },
+    imagePreviewWrap: {
+      height: 280, borderRadius: radius.lg, overflow: 'hidden',
+      marginBottom: spacing.md, position: 'relative',
+    },
+    imagePreview: { width: '100%', height: '100%' },
+    removeImageBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm },
+    removeBadge: {
+      width: 26, height: 26, borderRadius: 13,
+      backgroundColor: 'rgba(0,0,0,0.65)',
+      alignItems: 'center', justifyContent: 'center',
+    },
+    changeImageBtn: {
+      position: 'absolute', bottom: spacing.sm, right: spacing.sm,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      paddingHorizontal: spacing.sm, paddingVertical: 4,
+      borderRadius: radius.full,
+    },
+    changeImageText: { ...typography.small, color: '#fff', fontWeight: '600' },
 
-  locationRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    borderWidth: 1, borderRadius: radius.md, backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm,
-  },
-  locationInput: { flex: 1, ...typography.body, color: colors.text },
+    locationRow: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+      borderWidth: 1, borderRadius: radius.md, backgroundColor: C.surface,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm,
+    },
+    locationInput: { flex: 1, ...typography.body, color: C.text },
 
-  toolbar: {
-    flexDirection: 'row', gap: spacing.md,
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-    borderTopWidth: 1, backgroundColor: colors.background,
-  },
-  toolbarBtn: { padding: spacing.xs },
-});
+    toolbar: {
+      flexDirection: 'row', gap: spacing.md,
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+      borderTopWidth: 1, backgroundColor: C.background,
+    },
+    toolbarBtn: { padding: spacing.xs },
+  });
+}

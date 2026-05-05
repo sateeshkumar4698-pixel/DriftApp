@@ -17,7 +17,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { sendConnectionRequest } from '../../utils/firestore-helpers';
 import Avatar from '../../components/Avatar';
-import { colors, spacing, typography, radius, shadows } from '../../utils/theme';
+import { spacing, typography, radius, shadows } from '../../utils/theme';
+import { useTheme, AppColors } from '../../utils/useTheme';
 import { DiscoverStackParamList } from '../../types';
 
 type RouteProps = RouteProp<DiscoverStackParamList, 'ConnectRequest'>;
@@ -35,6 +36,8 @@ const PROMPT_STARTERS = [
 ];
 
 export default function ConnectRequestScreen() {
+  const { C, isDark } = useTheme();
+  const styles = makeStyles(C);
   const navigation = useNavigation();
   const route = useRoute<RouteProps>();
   const { user } = route.params;
@@ -74,7 +77,7 @@ export default function ConnectRequestScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
+          <Ionicons name="chevron-back" size={24} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Connect</Text>
         <View style={{ width: 32 }} />
@@ -125,7 +128,7 @@ export default function ConnectRequestScreen() {
               value={note}
               onChangeText={setNote}
               placeholder={`Write something genuine to ${user.name}...`}
-              placeholderTextColor={colors.textSecondary}
+              placeholderTextColor={C.textSecondary}
               multiline
               maxLength={MAX_CHARS}
               textAlignVertical="top"
@@ -139,7 +142,7 @@ export default function ConnectRequestScreen() {
                     styles.progressFill,
                     {
                       width: `${Math.min((note.trim().length / MIN_CHARS) * 100, 100)}%`,
-                      backgroundColor: isReady ? colors.success : colors.primary,
+                      backgroundColor: isReady ? C.success : C.primary,
                     },
                   ]}
                 />
@@ -192,7 +195,7 @@ export default function ConnectRequestScreen() {
             disabled={!isReady || loading}
           >
             {loading ? (
-              <ActivityIndicator color={colors.background} />
+              <ActivityIndicator color={C.background} />
             ) : (
               <>
                 <Text style={styles.sendBtnIcon}>🤝</Text>
@@ -208,98 +211,100 @@ export default function ConnectRequestScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+function makeStyles(C: AppColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: C.background },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { ...typography.heading, color: colors.text },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { ...typography.heading, color: C.text },
 
-  scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
+    scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
 
-  toCard: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    padding: spacing.md, marginBottom: spacing.lg, ...shadows.card,
-  },
-  toInfo: { flex: 1 },
-  toName: { ...typography.body, fontWeight: '700', color: colors.text },
-  toCity: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-  toVibes: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.xs },
-  vibePill: {
-    paddingHorizontal: spacing.sm, paddingVertical: 2,
-    borderRadius: radius.full, backgroundColor: `${colors.secondary}15`,
-  },
-  vibePillText: { ...typography.small, color: colors.secondary, fontWeight: '600' },
+    toCard: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+      backgroundColor: C.surface, borderRadius: radius.md,
+      padding: spacing.md, marginBottom: spacing.lg, ...shadows.card,
+    },
+    toInfo: { flex: 1 },
+    toName: { ...typography.body, fontWeight: '700', color: C.text },
+    toCity: { ...typography.caption, color: C.textSecondary, marginTop: 2 },
+    toVibes: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.xs },
+    vibePill: {
+      paddingHorizontal: spacing.sm, paddingVertical: 2,
+      borderRadius: radius.full, backgroundColor: `${C.secondary}15`,
+    },
+    vibePillText: { ...typography.small, color: C.secondary, fontWeight: '600' },
 
-  promptSection: { marginBottom: spacing.md },
-  promptTitle: { ...typography.heading, color: colors.text, marginBottom: spacing.sm },
-  promptSubtitle: {
-    ...typography.body, color: colors.textSecondary, lineHeight: 24,
-  },
+    promptSection: { marginBottom: spacing.md },
+    promptTitle: { ...typography.heading, color: C.text, marginBottom: spacing.sm },
+    promptSubtitle: {
+      ...typography.body, color: C.textSecondary, lineHeight: 24,
+    },
 
-  inputWrapper: {
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    marginBottom: spacing.lg,
-    overflow: 'hidden',
-  },
-  noteInput: {
-    padding: spacing.md,
-    ...typography.body,
-    color: colors.text,
-    minHeight: 120,
-    lineHeight: 24,
-  },
-  inputFooter: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.sm,
-  },
-  progressBar: {
-    flex: 1, height: 4, backgroundColor: colors.border,
-    borderRadius: radius.full, overflow: 'hidden',
-  },
-  progressFill: { height: '100%', borderRadius: radius.full },
-  charCount: { ...typography.small, color: colors.textSecondary },
-  charCountWarning: { color: colors.error },
+    inputWrapper: {
+      borderRadius: radius.md,
+      borderWidth: 1.5,
+      borderColor: C.border,
+      backgroundColor: C.surface,
+      marginBottom: spacing.lg,
+      overflow: 'hidden',
+    },
+    noteInput: {
+      padding: spacing.md,
+      ...typography.body,
+      color: C.text,
+      minHeight: 120,
+      lineHeight: 24,
+    },
+    inputFooter: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderTopWidth: 1, borderTopColor: C.border, gap: spacing.sm,
+    },
+    progressBar: {
+      flex: 1, height: 4, backgroundColor: C.border,
+      borderRadius: radius.full, overflow: 'hidden',
+    },
+    progressFill: { height: '100%', borderRadius: radius.full },
+    charCount: { ...typography.small, color: C.textSecondary },
+    charCountWarning: { color: C.error },
 
-  startersSection: { marginBottom: spacing.lg },
-  startersLabel: { ...typography.caption, color: colors.textSecondary, marginBottom: spacing.sm, fontWeight: '600' },
-  startersList: { flexDirection: 'row', gap: spacing.sm },
-  starterChip: {
-    width: 160, padding: spacing.sm, borderRadius: radius.md,
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
-  },
-  starterChipActive: { backgroundColor: `${colors.primary}15`, borderColor: colors.primary },
-  starterText: { ...typography.small, color: colors.textSecondary, lineHeight: 18 },
-  starterTextActive: { color: colors.primary },
+    startersSection: { marginBottom: spacing.lg },
+    startersLabel: { ...typography.caption, color: C.textSecondary, marginBottom: spacing.sm, fontWeight: '600' },
+    startersList: { flexDirection: 'row', gap: spacing.sm },
+    starterChip: {
+      width: 160, padding: spacing.sm, borderRadius: radius.md,
+      backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    },
+    starterChipActive: { backgroundColor: `${C.primary}15`, borderColor: C.primary },
+    starterText: { ...typography.small, color: C.textSecondary, lineHeight: 18 },
+    starterTextActive: { color: C.primary },
 
-  tipsCard: {
-    backgroundColor: `${colors.secondary}08`,
-    borderRadius: radius.md, padding: spacing.md,
-    borderLeftWidth: 3, borderLeftColor: colors.secondary,
-  },
-  tipsTitle: { ...typography.caption, fontWeight: '700', color: colors.secondary, marginBottom: spacing.sm },
-  tipLine: { ...typography.caption, color: colors.textSecondary, lineHeight: 22 },
+    tipsCard: {
+      backgroundColor: `${C.secondary}08`,
+      borderRadius: radius.md, padding: spacing.md,
+      borderLeftWidth: 3, borderLeftColor: C.secondary,
+    },
+    tipsTitle: { ...typography.caption, fontWeight: '700', color: C.secondary, marginBottom: spacing.sm },
+    tipLine: { ...typography.caption, color: C.textSecondary, lineHeight: 22 },
 
-  sendBar: {
-    padding: spacing.lg, paddingBottom: spacing.xl,
-    borderTopWidth: 1, borderTopColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  sendBtn: {
-    backgroundColor: colors.primary, borderRadius: radius.lg,
-    paddingVertical: spacing.md, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: spacing.sm, ...shadows.card,
-  },
-  sendBtnDisabled: { opacity: 0.5 },
-  sendBtnIcon: { fontSize: 20 },
-  sendBtnText: { ...typography.body, color: colors.background, fontWeight: '700' },
-});
+    sendBar: {
+      padding: spacing.lg, paddingBottom: spacing.xl,
+      borderTopWidth: 1, borderTopColor: C.border,
+      backgroundColor: C.background,
+    },
+    sendBtn: {
+      backgroundColor: C.primary, borderRadius: radius.lg,
+      paddingVertical: spacing.md, flexDirection: 'row',
+      alignItems: 'center', justifyContent: 'center', gap: spacing.sm, ...shadows.card,
+    },
+    sendBtnDisabled: { opacity: 0.5 },
+    sendBtnIcon: { fontSize: 20 },
+    sendBtnText: { ...typography.body, color: C.background, fontWeight: '700' },
+  });
+}
