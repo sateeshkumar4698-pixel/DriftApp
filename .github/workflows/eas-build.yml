@@ -32,15 +32,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Set up Expo & EAS
-        uses: expo/expo-github-action@v8
-        with:
-          expo-version: latest
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Install EAS CLI
+        run: npm install -g eas-cli@latest
 
-      - name: Build Android APK
+      - name: Build Android APK (submitted to EAS cloud)
         # On push → always use 'preview'. Manual dispatch uses chosen profile.
-        run: eas build --profile ${{ inputs.profile || 'preview' }} --platform android --non-interactive
+        # --no-wait: CI just submits the build; EAS emails you when APK is ready.
+        run: eas build --profile ${{ inputs.profile || 'preview' }} --platform android --non-interactive --no-wait
         env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_PUBLIC_BACKEND_URL: ${{ secrets.BACKEND_URL }}
