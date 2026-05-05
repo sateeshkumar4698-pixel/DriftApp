@@ -120,9 +120,11 @@ export async function getDiscoverFeed(
     ? Math.min((pageSize + excludeSet.size) * 4, 200)
     : pageSize + excludeSet.size + 5;
 
+  // NOTE: We intentionally do NOT filter `isBanned == false` in the Firestore
+  // query because Firestore equality filters exclude documents that are missing
+  // the field entirely (new sign-ups before the field was added won't appear).
+  // Instead we filter client-side so every valid profile is discoverable.
   const constraints: QueryConstraint[] = [
-    where('isBanned', '==', false),
-    orderBy('profileCompleteness', 'desc'),
     orderBy('createdAt', 'desc'),
     limit(fetchSize),
   ];
@@ -131,7 +133,11 @@ export async function getDiscoverFeed(
   const snap = await getDocs(query(collection(db, 'users'), ...constraints));
   let users = snap.docs
     .filter((d) => !excludeSet.has(d.id))
-    .map((d) => d.data() as UserProfile);
+    .map((d) => d.data() as UserProfile)
+    // Client-side: hide only users explicitly banned (missing field = not banned)
+    .filter((u) => u.isBanned !== true)
+    // Must have completed at least the basic profile setup
+    .filter((u) => u.name && u.createdAt);
 
   // ── Vibe-sort when we have a mood + current user profile ──────────────────
   if (currentUser && mood) {

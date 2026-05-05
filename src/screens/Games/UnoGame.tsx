@@ -158,6 +158,37 @@ const CARD_H = 108;
 const DISCARD_W = 96;
 const DISCARD_H = 144;
 
+// ─── Card-level styles (no theme colours needed) ─────────────────────────────
+const cardStyles = StyleSheet.create({
+  card: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  cardFaceDown: {
+    position: 'absolute',
+    top: 6, left: 6, right: 6, bottom: 6,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  cardOval: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardSymbol: { fontWeight: '900', textAlign: 'center' },
+  cardCornerText: { position: 'absolute', fontWeight: '900' },
+  cardGlow: {
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+});
+
 // ─── Sub-Components ───────────────────────────────────────────────────────────
 
 interface UnoCardProps {
@@ -181,11 +212,11 @@ function UnoCard({ card, playable = true, onPress, size = 'normal', faceDown = f
   if (faceDown) {
     return (
       <View style={[
-        styles.card,
+        cardStyles.card,
         { width: w, height: h, backgroundColor: '#1a1a2e', borderRadius: radius.md },
         shadows.card,
       ]}>
-        <View style={[styles.cardFaceDown, { borderRadius: radius.sm }]} />
+        <View style={[cardStyles.cardFaceDown, { borderRadius: radius.sm }]} />
       </View>
     );
   }
@@ -201,7 +232,7 @@ function UnoCard({ card, playable = true, onPress, size = 'normal', faceDown = f
       disabled={!onPress || !playable}
       activeOpacity={0.8}
       style={[
-        styles.card,
+        cardStyles.card,
         {
           width: w,
           height: h,
@@ -212,7 +243,7 @@ function UnoCard({ card, playable = true, onPress, size = 'normal', faceDown = f
           opacity: onPress && !playable ? 0.45 : 1,
         },
         shadows.card,
-        playable && onPress ? styles.cardGlow : null,
+        playable && onPress ? cardStyles.cardGlow : null,
       ]}
     >
       {/* Wild stripes */}
@@ -225,13 +256,13 @@ function UnoCard({ card, playable = true, onPress, size = 'normal', faceDown = f
       )}
 
       {/* Top-left corner */}
-      <Text style={[styles.cardCornerText, { fontSize: cornerSize, color: labelColor, top: 4, left: 5 }]}>
+      <Text style={[cardStyles.cardCornerText, { fontSize: cornerSize, color: labelColor, top: 4, left: 5 }]}>
         {symbol}
       </Text>
 
       {/* Center oval */}
       <View style={[
-        styles.cardOval,
+        cardStyles.cardOval,
         {
           width: ovalW,
           height: ovalH,
@@ -239,14 +270,14 @@ function UnoCard({ card, playable = true, onPress, size = 'normal', faceDown = f
           transform: [{ rotate: '25deg' }],
         },
       ]}>
-        <Text style={[styles.cardSymbol, { fontSize: symbolSize, color: bg }]}>
+        <Text style={[cardStyles.cardSymbol, { fontSize: symbolSize, color: bg }]}>
           {symbol}
         </Text>
       </View>
 
       {/* Bottom-right corner (rotated) */}
       <Text style={[
-        styles.cardCornerText,
+        cardStyles.cardCornerText,
         { fontSize: cornerSize, color: labelColor, bottom: 4, right: 5, transform: [{ rotate: '180deg' }] },
       ]}>
         {symbol}
@@ -963,45 +994,6 @@ export default function UnoGame() {
 
 function makeStyles(C: AppColors) {
   return StyleSheet.create({
-
-  // ── Card Component ──
-
-  card: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  cardFaceDown: {
-    position: 'absolute',
-    top: 6,
-    left: 6,
-    right: 6,
-    bottom: 6,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  cardOval: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardSymbol: {
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  cardCornerText: {
-    position: 'absolute',
-    fontWeight: '900',
-  },
-  cardGlow: {
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 12,
-    elevation: 12,
-  },
 
   // ── Setup Screen ──
 
