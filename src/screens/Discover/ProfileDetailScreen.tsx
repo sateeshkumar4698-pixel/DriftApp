@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -37,6 +38,30 @@ import { dynamicVibeMatch, MatchBreakdown } from '../../utils/vibeMatch';
 import { useMoodStore, MOOD_META } from '../../store/moodStore';
 
 type RouteProps = RouteProp<DiscoverStackParamList, 'ProfileDetail'>;
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const CHIP_PALETTE = [
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+  '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
+  '#FFB347', '#87CEEB',
+];
+
+const HERO_HEIGHT = 280;
+
+const LOOKING_FOR_COLORS: Record<string, string> = {
+  friends:    '#00B894',
+  dating:     '#FF4B6E',
+  networking: '#0984E3',
+  events:     '#E17055',
+};
+
+const LOOKING_FOR_LABELS: Record<string, string> = {
+  friends:    '👫 Friends',
+  dating:     '💘 Dating',
+  networking: '💼 Networking',
+  events:     '🎉 Events',
+};
 
 // ─── Vibe Bar ──────────────────────────────────────────────────────────────────
 function VibeBar({ label, value, color }: { label: string; value: number; color: string }) {
@@ -131,6 +156,46 @@ function PhotoDots({ count, activeIdx }: { count: number; activeIdx: number }) {
   );
 }
 
+// ─── Hero Photo Carousel (full-bleed) ─────────────────────────────────────────
+function HeroPhotoCarousel({ photos, name, photoURL }: { photos?: string[]; name: string; photoURL?: string }) {
+  const allPhotos = photos?.length ? photos : (photoURL ? [photoURL] : []);
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  if (allPhotos.length === 0) return null;
+
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <FlatList
+        data={allPhotos}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(_, i) => String(i)}
+        onMomentumScrollEnd={(e) => {
+          setActiveIdx(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH));
+        }}
+        renderItem={({ item }) => (
+          <Image
+            source={{ uri: item }}
+            style={{ width: SCREEN_WIDTH, height: HERO_HEIGHT, resizeMode: 'cover' }}
+          />
+        )}
+      />
+      {/* Dot indicators */}
+      {allPhotos.length > 1 && (
+        <View style={{ position: 'absolute', bottom: 60, width: '100%', flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
+          {allPhotos.map((_, i) => (
+            <View key={i} style={{
+              width: i === activeIdx ? 18 : 6, height: 4, borderRadius: 2,
+              backgroundColor: i === activeIdx ? '#fff' : 'rgba(255,255,255,0.45)',
+            }} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ─── Section Header ───────────────────────────────────────────────────────────
 function SectionHeader({ title }: { title: string }) {
   const { C } = useTheme();
@@ -145,13 +210,6 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
-const LOOKING_FOR_LABELS: Record<string, string> = {
-  friends: '👫 Friends',
-  dating: '💘 Dating',
-  networking: '💼 Networking',
-  events: '🎉 Events',
-};
-
 // ─── Match Breakdown Card ─────────────────────────────────────────────────────────────
 function MatchBreakdownCard({
   score,
@@ -165,7 +223,6 @@ function MatchBreakdownCard({
   const { C } = useTheme();
   const moodMeta = MOOD_META[mood];
 
-  // Badge appearance
   const badgeBg   = score >= 85 ? '#FF4B6E' : score >= 70 ? '#6C5CE7' : score >= 50 ? '#0984E3' : C.border;
   const badgeEmoji = score >= 85 ? '🔥' : score >= 70 ? '💜' : score >= 50 ? '💙' : '';
 
@@ -173,7 +230,6 @@ function MatchBreakdownCard({
 
   return (
     <View style={[mbc.card, { backgroundColor: C.surface, borderColor: badgeBg + '40' }]}>
-      {/* Header */}
       <View style={mbc.header}>
         <View style={[mbc.scorePill, { backgroundColor: badgeBg }]}>
           {badgeEmoji ? <Text style={mbc.badgeEmoji}>{badgeEmoji}</Text> : null}
@@ -185,7 +241,6 @@ function MatchBreakdownCard({
         </View>
       </View>
 
-      {/* Breakdown rows */}
       {breakdown.sharedVibes.length > 0 && (
         <View style={mbc.row}>
           <Text style={mbc.rowEmoji}>✨</Text>
@@ -256,7 +311,7 @@ const mbc = StyleSheet.create({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function ProfileDetailScreen() {
-  const { C } = useTheme();
+  const { C, isDark } = useTheme();
   const styles = makeStyles(C);
   const navigation = useNavigation<NativeStackNavigationProp<DiscoverStackParamList>>();
   const route = useRoute<RouteProps>();
@@ -321,6 +376,13 @@ export default function ProfileDetailScreen() {
     extrapolate: 'clamp',
   });
 
+  // Hero parallax
+  const heroTranslate = scrollY.interpolate({
+    inputRange: [-80, 0, HERO_HEIGHT],
+    outputRange: [40, 0, -HERO_HEIGHT * 0.4],
+    extrapolate: 'clamp',
+  });
+
   useEffect(() => {
     async function load() {
       if (!firebaseUser_) return;
@@ -373,17 +435,23 @@ export default function ProfileDetailScreen() {
       ]
     : [];
 
-  return (
-    <SafeAreaView style={styles.flex} edges={['top']}>
-      <View style={styles.topBar}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={26} color={C.text} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.reportBtn} onPress={handleMoreMenu}>
-          <Text style={styles.reportIcon}>⋯</Text>
-        </TouchableOpacity>
-      </View>
+  // Pick a hero gradient based on primary vibe or fallback
+  const primaryVibe  = vibe?.primaryVibes?.[0] ?? '';
+  const vibeGradients: Record<string, readonly [string, string, string]> = {
+    chill:     ['#6C5CE7', '#A855F7', '#0984E3'],
+    energetic: ['#FF4B6E', '#FF8C42', '#FFD700'],
+    creative:  ['#E17055', '#FDCB6E', '#FF4B6E'],
+    romantic:  ['#FF4B6E', '#C2185B', '#6C5CE7'],
+    social:    ['#00B894', '#0984E3', '#6C5CE7'],
+    focused:   ['#0984E3', '#00B4D8', '#00E676'],
+    adventurous: ['#E17055', '#FF8C42', '#FFD700'],
+  };
+  const heroGrad: readonly [string, string, string] = vibeGradients[primaryVibe.toLowerCase()] ?? ['#1A0A2E', '#0D1744', '#6C5CE7'];
 
+  const hasPhotos = (user.photos?.length ?? 0) > 0 || !!user.photoURL;
+
+  return (
+    <View style={styles.flex}>
       <Animated.ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -392,208 +460,417 @@ export default function ProfileDetailScreen() {
         })}
         scrollEventThrottle={16}
       >
-        {(user.photos?.length ?? 0) > 0 ? (
-          <View style={styles.carouselWrapper}>
-            <PhotoCarousel photos={user.photos} name={user.name} photoURL={user.photoURL} />
-            {user.isVerified && (
-              <View style={styles.verifiedBadgeOverlay}>
-                <Text style={styles.verifiedOverlayText}>✓ Verified</Text>
+        {/* ── Hero Section ──────────────────────────────────────────────────── */}
+        <View style={styles.hero}>
+          {/* Background: photo carousel OR gradient */}
+          {hasPhotos ? (
+            <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateY: heroTranslate }] }]}>
+              <HeroPhotoCarousel photos={user.photos} name={user.name} photoURL={user.photoURL} />
+            </Animated.View>
+          ) : (
+            <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateY: heroTranslate }] }]}>
+              <LinearGradient
+                colors={heroGrad}
+                style={StyleSheet.absoluteFill}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              />
+              {/* Decorative circles */}
+              <View style={styles.heroBubble1} />
+              <View style={styles.heroBubble2} />
+            </Animated.View>
+          )}
+
+          {/* Dark scrim at bottom for text legibility */}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.72)']}
+            style={styles.heroScrim}
+            start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+          />
+
+          {/* Avatar centered in lower half */}
+          <Animated.View style={[styles.heroAvatarWrap, { transform: [{ scale: avatarScale }] }]}>
+            <LinearGradient
+              colors={['#FF4B6E', '#6C5CE7']}
+              style={styles.heroAvatarRing}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            >
+              <View style={[styles.heroAvatarInner, { backgroundColor: isDark ? '#0D0D1A' : '#fff' }]}>
+                <Avatar name={user.name} photoURL={user.photoURL} size={94} />
               </View>
-            )}
-          </View>
-        ) : (
-          <Animated.View style={[styles.heroSection, { transform: [{ scale: avatarScale }] }]}>
-            <Avatar name={user.name} photoURL={user.photoURL} size={100} />
-            {user.isVerified && (
-              <View style={styles.verifiedRow}>
-                <Text style={styles.verifiedText}>✓ Verified</Text>
-              </View>
-            )}
+            </LinearGradient>
           </Animated.View>
-        )}
 
-        <View style={styles.nameSection}>
-          <Text style={styles.name}>{user.name}{user.age ? `, ${user.age}` : ''}</Text>
-          {user.city && <Text style={styles.city}>📍 {user.city}</Text>}
-          <View style={styles.metaRow}>
-            {user.college && <Text style={styles.metaTag}>🎓 {user.college}</Text>}
-            {user.work    && <Text style={styles.metaTag}>💼 {user.work}</Text>}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.lookingForRow}>
-            {(user.lookingFor ?? []).map((item) => (
-              <View key={item} style={styles.lookingForChip}>
-                <Text style={styles.lookingForText}>{LOOKING_FOR_LABELS[item]}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <SectionHeader title="About" />
-          <Text style={styles.bio}>{user.bio}</Text>
-        </View>
-
-        <View style={styles.section}>
-          <SectionHeader title="Interests" />
-          <View style={styles.chipsRow}>
-            {(user.interests ?? []).map((interest) => (
-              <View key={interest} style={styles.interestChip}>
-                <Text style={styles.interestChipText}>{interest}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {vibe && vibeAxes.length > 0 && (
-          <View style={styles.section}>
-            <SectionHeader title="Vibe" />
-            <View style={[styles.card, { padding: spacing.md }]}>
-              {vibeAxes.map((axis) => (
-                <VibeBar key={axis.label} {...axis} />
-              ))}
-              <View style={styles.primaryVibesRow}>
-                {vibe.primaryVibes.slice(0, 3).map((v) => (
-                  <View key={v} style={styles.primaryVibeChip}>
-                    <Text style={styles.primaryVibeText}>{v}</Text>
-                  </View>
-                ))}
-              </View>
-              {vibe.nightlifeStyle && (
-                <Text style={styles.nightlifeText}>
-                  🌙 Nightlife style: <Text style={{ fontWeight: '600' }}>{vibe.nightlifeStyle}</Text>
-                </Text>
+          {/* Name / age / city overlaid at bottom */}
+          <View style={styles.heroMeta}>
+            <View style={styles.heroNameRow}>
+              <Text style={styles.heroName}>{user.name}</Text>
+              {user.age ? <Text style={styles.heroAge}>{user.age}</Text> : null}
+              {user.isVerified && (
+                <View style={styles.verifiedBadge}>
+                  <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                </View>
               )}
             </View>
+            {user.city ? (
+              <Text style={styles.heroCity}>📍 {user.city}</Text>
+            ) : null}
           </View>
-        )}
+        </View>
 
-        {/* Match Breakdown Card */}
-        {matchResult && matchResult.score > 0 && (
-          <View style={styles.section}>
-            <SectionHeader title="Your Match" />
-            <MatchBreakdownCard
-              score={matchResult.score}
-              breakdown={matchResult.breakdown}
-              mood={moodPreset}
-            />
-          </View>
-        )}
+        {/* ── Content ──────────────────────────────────────────────────────── */}
+        <View style={styles.contentWrap}>
 
-        {memories.length > 0 && (
-          <View style={styles.section}>
-            <SectionHeader title="Memories & Moments" />
-            {loading ? (
-              <ActivityIndicator color={C.primary} />
-            ) : (
-              memories.map((m) => <MemoryPill key={m.id} memory={m} />)
-            )}
-          </View>
-        )}
+          {/* Meta pills: city + college/work */}
+          {(user.college || user.work) && (
+            <View style={styles.metaPillsRow}>
+              {user.college && (
+                <View style={[styles.metaPill, { backgroundColor: C.surface, borderColor: C.border }]}>
+                  <Text style={styles.metaPillText}>🎓 {user.college}</Text>
+                </View>
+              )}
+              {user.work && (
+                <View style={[styles.metaPill, { backgroundColor: C.surface, borderColor: C.border }]}>
+                  <Text style={styles.metaPillText}>💼 {user.work}</Text>
+                </View>
+              )}
+            </View>
+          )}
 
-        <View style={{ height: 100 }} />
+          {/* Looking For chips */}
+          {(user.lookingFor ?? []).length > 0 && (
+            <View style={styles.lookingForRow}>
+              {(user.lookingFor ?? []).map((item) => {
+                const color = LOOKING_FOR_COLORS[item] ?? C.primary;
+                return (
+                  <View key={item} style={[styles.lookingForChip, { backgroundColor: color + '18', borderColor: color + '50', borderWidth: 1 }]}>
+                    <Text style={[styles.lookingForText, { color }]}>{LOOKING_FOR_LABELS[item]}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Bio */}
+          {!!user.bio && (
+            <View style={styles.section}>
+              <SectionHeader title="About" />
+              <Text style={styles.bio}>{user.bio}</Text>
+            </View>
+          )}
+
+          {/* Interests */}
+          {(user.interests ?? []).length > 0 && (
+            <View style={styles.section}>
+              <SectionHeader title="Interests" />
+              <View style={styles.chipsRow}>
+                {(user.interests ?? []).map((interest, idx) => {
+                  const color = CHIP_PALETTE[idx % CHIP_PALETTE.length];
+                  return (
+                    <View
+                      key={interest}
+                      style={[styles.interestChip, { backgroundColor: color + '1A', borderColor: color + '55', borderWidth: 1 }]}
+                    >
+                      <Text style={[styles.interestChipText, { color }]}>{interest}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          {/* Vibe section */}
+          {vibe && vibeAxes.length > 0 && (
+            <View style={styles.section}>
+              <SectionHeader title="Vibe" />
+              <View style={[styles.vibeCard, { backgroundColor: C.surface, borderColor: C.primary + '40' }]}>
+                {vibeAxes.map((axis) => (
+                  <VibeBar key={axis.label} {...axis} />
+                ))}
+                <View style={styles.primaryVibesRow}>
+                  {vibe.primaryVibes.slice(0, 3).map((v) => (
+                    <View key={v} style={[styles.primaryVibeChip, { backgroundColor: C.secondary + '20', borderColor: C.secondary + '40', borderWidth: 1 }]}>
+                      <Text style={[styles.primaryVibeText, { color: C.secondary }]}>{v}</Text>
+                    </View>
+                  ))}
+                </View>
+                {vibe.nightlifeStyle && (
+                  <Text style={[styles.nightlifeText, { color: C.textSecondary }]}>
+                    🌙 Nightlife style: <Text style={{ fontWeight: '600' }}>{vibe.nightlifeStyle}</Text>
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Match Breakdown Card */}
+          {matchResult && matchResult.score > 0 && (
+            <View style={styles.section}>
+              <SectionHeader title="Your Match" />
+              <MatchBreakdownCard
+                score={matchResult.score}
+                breakdown={matchResult.breakdown}
+                mood={moodPreset}
+              />
+            </View>
+          )}
+
+          {/* Memories */}
+          {memories.length > 0 && (
+            <View style={styles.section}>
+              <SectionHeader title="Memories & Moments" />
+              {loading ? (
+                <ActivityIndicator color={C.primary} />
+              ) : (
+                memories.map((m) => <MemoryPill key={m.id} memory={m} />)
+              )}
+            </View>
+          )}
+
+          <View style={{ height: 110 }} />
+        </View>
       </Animated.ScrollView>
 
+      {/* ── Floating nav buttons over hero ───────────────────────────────── */}
+      <SafeAreaView style={styles.floatingNav} edges={['top']} pointerEvents="box-none">
+        <TouchableOpacity style={styles.floatBtn} onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.floatBtn} onPress={handleMoreMenu}>
+          <Text style={styles.moreIcon}>⋯</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+
+      {/* ── Footer CTA ──────────────────────────────────────────────────────── */}
       <View style={styles.footer}>
         {connectionState === 'pending_sent' ? (
-          <View style={styles.pendingRow}>
-            <Text style={styles.pendingText}>⏳ Connect request sent — waiting for response</Text>
+          <View style={[styles.pendingRow, { backgroundColor: C.surface }]}>
+            <Text style={[styles.pendingText, { color: C.textSecondary }]}>⏳ Connect request sent — waiting for response</Text>
           </View>
         ) : connectionState === 'pending_received' ? (
-          <View style={styles.pendingRow}>
-            <Text style={styles.pendingText}>
+          <View style={[styles.pendingRow, { backgroundColor: C.surface }]}>
+            <Text style={[styles.pendingText, { color: C.textSecondary }]}>
               💌 {user.name} wants to connect with you! Check Connections.
             </Text>
           </View>
         ) : (
           <TouchableOpacity
-            style={[styles.connectBtn, connectionState === 'connected' && styles.connectedBtn]}
             onPress={handleConnectPress}
             disabled={actionLoading}
+            activeOpacity={0.88}
           >
-            {actionLoading ? (
-              <ActivityIndicator color="#fff" />
+            {connectionState === 'connected' ? (
+              <LinearGradient
+                colors={['#6C5CE7', '#A855F7']}
+                style={styles.ctaBtn}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              >
+                {actionLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Text style={styles.ctaBtnIcon}>💬</Text>
+                    <Text style={styles.ctaBtnText}>Message {user.name}</Text>
+                  </>
+                )}
+              </LinearGradient>
             ) : (
-              <>
-                <Text style={styles.connectBtnIcon}>
-                  {connectionState === 'connected' ? '💬' : '🤝'}
-                </Text>
-                <Text style={styles.connectBtnText}>
-                  {connectionState === 'connected'
-                    ? `Message ${user.name}`
-                    : `Connect with ${user.name}`}
-                </Text>
-              </>
+              <LinearGradient
+                colors={['#FF4B6E', '#D93056']}
+                style={styles.ctaBtn}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              >
+                {/* Shine */}
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']}
+                  style={styles.ctaShine}
+                  start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+                />
+                {actionLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="person-add-outline" size={20} color="#fff" />
+                    <Text style={styles.ctaBtnText}>Connect with {user.name}</Text>
+                  </>
+                )}
+              </LinearGradient>
             )}
           </TouchableOpacity>
         )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 function makeStyles(C: AppColors) {
   return StyleSheet.create({
     flex: { flex: 1, backgroundColor: C.background },
-    topBar: {
-      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-      paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xs,
+
+    // ── Hero ────────────────────────────────────────────────────────────────
+    hero: {
+      height: HERO_HEIGHT,
+      overflow: 'hidden',
+      position: 'relative',
+      justifyContent: 'flex-end',
     },
-    backBtn: {
-      width: 40, height: 40, borderRadius: 20,
-      backgroundColor: C.surface,
+    heroScrim: {
+      position: 'absolute',
+      bottom: 0, left: 0, right: 0,
+      height: HERO_HEIGHT * 0.65,
+    },
+    heroBubble1: {
+      position: 'absolute',
+      width: 220, height: 220, borderRadius: 110,
+      backgroundColor: 'rgba(255,255,255,0.06)',
+      top: -60, right: -40,
+    },
+    heroBubble2: {
+      position: 'absolute',
+      width: 140, height: 140, borderRadius: 70,
+      backgroundColor: 'rgba(255,255,255,0.04)',
+      bottom: 30, left: -30,
+    },
+    heroAvatarWrap: {
+      position: 'absolute',
+      bottom: 64,
+      alignSelf: 'center',
+    },
+    heroAvatarRing: {
+      width: 108, height: 108, borderRadius: 54,
       alignItems: 'center', justifyContent: 'center',
-      ...shadows.card,
     },
-    reportBtn: {
-      width: 40, height: 40, borderRadius: 20,
-      backgroundColor: C.surface,
+    heroAvatarInner: {
+      width: 100, height: 100, borderRadius: 50,
+      overflow: 'hidden',
+    },
+    heroMeta: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.md,
+      alignItems: 'center',
+    },
+    heroNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    heroName: {
+      fontSize: 28,
+      fontWeight: '800',
+      color: '#fff',
+      letterSpacing: -0.5,
+      textShadowColor: 'rgba(0,0,0,0.5)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 4,
+    },
+    heroAge: {
+      fontSize: 22,
+      fontWeight: '500',
+      color: 'rgba(255,255,255,0.85)',
+      textShadowColor: 'rgba(0,0,0,0.4)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
+    },
+    verifiedBadge: {
+      width: 22, height: 22, borderRadius: 11,
+      backgroundColor: C.success,
       alignItems: 'center', justifyContent: 'center',
-      ...shadows.card,
     },
-    reportIcon: { fontSize: 20, color: C.textSecondary },
-    scroll: { paddingHorizontal: spacing.lg },
-    carouselWrapper: { marginBottom: spacing.sm, position: 'relative' },
-    verifiedBadgeOverlay: {
-      position: 'absolute', top: spacing.sm, right: spacing.sm,
-      backgroundColor: 'rgba(0,0,0,0.45)',
-      paddingHorizontal: spacing.sm, paddingVertical: 3,
+    heroCity: {
+      fontSize: 13,
+      color: 'rgba(255,255,255,0.80)',
+      marginTop: 3,
+      textShadowColor: 'rgba(0,0,0,0.4)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
+    },
+
+    // ── Floating nav ────────────────────────────────────────────────────────
+    floatingNav: {
+      position: 'absolute',
+      top: 0, left: 0, right: 0,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+    },
+    floatBtn: {
+      width: 40, height: 40, borderRadius: 20,
+      backgroundColor: 'rgba(0,0,0,0.38)',
+      alignItems: 'center', justifyContent: 'center',
+    },
+    moreIcon: {
+      fontSize: 20,
+      color: '#fff',
+      fontWeight: '600',
+      lineHeight: 22,
+    },
+
+    // ── Content ─────────────────────────────────────────────────────────────
+    scroll: { paddingBottom: 0 },
+    contentWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
+
+    metaPillsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginBottom: spacing.md,
+    },
+    metaPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingVertical: 6,
+      borderRadius: radius.full,
+      borderWidth: 1,
+    },
+    metaPillText: {
+      ...typography.caption,
+      color: C.textSecondary,
+      fontWeight: '500',
+    },
+
+    lookingForRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginBottom: spacing.md,
+    },
+    lookingForChip: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
       borderRadius: radius.full,
     },
-    verifiedOverlayText: { ...typography.small, color: '#fff', fontWeight: '700' },
-    heroSection: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.sm },
-    verifiedRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs },
-    verifiedText: { ...typography.small, color: C.success, fontWeight: '700' },
-    nameSection: { alignItems: 'center', marginBottom: spacing.sm },
-    name: { ...typography.h1, color: C.text, textAlign: 'center' },
-    city: { ...typography.body, color: C.textSecondary, marginTop: spacing.xs },
-    metaRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs, flexWrap: 'wrap', justifyContent: 'center' },
-    metaTag: { ...typography.caption, color: C.textSecondary },
-    section: { marginBottom: spacing.md },
-    lookingForRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'center' },
-    lookingForChip: {
-      paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-      borderRadius: radius.lg, backgroundColor: C.primary + '12',
+    lookingForText: {
+      ...typography.caption,
+      fontWeight: '700',
     },
-    lookingForText: { ...typography.caption, color: C.primary, fontWeight: '600' },
-    bio: { ...typography.body, color: C.textSecondary, lineHeight: 26 },
+
+    section: { marginBottom: spacing.md },
+    bio: { ...typography.body, color: C.textSecondary, lineHeight: 26, fontSize: 16 },
+
     chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     interestChip: {
-      paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-      borderRadius: radius.full, backgroundColor: C.surface,
-      borderWidth: 1, borderColor: C.border,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 6,
+      borderRadius: radius.full,
     },
-    interestChipText: { ...typography.caption, color: C.textSecondary },
-    card: { backgroundColor: C.surface, borderRadius: radius.md, ...shadows.card },
+    interestChipText: { fontSize: 13, fontWeight: '600' },
+
+    vibeCard: {
+      borderRadius: radius.md,
+      borderWidth: 1.5,
+      padding: spacing.md,
+      ...shadows.card,
+    },
     primaryVibesRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },
     primaryVibeChip: {
       paddingHorizontal: spacing.md, paddingVertical: 4,
-      borderRadius: radius.full, backgroundColor: C.secondary + '20',
+      borderRadius: radius.full,
     },
-    primaryVibeText: { ...typography.small, color: C.secondary, fontWeight: '600' },
-    nightlifeText: { ...typography.caption, color: C.textSecondary, marginTop: spacing.sm },
+    primaryVibeText: { ...typography.small, fontWeight: '600' },
+    nightlifeText: { ...typography.caption, marginTop: spacing.sm },
+
+    // ── Footer ──────────────────────────────────────────────────────────────
     footer: {
       position: 'absolute',
       bottom: 0, left: 0, right: 0,
@@ -603,25 +880,34 @@ function makeStyles(C: AppColors) {
       borderTopWidth: 1,
       borderTopColor: C.border,
     },
-    connectBtn: {
-      backgroundColor: C.primary,
-      borderRadius: radius.lg,
-      paddingVertical: spacing.md,
+    ctaBtn: {
+      height: 56,
+      borderRadius: 16,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: spacing.sm,
-      ...shadows.card,
+      overflow: 'hidden',
+      shadowColor: '#FF4B6E',
+      shadowOpacity: 0.40,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
     },
-    connectedBtn: { backgroundColor: C.secondary },
-    connectBtnIcon: { fontSize: 20 },
-    connectBtnText: { ...typography.body, color: '#fff', fontWeight: '700' },
+    ctaShine: {
+      position: 'absolute',
+      top: 0, left: 0, right: 0,
+      height: '50%',
+      borderRadius: 16,
+    },
+    ctaBtnIcon: { fontSize: 20 },
+    ctaBtnText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: -0.2 },
+
     pendingRow: {
-      backgroundColor: C.surface,
       borderRadius: radius.md,
       padding: spacing.md,
       alignItems: 'center',
     },
-    pendingText: { ...typography.caption, color: C.textSecondary, textAlign: 'center', lineHeight: 20 },
+    pendingText: { ...typography.caption, textAlign: 'center', lineHeight: 20 },
   });
 }

@@ -473,10 +473,10 @@ function ProfileCard({
 }) {
   const { C, isDark } = useTheme();
   const { score: matchPct } = dynamicVibeMatch(currentUser, user, mood);
-  const grad    = matchGrad(matchPct);
+  const grad      = matchGrad(matchPct);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const glowAnim  = useRef(new Animated.Value(0)).current;
-  const interests = (user.interests ?? []).slice(0, 2);
+  const interests = (user.interests ?? []).slice(0, 3);
 
   function handlePressIn() {
     Animated.parallel([
@@ -491,7 +491,6 @@ function ProfileCard({
     ]).start();
   }
 
-  // Glow border color transitions on press
   const borderColor = glowAnim.interpolate({
     inputRange:  [0, 1],
     outputRange: [isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', grad[0] + 'BB'],
@@ -499,44 +498,49 @@ function ProfileCard({
 
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-      {/* Gradient glow border — wraps the card */}
-      <Animated.View style={[cs.glowWrap, { borderColor }]}>
+      <Animated.View style={[cs.glowWrap, { borderColor, backgroundColor: isDark ? '#15152A' : '#FFFFFF' }]}>
         <TouchableOpacity
-          style={[cs.card, {
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-          }]}
+          style={cs.card}
           activeOpacity={1}
           onPress={onPress}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
         >
-          {/* Gradient stripe — left side score indicator */}
+          {/* Left gradient stripe — score indicator */}
           <LinearGradient colors={grad} style={cs.stripe} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} />
 
-          {/* Avatar */}
+          {/* Avatar with active ring */}
           <View style={cs.avatarWrap}>
             {isActive ? (
               <LinearGradient colors={['#00E676', '#00CEC9']} style={cs.avatarRing} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                <View style={cs.avatarInner}>
-                  <Avatar name={user.name} photoURL={user.photoURL} size={38} />
+                <View style={[cs.avatarInner, { backgroundColor: isDark ? '#15152A' : '#FFFFFF' }]}>
+                  <Avatar name={user.name} photoURL={user.photoURL} size={50} />
                 </View>
               </LinearGradient>
             ) : (
-              <Avatar name={user.name} photoURL={user.photoURL} size={42} />
+              <LinearGradient
+                colors={[grad[0] + '55', grad[1] + '33']}
+                style={cs.avatarRing}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              >
+                <View style={[cs.avatarInner, { backgroundColor: isDark ? '#15152A' : '#FFFFFF' }]}>
+                  <Avatar name={user.name} photoURL={user.photoURL} size={50} />
+                </View>
+              </LinearGradient>
             )}
             {isActive && <View style={cs.activeDot} />}
           </View>
 
-          {/* Info — single dense line layout */}
+          {/* Info block */}
           <View style={cs.info}>
-            {/* Row 1: name + chips */}
+            {/* Row 1: name + age + verified + live */}
             <View style={cs.row1}>
               <Text style={[cs.name, { color: C.text }]} numberOfLines={1}>
                 {user.name}
-                {user.age ? <Text style={[cs.age, { color: C.textSecondary }]}>, {user.age}</Text> : null}
+                {user.age ? <Text style={[cs.age, { color: C.textSecondary }]}>,  {user.age}</Text> : null}
               </Text>
               {user.isVerified && (
-                <Ionicons name="checkmark-circle" size={12} color={C.success} />
+                <Ionicons name="checkmark-circle" size={14} color={C.success} style={{ marginLeft: 2 }} />
               )}
               {isActive && (
                 <View style={cs.livePill}>
@@ -546,26 +550,36 @@ function ProfileCard({
               )}
             </View>
 
-            {/* Row 2: city + interests inline */}
-            <View style={cs.row2}>
-              {user.city ? (
-                <Text style={[cs.meta, { color: C.textSecondary }]} numberOfLines={1}>
-                  <Text style={{ fontSize: 9 }}>📍 </Text>{user.city}
-                </Text>
-              ) : null}
-              {interests.map((t, i) => (
-                <View key={t} style={[cs.chip, { borderColor: CHIP_PALETTE[i % CHIP_PALETTE.length] + '60', backgroundColor: CHIP_PALETTE[i % CHIP_PALETTE.length] + '18' }]}>
-                  <Text style={[cs.chipTxt, { color: CHIP_PALETTE[i % CHIP_PALETTE.length] }]}>{t}</Text>
-                </View>
-              ))}
-            </View>
+            {/* Row 2: city */}
+            {user.city ? (
+              <Text style={[cs.cityText, { color: C.textSecondary }]} numberOfLines={1}>
+                📍 {user.city}
+              </Text>
+            ) : null}
+
+            {/* Row 3: interest chips */}
+            {interests.length > 0 && (
+              <View style={cs.chipsRow}>
+                {interests.map((t, i) => (
+                  <View
+                    key={t}
+                    style={[cs.chip, {
+                      borderColor: CHIP_PALETTE[i % CHIP_PALETTE.length] + '60',
+                      backgroundColor: CHIP_PALETTE[i % CHIP_PALETTE.length] + '1A',
+                    }]}
+                  >
+                    <Text style={[cs.chipTxt, { color: CHIP_PALETTE[i % CHIP_PALETTE.length] }]}>{t}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
 
-          {/* Right: match % pill + connect */}
+          {/* Right column: match % + connect */}
           <View style={cs.right}>
             {matchPct > 0 && (
               <LinearGradient
-                colors={matchPct >= 50 ? grad : ['rgba(120,120,120,0.3)', 'rgba(80,80,80,0.3)']}
+                colors={matchPct >= 50 ? grad : ['rgba(120,120,120,0.35)', 'rgba(80,80,80,0.35)']}
                 style={cs.scorePill}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               >
@@ -573,20 +587,18 @@ function ProfileCard({
               </LinearGradient>
             )}
 
-            {/* Shiny gradient connect button */}
-            <TouchableOpacity onPress={onConnect} activeOpacity={0.8}>
+            <TouchableOpacity onPress={onConnect} activeOpacity={0.8} style={cs.connectBtnWrap}>
               <LinearGradient
-                colors={['#FF4B6E', '#FF2D6E', '#C2185B']}
+                colors={['#FF4B6E', '#C2185B']}
                 style={cs.connectBtn}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               >
-                {/* Shine overlay */}
                 <LinearGradient
-                  colors={['rgba(255,255,255,0.35)', 'rgba(255,255,255,0)']}
+                  colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0)']}
                   style={cs.shine}
                   start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
                 />
-                <Ionicons name="person-add-outline" size={14} color="#fff" />
+                <Ionicons name="person-add-outline" size={15} color="#fff" />
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -601,64 +613,64 @@ const cs = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
-    // shadow for depth
     shadowColor: '#FF4B6E',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOpacity: 0.10,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 66,
-    paddingRight: 10,
+    minHeight: 110,
+    paddingRight: 12,
+    paddingVertical: 10,
     gap: 10,
   },
   stripe: {
-    width: 3,
+    width: 4,
     alignSelf: 'stretch',
   },
 
-  avatarWrap:  { position: 'relative', marginLeft: 4 },
-  avatarRing:  { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
-  avatarInner: { width: 41, height: 41, borderRadius: 20, overflow: 'hidden', backgroundColor: 'transparent' },
-  activeDot:   { position: 'absolute', bottom: 0, right: 0, width: 11, height: 11, borderRadius: 5.5, backgroundColor: '#00E676', borderWidth: 2, borderColor: 'rgba(0,0,0,0.4)' },
+  avatarWrap:  { position: 'relative', marginLeft: 6 },
+  avatarRing:  { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
+  avatarInner: { width: 58, height: 58, borderRadius: 29, overflow: 'hidden' },
+  activeDot:   { position: 'absolute', bottom: 1, right: 1, width: 13, height: 13, borderRadius: 6.5, backgroundColor: '#00E676', borderWidth: 2.5, borderColor: 'rgba(0,0,0,0.5)' },
 
-  info:  { flex: 1, gap: 4, minWidth: 0 },
-  row1:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  row2:  { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'nowrap' },
+  info:     { flex: 1, gap: 5, minWidth: 0 },
+  row1:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  chipsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'nowrap' },
 
-  name:  { fontSize: 13.5, fontWeight: '800', flex: 1 },
-  age:   { fontSize: 12, fontWeight: '500' },
-  meta:  { fontSize: 10, flexShrink: 1 },
+  name:     { fontSize: 15, fontWeight: '800', flexShrink: 1 },
+  age:      { fontSize: 13, fontWeight: '500' },
+  cityText: { fontSize: 12, fontWeight: '500' },
 
-  livePill: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#00E67622', borderRadius: 20, paddingHorizontal: 5, paddingVertical: 1 },
+  livePill: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#00E67622', borderRadius: 20, paddingHorizontal: 6, paddingVertical: 2 },
   liveDot:  { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#00E676' },
-  liveText: { fontSize: 8.5, fontWeight: '800', color: '#00E676' },
+  liveText: { fontSize: 9, fontWeight: '800', color: '#00E676' },
 
-  chip:    { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 20, borderWidth: 1 },
-  chipTxt: { fontSize: 9.5, fontWeight: '700' },
+  chip:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
+  chipTxt: { fontSize: 10, fontWeight: '700' },
 
-  right:      { alignItems: 'center', gap: 6 },
-  scorePill:  { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 10, minWidth: 38, alignItems: 'center' },
-  scoreText:  { fontSize: 11, fontWeight: '900', color: '#fff' },
-
+  right:          { alignItems: 'center', gap: 8, paddingLeft: 4 },
+  scorePill:      { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, minWidth: 44, alignItems: 'center' },
+  scoreText:      { fontSize: 11.5, fontWeight: '900', color: '#fff' },
+  connectBtnWrap: {},
   connectBtn: {
-    width: 32, height: 32, borderRadius: 16,
+    width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
     shadowColor: '#FF4B6E',
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
+    shadowOpacity: 0.55,
+    shadowRadius: 7,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    elevation: 5,
   },
   shine: {
     position: 'absolute',
     top: 0, left: 0, right: 0,
     height: '50%',
-    borderRadius: 16,
+    borderRadius: 18,
   },
 });
 
@@ -882,7 +894,7 @@ export default function DiscoverScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: spacing.md, gap: 8, paddingVertical: 8, alignItems: 'center' }}
+          contentContainerStyle={{ paddingHorizontal: spacing.md, gap: 8, paddingVertical: 10, alignItems: 'center' }}
           style={{ borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.background }}
         >
           {INTENT_FILTERS.map(({ key, label, emoji, color }) => {
@@ -893,23 +905,23 @@ export default function DiscoverScreen() {
                 onPress={() => setActiveFilter(key)}
                 activeOpacity={0.75}
                 style={{
-                  width: 62,
-                  height: 52,
-                  borderRadius: 14,
+                  height: 36,
+                  flexDirection: 'row',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 3,
-                  backgroundColor: active ? color + '20' : C.surface,
+                  gap: 5,
+                  paddingHorizontal: 14,
+                  borderRadius: 18,
+                  backgroundColor: active ? color : C.surface,
                   borderWidth: 1.5,
                   borderColor: active ? color : C.border,
                 }}
               >
-                <Text style={{ fontSize: 18, lineHeight: 22 }}>{emoji}</Text>
+                <Text style={{ fontSize: 14, lineHeight: 18 }}>{emoji}</Text>
                 <Text style={{
-                  fontSize: 10,
-                  fontWeight: active ? '800' : '500',
-                  color: active ? color : C.textSecondary,
-                  letterSpacing: -0.2,
+                  fontSize: 13,
+                  fontWeight: active ? '700' : '500',
+                  color: active ? '#fff' : C.textSecondary,
+                  letterSpacing: -0.1,
                 }}>
                   {label}
                 </Text>
