@@ -107,6 +107,15 @@
         { "fieldPath": "attendees", "arrayConfig": "CONTAINS" },
         { "fieldPath": "date",      "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "userSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "city",       "order": "ASCENDING" },
+        { "fieldPath": "online",     "order": "ASCENDING" },
+        { "fieldPath": "lastActive", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
