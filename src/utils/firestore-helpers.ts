@@ -958,3 +958,67 @@ export async function getActiveStatusesBatched(uids: string[]): Promise<DriftSta
   );
   return results.flat();
 }
+
+// ─── Calls (Jitsi-based, no backend required) ─────────────────────────────────
+
+export interface CallDoc {
+  id:              string;
+  callerUid:       string;
+  calleeUid:       string;
+  callerName:      string;
+  callerPhotoURL?: string;
+  callType:        'audio' | 'video';
+  roomName:        string;
+  status:          'ringing' | 'active' | 'ended' | 'declined';
+  createdAt:       number;
+}
+
+/** Caller creates a call doc — triggers onCallCreated Cloud Function push to callee. */
+export async function createCall(
+  call: Omit<CallDoc, 'id' | 'status' | 'createdAt'>,
+): Promise<string> {
+  const callRef = doc(collection(db, 'calls'));
+  await setDoc(callRef, {
+    ...call,
+    id:        callRef.id,
+    status:    'ringing',
+    createdAt: Date.now(),
+  });
+  return callRef.id;
+}
+
+/** Update call status (accepted / ended / declined). */
+export async function updateCallStatus(
+  callId: string,
+  status: CallDoc['status'],
+): Promise<void> {
+  await updateDoc(doc(db, 'calls', callId), { status });
+}
+
+/** Subscribe to a specific call doc (caller watches for callee response). */
+export function subscribeToCall(
+  callId: string,
+  cb: (call: CallDoc | null) => void,
+): Unsubscribe {
+  return onSnapshot(doc(db, 'calls', callId), (snap) => {
+    cb(snap.exists() ? (snap.data() as CallDoc) : null);
+  });
+}
+
+/** Subscribe to incoming calls for a user (callee watches for ringing calls). */
+export function subscribeToIncomingCalls(
+  uid: string,
+  cb: (call: CallDoc | null) => void,
+): Unsubscribe {
+  return onSnapshot(
+    query(
+      collection(db, 'calls'),
+      where('calleeUid', '==', uid),
+      where('status', '==', 'ringing'),
+    ),
+    (snap) => {
+      const calls = snap.docs.map((d) => d.data() as CallDoc);
+      cb(calls.length > 0 ? calls[0] : null);
+    },
+  );
+}

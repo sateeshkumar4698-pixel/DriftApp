@@ -29,7 +29,7 @@ import {
   subscribeToGameChat,
   sendGameChatMessage,
 } from '../utils/firestore-helpers';
-import { fetchVoiceToken } from '../services/voiceService';
+// Voice uses Jitsi Meet — no backend required
 import { useTheme, AppColors, spacing, radius, typography } from '../utils/useTheme';
 import { formatRelativeTime } from '../utils/helpers';
 
@@ -95,22 +95,25 @@ export default function GameChatVoice({ roomId, myUid, myName, accentColor }: Pr
     }
   }, [open]);
 
-  // ── Voice (WebView-based — works in Expo managed without native modules) ──
-  async function joinVoice() {
+  // ── Voice: Jitsi Meet — completely free, no backend, no API key ──
+  function joinVoice() {
     if (!roomId || voiceState !== 'idle') return;
-    setVoiceState('joining');
-    try {
-      const token = await fetchVoiceToken(roomId, 'audio');
-      // Append Daily.co prebuilt params: audio-only, no nav chrome
-      const url = `${token.roomUrl}?embed&startVideoOff=true&startAudioOff=false&noNav=true`;
-      setVoiceRoomUrl(url);
-      setVoiceState('joined');
-      setParticipantCount((n) => n + 1);
-      setShowVoiceModal(true);
-    } catch (err) {
-      console.warn('[GameChatVoice] joinVoice error:', err);
-      setVoiceState('error');
-    }
+    // Jitsi room = drift-game-{first 8 chars of roomId} — same for all players
+    const jitsiRoom   = `drift-game-${roomId.slice(0, 8)}`;
+    const params = [
+      'config.prejoinPageEnabled=false',
+      'config.disableDeepLinking=true',
+      'config.startWithVideoMuted=true',
+      'config.disableVideo=true',
+      'config.startWithAudioMuted=false',
+      'interfaceConfig.SHOW_JITSI_WATERMARK=false',
+      'interfaceConfig.TOOLBAR_BUTTONS=["microphone","hangup"]',
+    ].join('&');
+    const url = `https://meet.jit.si/${encodeURIComponent(jitsiRoom)}#${params}`;
+    setVoiceRoomUrl(url);
+    setVoiceState('joined');
+    setParticipantCount((n) => n + 1);
+    setShowVoiceModal(true);
   }
 
   function leaveVoice() {

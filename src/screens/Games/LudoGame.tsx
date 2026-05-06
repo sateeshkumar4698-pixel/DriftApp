@@ -554,11 +554,15 @@ export default function LudoGame(): React.ReactElement {
   const [myColor,   setMyColor]   = useState<PlayerColor | null>(null);
   const [opponentLeft, setOpponentLeft] = useState(false);
   const [rejoinCountdown, setRejoinCountdown] = useState(0);
+  const [turnTimeLeft, setTurnTimeLeft] = useState<number | null>(null); // turn countdown
   const myColorRef = useRef<PlayerColor | null>(null);
   const isHostRef  = useRef(false);
   const suppressRemoteRef  = useRef(false); // true while we're writing our own state
   const hasInitialStateRef = useRef(false); // first RTDB snapshot always applied (resume-safe)
   const rejoinTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const turnTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const TURN_SECONDS = 30; // auto-skip after 30s
 
   // ── Piece animations — translateX/Y only (NOT left/top) ─────────────────────
   // Stores absolute board-pixel position; applied via transform, not layout props
@@ -750,8 +754,47 @@ export default function LudoGame(): React.ReactElement {
 
   useEffect(() => {
     gameSounds.preload(['dice_roll','piece_move','capture','six_rolled','home','win','turn_change','error']);
-    return () => { gameSounds.unloadAll(); };
+    return () => {
+      gameSounds.unloadAll();
+      if (turnTimerRef.current) clearInterval(turnTimerRef.current);
+      if (rejoinTimerRef.current) clearInterval(rejoinTimerRef.current);
+    };
   }, []);
+
+  // ── Turn timer — resets on every new turn, auto-rolls if time runs out ────────
+  useEffect(() => {
+    if (gs.winner || gs.phase !== 'idle') {
+      // Clear timer when game won or mid-move
+      if (turnTimerRef.current) { clearInterval(turnTimerRef.current); turnTimerRef.current = null; }
+      if (gs.winner) setTurnTimeLeft(null);
+      return;
+    }
+    // Only run timer in multiplayer
+    if (!roomId) { setTurnTimeLeft(null); return; }
+
+    setTurnTimeLeft(TURN_SECONDS);
+    if (turnTimerRef.current) clearInterval(turnTimerRef.current);
+    turnTimerRef.current = setInterval(() => {
+      setTurnTimeLeft((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(turnTimerRef.current!);
+          turnTimerRef.current = null;
+          // Auto-roll if it's my turn and time ran out
+          if (myColorRef.current && gs.turn === myColorRef.current) {
+            // Small delay to avoid state race
+            setTimeout(() => handleRoll(), 50);
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (turnTimerRef.current) { clearInterval(turnTimerRef.current); turnTimerRef.current = null; }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gs.turn, gs.phase, gs.winner, roomId]);
 
   const flashMsg = useCallback(() => {
     msgFade.setValue(0.2);
@@ -1298,9 +1341,16 @@ export default function LudoGame(): React.ReactElement {
           <Text style={st.backTxt}>← Back</Text>
         </TouchableOpacity>
         <Text style={st.title}>Ludo</Text>
-        <Animated.View style={[st.turnPill, { backgroundColor: cfg.color, transform:[{scale:turnScale}] }]}>
-          <Text style={st.turnPillTxt}>{cfg.emoji} {cfg.label}'s turn</Text>
-        </Animated.View>
+        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+          <Animated.View style={[st.turnPill, { backgroundColor: cfg.color, transform:[{scale:turnScale}] }]}>
+            <Text style={st.turnPillTxt}>{cfg.emoji} {cfg.label}'s turn</Text>
+          </Animated.View>
+          {roomId && turnTimeLeft !== null && gs.phase === 'idle' && !gs.winner && (
+            <Text style={[st.timerTxt, turnTimeLeft <= 10 && st.timerTxtUrgent]}>
+              ⏱ {turnTimeLeft}s
+            </Text>
+          )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={st.scroll} showsVerticalScrollIndicator={false}>
@@ -1476,6 +1526,8 @@ function makeStyles(C: AppColors) {
     }),
   },
   turnPillTxt: { fontSize: 10, fontWeight: '800', color: '#fff' },
+  timerTxt: { fontSize: 11, fontWeight: '700', color: '#64748B' },
+  timerTxtUrgent: { color: '#EF4444' }, // red when ≤10s
 
   scroll: { alignItems: 'center', paddingVertical: 12, paddingBottom: 50 },
 

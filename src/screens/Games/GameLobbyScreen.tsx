@@ -17,7 +17,7 @@ import {
   startGameRoom,
   leaveGameRoom,
 } from '../../utils/firestore-helpers';
-import { fetchVoiceToken } from '../../services/voiceService';
+// Voice uses Jitsi Meet — no backend required
 import Avatar from '../../components/Avatar';
 import { spacing, typography, radius } from '../../utils/theme';
 import { useTheme, AppColors } from '../../utils/useTheme';
@@ -123,29 +123,25 @@ export default function GameLobbyScreen() {
     } catch { Alert.alert('Error', 'Could not leave the room.'); }
   }
 
-  // ── Voice (WebView-based — no native module needed) ──────────────────────────
+  // ── Voice: Jitsi Meet — completely free, no backend, no API key ──────────────
 
-  async function joinVoice() {
+  function joinVoice() {
     if (voiceState !== 'idle' && voiceState !== 'error') return;
-    setVoiceState('joining');
-    try {
-      const token = await fetchVoiceToken(roomId, 'audio');
-      const url = `${token.roomUrl}?embed&startVideoOff=true&startAudioOff=false&noNav=true`;
-      setVoiceRoomUrl(url);
-      setVoiceState('joined');
-      setShowVoiceModal(true);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('localhost') || msg.includes('Failed to fetch') || msg.includes('Network')) {
-        Alert.alert(
-          'Voice unavailable',
-          'Backend server not reachable. Set EXPO_PUBLIC_BACKEND_URL in your .env to enable voice chat.',
-        );
-      } else {
-        Alert.alert('Voice error', 'Could not join voice. Please try again.');
-      }
-      setVoiceState('error');
-    }
+    // All players in this room join the same Jitsi channel automatically
+    const jitsiRoom = `drift-game-${roomId.slice(0, 8)}`;
+    const params = [
+      'config.prejoinPageEnabled=false',
+      'config.disableDeepLinking=true',
+      'config.startWithVideoMuted=true',
+      'config.disableVideo=true',
+      'config.startWithAudioMuted=false',
+      'interfaceConfig.SHOW_JITSI_WATERMARK=false',
+      'interfaceConfig.TOOLBAR_BUTTONS=["microphone","hangup"]',
+    ].join('&');
+    const url = `https://meet.jit.si/${encodeURIComponent(jitsiRoom)}#${params}`;
+    setVoiceRoomUrl(url);
+    setVoiceState('joined');
+    setShowVoiceModal(true);
   }
 
   function leaveVoice() {
@@ -224,16 +220,11 @@ export default function GameLobbyScreen() {
                   </LinearGradient>
                 </TouchableOpacity>
                 {voiceState === 'error' && (
-                  <Text style={styles.voiceErrorHint}>⚠️ Backend not reachable. Set EXPO_PUBLIC_BACKEND_URL to enable voice.</Text>
+                  <Text style={styles.voiceErrorHint}>⚠️ Could not join voice. Tap to retry.</Text>
                 )}
               </>
             )}
-            {voiceState === 'joining' && (
-              <View style={styles.voiceRow}>
-                <ActivityIndicator color={C.primary} />
-                <Text style={styles.voiceHint}>Connecting to voice…</Text>
-              </View>
-            )}
+            {/* joining state removed — Jitsi connect is instant */}
             {voiceState === 'joined' && (
               <View style={styles.voiceRow}>
                 <TouchableOpacity

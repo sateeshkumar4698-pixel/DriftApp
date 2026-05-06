@@ -237,7 +237,6 @@ export default function App() {
             case 'incoming_call': {
               const callType       = (data.callType as string) ?? 'audio';
               const roomName       = data.roomName as string | undefined;
-              const roomUrl        = data.roomUrl  as string | undefined;
               const callerUid      = data.callerUid as string | undefined;
               const callerName     = (data.callerName as string) ?? 'Someone';
               const callerPhotoURL = (data.callerPhotoURL as string) ?? undefined;
@@ -265,8 +264,7 @@ export default function App() {
                     },
                     callType,
                     isOutgoing: false,
-                    roomName,
-                    roomUrl,
+                    roomName,   // Jitsi room — both caller & callee join this
                   },
                 });
               }, 300);
