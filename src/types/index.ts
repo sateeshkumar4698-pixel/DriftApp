@@ -296,19 +296,20 @@ export type FeedStackParamList = {
 };
 
 export type GamesStackParamList = {
-  GamesList:     undefined;
-  LudoGame:      { roomId?: string } | undefined;
-  TruthOrDare:   { roomId?: string } | undefined;
-  UnoGame:       undefined;
-  ChessGame:     undefined;
-  BetGame:       undefined;
-  GameInvite:    { gameId: 'ludo' | 'truth-dare' };
-  GameLobby:     { roomId: string; gameId: 'ludo' | 'truth-dare' };
+  GamesList:       undefined;
+  LudoGame:        { roomId?: string } | undefined;
+  TruthOrDare:     { roomId?: string } | undefined;
+  WouldYouRather:  { roomId?: string } | undefined;
+  UnoGame:         undefined;
+  ChessGame:       undefined;
+  BetGame:         undefined;
+  GameInvite:      { gameId: 'ludo' | 'truth-dare' | 'wyr' };
+  GameLobby:       { roomId: string; gameId: 'ludo' | 'truth-dare' | 'wyr' };
 };
 
 // ─── Multiplayer Game Types ──────────────────────────────────────────────────
 
-export type GameId = 'ludo' | 'truth-dare';
+export type GameId = 'ludo' | 'truth-dare' | 'wyr';
 
 export type GameRoomStatus = 'waiting' | 'playing' | 'finished' | 'abandoned';
 

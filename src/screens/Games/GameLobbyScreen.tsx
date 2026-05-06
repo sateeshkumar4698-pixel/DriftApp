@@ -27,11 +27,11 @@ type Nav = NativeStackNavigationProp<GamesStackParamList, 'GameLobby'>;
 type Rt  = RouteProp<GamesStackParamList, 'GameLobby'>;
 
 const GAME_NAME: Record<string, string> = {
-  ludo: 'Ludo', 'truth-dare': 'Truth or Dare', uno: 'UNO', chess: 'Chess', bet: 'Stake It',
+  ludo: 'Ludo', 'truth-dare': 'Truth or Dare', wyr: 'Would You Rather', uno: 'UNO', chess: 'Chess', bet: 'Stake It',
 };
 
 const GAME_COLOR: Record<string, string> = {
-  ludo: '#6C5CE7', 'truth-dare': '#FF4B6E', uno: '#E17055', chess: '#4A4A6A', bet: '#FDCB6E',
+  ludo: '#6C5CE7', 'truth-dare': '#FF4B6E', wyr: '#00B894', uno: '#E17055', chess: '#4A4A6A', bet: '#FDCB6E',
 };
 
 export default function GameLobbyScreen() {
@@ -60,8 +60,9 @@ export default function GameLobbyScreen() {
     if (!room || hasNavigatedToGame.current) return;
     if (room.status === 'playing') {
       hasNavigatedToGame.current = true;
-      if (gameId === 'ludo') navigation.replace('LudoGame', { roomId });
-      else                   navigation.replace('TruthOrDare', { roomId });
+      if (gameId === 'ludo')       navigation.replace('LudoGame', { roomId });
+      else if (gameId === 'wyr')   navigation.replace('WouldYouRather', { roomId });
+      else                         navigation.replace('TruthOrDare', { roomId });
     }
   }, [room, gameId, navigation, roomId]);
 

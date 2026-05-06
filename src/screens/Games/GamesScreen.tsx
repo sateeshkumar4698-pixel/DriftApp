@@ -24,7 +24,7 @@ import { db } from '../../config/firebase';
 type Nav = NativeStackNavigationProp<GamesStackParamList, 'GamesList'>;
 
 interface GameItem {
-  id: 'ludo' | 'truth-dare' | 'uno' | 'chess' | 'bet';
+  id: 'ludo' | 'truth-dare' | 'uno' | 'chess' | 'bet' | 'wyr';
   emoji: string;
   name: string;
   tagline: string;
@@ -77,10 +77,15 @@ const LIVE_GAMES: GameItem[] = [
     players: '2–6 players', color: '#FDCB6E', accentDark: '#B7791F',
     tags: ['Party', 'Betting', 'Custom Stakes'], available: true,
   },
+  {
+    id: 'wyr', emoji: '🤔', name: 'Would You Rather', tagline: 'Reveal your true self.',
+    description: 'Both pick secretly, then reveal. 10 rounds of binary choices — lifestyle, power, deep dilemmas — with compatibility score at the end.',
+    players: '2 players', color: '#00B894', accentDark: '#00856A',
+    tags: ['Social', 'Personality', 'Conversation'], available: true,
+  },
 ];
 
 const COMING_SOON: ComingSoonItem[] = [
-  { id: 'trivia', emoji: '🧠', name: 'Trivia', color: '#00B894', available: false },
   { id: 'drift-world', emoji: '🌍', name: 'Drift World', color: '#0984E3', available: false },
 ];
 
@@ -90,10 +95,11 @@ const GAME_DISPLAY: Record<string, { name: string; emoji: string }> = {
   uno: { name: 'UNO', emoji: '🃏' },
   chess: { name: 'Chess', emoji: '♟️' },
   bet: { name: 'Stake It', emoji: '🎰' },
+  wyr: { name: 'Would You Rather', emoji: '🤔' },
 };
 
 const GAME_COLOR: Record<string, string> = {
-  ludo: '#6C5CE7', 'truth-dare': '#FF4B6E', uno: '#E17055', chess: '#4A4A6A', bet: '#FDCB6E',
+  ludo: '#6C5CE7', 'truth-dare': '#FF4B6E', uno: '#E17055', chess: '#4A4A6A', bet: '#FDCB6E', wyr: '#00B894',
 };
 
 export default function GamesScreen() {
@@ -129,18 +135,24 @@ export default function GamesScreen() {
   }, [firebaseUser]);
 
   function handleSolo(game: GameItem) {
-    if (game.id === 'ludo')        navigation.navigate('LudoGame');
+    if (game.id === 'ludo')            navigation.navigate('LudoGame');
     else if (game.id === 'truth-dare') navigation.navigate('TruthOrDare');
-    else if (game.id === 'uno')    navigation.navigate('UnoGame');
-    else if (game.id === 'chess')  navigation.navigate('ChessGame');
-    else if (game.id === 'bet')    navigation.navigate('BetGame');
+    else if (game.id === 'uno')        navigation.navigate('UnoGame');
+    else if (game.id === 'chess')      navigation.navigate('ChessGame');
+    else if (game.id === 'bet')        navigation.navigate('BetGame');
+    else if (game.id === 'wyr')        navigation.navigate('WouldYouRather');
   }
 
   function handleWithFriends(game: GameItem) {
     if (game.id === 'uno')   { navigation.navigate('UnoGame');   return; }
     if (game.id === 'chess') { navigation.navigate('ChessGame'); return; }
     if (game.id === 'bet')   { navigation.navigate('BetGame');   return; }
-    navigation.navigate('GameInvite', { gameId: game.id });
+    // WYR, Ludo, Truth-or-Dare go through the invite/lobby flow
+    if (game.id === 'wyr' || game.id === 'ludo' || game.id === 'truth-dare') {
+      navigation.navigate('GameInvite', { gameId: game.id as 'ludo' | 'truth-dare' | 'wyr' });
+      return;
+    }
+    navigation.navigate('GameInvite', { gameId: game.id as 'ludo' | 'truth-dare' | 'wyr' });
   }
 
   function handleComingSoon(game: ComingSoonItem) {

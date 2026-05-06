@@ -37,8 +37,9 @@ type Nav = NativeStackNavigationProp<GamesStackParamList, 'GameInvite'>;
 type Rt = RouteProp<GamesStackParamList, 'GameInvite'>;
 
 const GAME_INFO: Record<GameId, { name: string; emoji: string; maxPlayers: number }> = {
-  ludo:          { name: 'Ludo',          emoji: '🎲', maxPlayers: 4 },
-  'truth-dare':  { name: 'Truth or Dare', emoji: '🎯', maxPlayers: 8 },
+  ludo:         { name: 'Ludo',             emoji: '🎲', maxPlayers: 4 },
+  'truth-dare': { name: 'Truth or Dare',    emoji: '🎯', maxPlayers: 8 },
+  wyr:          { name: 'Would You Rather', emoji: '🤔', maxPlayers: 2 },
 };
 
 function makeRoomId(): string {

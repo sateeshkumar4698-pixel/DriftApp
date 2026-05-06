@@ -44,6 +44,7 @@ import TruthOrDareScreen from '../screens/Games/TruthOrDare';
 import UnoGameScreen from '../screens/Games/UnoGame';
 import ChessGameScreen from '../screens/Games/ChessGame';
 import BetGameScreen from '../screens/Games/BetGame';
+import WouldYouRatherScreen from '../screens/Games/WouldYouRather';
 import GameInviteScreen from '../screens/Games/GameInviteScreen';
 import GameLobbyScreen from '../screens/Games/GameLobbyScreen';
 
@@ -127,9 +128,10 @@ function GamesNavigator() {
       <GamesStack.Screen name="TruthOrDare"  component={TruthOrDareScreen} />
       <GamesStack.Screen name="UnoGame"      component={UnoGameScreen} />
       <GamesStack.Screen name="ChessGame"    component={ChessGameScreen} />
-      <GamesStack.Screen name="BetGame"      component={BetGameScreen} />
-      <GamesStack.Screen name="GameInvite"   component={GameInviteScreen} />
-      <GamesStack.Screen name="GameLobby"    component={GameLobbyScreen} />
+      <GamesStack.Screen name="BetGame"          component={BetGameScreen} />
+      <GamesStack.Screen name="WouldYouRather"   component={WouldYouRatherScreen} />
+      <GamesStack.Screen name="GameInvite"       component={GameInviteScreen} />
+      <GamesStack.Screen name="GameLobby"        component={GameLobbyScreen} />
     </GamesStack.Navigator>
   );
 }

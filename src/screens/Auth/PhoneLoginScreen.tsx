@@ -15,12 +15,13 @@ import {
   signInWithPhoneNumber,
   type ApplicationVerifier,
 } from 'firebase/auth';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+import RecaptchaVerifierModal, {
+  type RecaptchaVerifierRef,
+} from '../../components/RecaptchaVerifierModal';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { auth, firebaseConfig } from '../../config/firebase';
+import { auth } from '../../config/firebase';
 import { spacing, typography, radius, shadows } from '../../utils/theme';
 import { useTheme, AppColors } from '../../utils/useTheme';
 import { normalizePhone, formatIndianNumber } from '../../utils/helpers';
@@ -40,7 +41,7 @@ export default function PhoneLoginScreen() {
   const [error, setError]               = useState('');
   const [resendCountdown, setResendCountdown] = useState(0);
 
-  const recaptchaRef    = useRef<FirebaseRecaptchaVerifierModal>(null);
+  const recaptchaRef    = useRef<RecaptchaVerifierRef>(null);
   const resendTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const otpInputRef     = useRef<TextInput>(null);
 
@@ -78,11 +79,15 @@ export default function PhoneLoginScreen() {
     setError('');
     setLoading(true);
     try {
-      const verifier = (recaptchaRef.current ?? undefined) as ApplicationVerifier | undefined;
-      if (!verifier) {
+      if (!recaptchaRef.current) {
         setError('Verification not ready. Please wait a moment and try again.');
+        setLoading(false);
         return;
       }
+      // In __DEV__ appVerificationDisabledForTesting=true so verify() resolves
+      // instantly; in prod it shows the reCAPTCHA modal first.
+      await recaptchaRef.current.verify();
+      const verifier = recaptchaRef.current as unknown as ApplicationVerifier;
       const result = await signInWithPhoneNumber(auth, e164, verifier);
       setConfirmation(result);
       startResendCountdown();
@@ -115,8 +120,9 @@ export default function PhoneLoginScreen() {
     setError('');
     setLoading(true);
     try {
-      const verifier = (recaptchaRef.current ?? undefined) as ApplicationVerifier | undefined;
-      if (!verifier) { setError('Verification not ready. Try again.'); return; }
+      if (!recaptchaRef.current) { setError('Verification not ready. Try again.'); setLoading(false); return; }
+      await recaptchaRef.current.verify();
+      const verifier = recaptchaRef.current as unknown as ApplicationVerifier;
       const result = await signInWithPhoneNumber(auth, e164, verifier);
       setConfirmation(result);
       startResendCountdown();
@@ -144,13 +150,12 @@ export default function PhoneLoginScreen() {
     >
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {/* reCAPTCHA — invisible WebView, required for real phone numbers */}
-      <FirebaseRecaptchaVerifierModal
+      {/* reCAPTCHA — shown only in production; bypassed in dev mode */}
+      <RecaptchaVerifierModal
         ref={recaptchaRef}
-        firebaseConfig={firebaseConfig}
-        attemptInvisibleVerification
-        title="Quick verification"
+        title="Quick Verification"
         cancelLabel="Cancel"
+        attemptInvisibleVerification
       />
 
       {/* ── Brand top section ── */}

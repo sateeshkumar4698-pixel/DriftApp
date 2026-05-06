@@ -187,6 +187,30 @@ service cloud.firestore {
       }
     }
 
+    // ─── Calls (Jitsi-based, no backend) ─────────────────────────────────────
+    // Caller creates; both parties read; either party can end the call.
+
+    match /calls/{callId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid == resource.data.callerUid
+            || request.auth.uid == resource.data.calleeUid);
+
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.callerUid
+        && request.resource.data.status == 'ringing'
+        && request.resource.data.callType in ['audio', 'video']
+        && request.resource.data.roomName is string
+        && request.resource.data.createdAt is number;
+
+      allow update: if isSignedIn()
+        && (request.auth.uid == resource.data.callerUid
+            || request.auth.uid == resource.data.calleeUid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['active', 'ended', 'declined'];
+
+      allow delete: if false;
+    }
+
     // ─── Game Rooms ───────────────────────────────────────────────────────────
 
     match /gameRooms/{roomId} {
