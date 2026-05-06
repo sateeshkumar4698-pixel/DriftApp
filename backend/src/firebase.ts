@@ -11,7 +11,6 @@ export function initFirebase(): void {
   }
 
   // ── Option 1: JSON string in env var (recommended for Railway / cloud) ────
-  // Set FIREBASE_SERVICE_ACCOUNT_JSON to the full contents of service-account.json
   const jsonEnv = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (jsonEnv) {
     const serviceAccount = JSON.parse(jsonEnv);
@@ -42,6 +41,13 @@ export function initFirebase(): void {
   // ── Option 3: Google Application Default Credentials (GCP / Cloud Run) ───
   admin.initializeApp({ credential: admin.credential.applicationDefault() });
   initialized = true;
+}
+
+export function getFirebaseAdmin(): typeof admin {
+  if (!initialized && admin.apps.length === 0) {
+    throw new Error('Firebase Admin not initialized. Call initFirebase() first.');
+  }
+  return admin;
 }
 
 export { admin };

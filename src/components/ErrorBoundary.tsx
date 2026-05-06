@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { lightColors, spacing, typography, radius } from '../utils/useTheme';
+import { logError } from '../services/logService';
 
 // ErrorBoundary is a class component — hooks are unavailable.
 // We fall back to lightColors for the error UI (acceptable for a rare fallback screen).
@@ -22,6 +23,10 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, errorMessage: error.message };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    logError('ErrorBoundary', error.message, { stack: error.stack, componentStack: info.componentStack });
   }
 
   render() {

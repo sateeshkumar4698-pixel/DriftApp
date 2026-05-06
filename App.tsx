@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { createNavigationContainerRef } from '@react-navigation/native';
+import { createNavigationContainerRef } from '@react-navigation/native'; // kept for type export below
 
 // ─── Silence Firebase SDK reCAPTCHA logs (cosmetic, not errors) ───────────────
 // Firebase web SDK internally tries to init reCAPTCHA on every phone auth call.
@@ -39,10 +39,14 @@ import { useThemeStore } from './src/store/themeStore';
 import { getUserProfile, trackUserSession, clearUserSession } from './src/utils/firestore-helpers';
 import { processDailyLogin } from './src/services/coinService';
 import { setAnalyticsUser, trackSessionStart } from './src/services/analyticsService';
+import { installGlobalErrorHandler, logError } from './src/services/logService';
 import RootNavigator from './src/navigation/RootNavigator';
 
-// Global navigation ref — lets us navigate from outside React components (push notifications)
-export const navigationRef = createNavigationContainerRef();
+// Global navigation ref — shared with notificationService, GameInviteBanner, etc.
+import { navigationRef } from './src/utils/navRef';
+
+// Install global JS error handler — captures uncaught errors to Firestore appLogs
+installGlobalErrorHandler();
 
 // ─── Auth mode ────────────────────────────────────────────────────────────────
 // true  → mock user injected, skips OTP — use this in Expo Go for testing
@@ -153,6 +157,7 @@ export default function App() {
           }
         } catch (err) {
           console.warn('[App] Profile load failed:', err);
+          logError('App.authListener', `Profile load failed for uid ${user.uid}: ${String(err)}`);
           setUserProfile(null);
         }
       } else {
@@ -211,15 +216,62 @@ export default function App() {
               }
               break;
             }
-            case 'game_invite':
-              navigationRef.navigate('Main' as never);
-              setTimeout(() => (navigationRef as any).navigate('Play'), 300);
+            case 'game_invite': {
+              const invRoomId = data.roomId as string | undefined;
+              const invGameId = (data.gameId as string | undefined) ?? 'ludo';
+              if (invRoomId) {
+                import('./src/utils/navRef').then(({ navigateToGameLobby }) => {
+                  navigateToGameLobby(invRoomId, invGameId as 'ludo' | 'truth-dare');
+                }).catch(() => {});
+              } else {
+                navigationRef.navigate('Main' as never);
+                setTimeout(() => (navigationRef as any).navigate('Play'), 300);
+              }
               break;
+            }
             case 'event_invite':
             case 'event_rsvp':
               navigationRef.navigate('Main' as never);
               setTimeout(() => (navigationRef as any).navigate('Events'), 300);
               break;
+            case 'incoming_call': {
+              const callType       = (data.callType as string) ?? 'audio';
+              const roomName       = data.roomName as string | undefined;
+              const roomUrl        = data.roomUrl  as string | undefined;
+              const callerUid      = data.callerUid as string | undefined;
+              const callerName     = (data.callerName as string) ?? 'Someone';
+              const callerPhotoURL = (data.callerPhotoURL as string) ?? undefined;
+              if (!roomName || !callerUid) break;
+              navigationRef.navigate('Main' as never);
+              setTimeout(() => {
+                (navigationRef as any).navigate('Discover', {
+                  screen: 'Call',
+                  params: {
+                    connectionId: roomName,
+                    remoteUser: {
+                      uid:      callerUid,
+                      name:     callerName,
+                      photoURL: callerPhotoURL,
+                      age:      0,
+                      bio:      '',
+                      interests: [],
+                      lookingFor: [],
+                      coins:    0,
+                      streak:   { current: 0, longest: 0, lastLoginDate: '' },
+                      profileCompleteness: 0,
+                      isVerified: false,
+                      isBanned:   false,
+                      createdAt:  0,
+                    },
+                    callType,
+                    isOutgoing: false,
+                    roomName,
+                    roomUrl,
+                  },
+                });
+              }, 300);
+              break;
+            }
             case 'admin_notification':
             default:
               // Go to Notifications screen for everything else

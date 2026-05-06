@@ -16,7 +16,10 @@ import {
   subscribeToIncomingInvites,
   respondToGameInvite,
   joinGameRoom,
+  subscribeToActiveRoomCount,
 } from '../../utils/firestore-helpers';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 
 type Nav = NativeStackNavigationProp<GamesStackParamList, 'GamesList'>;
 
@@ -99,12 +102,30 @@ export default function GamesScreen() {
   const { C, isDark } = useTheme();
   const styles = makeStyles(C);
 
-  const [invites, setInvites] = useState<GameInvite[]>([]);
+  const [invites, setInvites]             = useState<GameInvite[]>([]);
+  const [liveRoomCount, setLiveRoomCount] = useState(0);
+  const [perGameCounts, setPerGameCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!firebaseUser) return;
-    const unsub = subscribeToIncomingInvites(firebaseUser.uid, setInvites);
-    return () => unsub();
+    const unsubInvites = subscribeToIncomingInvites(firebaseUser.uid, setInvites);
+    const unsubRooms   = subscribeToActiveRoomCount(setLiveRoomCount);
+
+    // Per-game active player counts
+    const q = query(
+      collection(db, 'gameRooms'),
+      where('status', 'in', ['waiting', 'playing']),
+    );
+    const unsubPerGame = onSnapshot(q, (snap) => {
+      const counts: Record<string, number> = {};
+      snap.docs.forEach((d) => {
+        const gameId = d.data().gameId as string;
+        if (gameId) counts[gameId] = (counts[gameId] ?? 0) + 1;
+      });
+      setPerGameCounts(counts);
+    });
+
+    return () => { unsubInvites(); unsubRooms(); unsubPerGame(); };
   }, [firebaseUser]);
 
   function handleSolo(game: GameItem) {
@@ -163,7 +184,9 @@ export default function GamesScreen() {
           </View>
           <LinearGradient colors={['#00E67622', '#00B89422']} style={styles.headerBadge} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
             <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: C.success }} />
-            <Text style={styles.headerBadgeText}>{LIVE_GAMES.length} live</Text>
+            <Text style={styles.headerBadgeText}>
+              {liveRoomCount > 0 ? `${liveRoomCount} active ${liveRoomCount === 1 ? 'room' : 'rooms'}` : `${LIVE_GAMES.length} games`}
+            </Text>
           </LinearGradient>
         </LinearGradient>
 
@@ -214,6 +237,7 @@ export default function GamesScreen() {
                 game={game}
                 C={C}
                 isDark={isDark}
+                activeRooms={perGameCounts[game.id] ?? 0}
                 onSolo={() => handleSolo(game)}
                 onFriends={() => handleWithFriends(game)}
               />
@@ -256,11 +280,12 @@ interface GameCardProps {
   game: GameItem;
   C: AppColors;
   isDark: boolean;
+  activeRooms: number;
   onSolo: () => void;
   onFriends: () => void;
 }
 
-function GameCard({ game, C, isDark, onSolo, onFriends }: GameCardProps) {
+function GameCard({ game, C, isDark, activeRooms, onSolo, onFriends }: GameCardProps) {
   const styles = makeStyles(C);
   return (
     <View style={styles.gameCard}>
@@ -276,9 +301,17 @@ function GameCard({ game, C, isDark, onSolo, onFriends }: GameCardProps) {
             <Text style={styles.heroName}>{game.name}</Text>
             <Text style={styles.heroTagline}>{game.tagline}</Text>
           </View>
-          <View style={styles.heroPlayersBadge}>
-            <Ionicons name="people-outline" size={12} color="#fff" />
-            <Text style={styles.heroPlayersText}>{game.players}</Text>
+          <View style={{ alignItems: 'flex-end', gap: 6 }}>
+            <View style={styles.heroPlayersBadge}>
+              <Ionicons name="people-outline" size={12} color="#fff" />
+              <Text style={styles.heroPlayersText}>{game.players}</Text>
+            </View>
+            {activeRooms > 0 && (
+              <View style={styles.heroLiveBadge}>
+                <View style={styles.heroLiveDot} />
+                <Text style={styles.heroLiveText}>{activeRooms} active</Text>
+              </View>
+            )}
           </View>
         </View>
       </LinearGradient>
@@ -367,8 +400,11 @@ function makeStyles(C: AppColors) {
     heroTextBlock:     { flex: 1 },
     heroName:          { fontSize: 22, fontWeight: '800', color: '#fff', marginBottom: 2 },
     heroTagline:       { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontStyle: 'italic', fontWeight: '500' },
-    heroPlayersBadge:  { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.22)', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full, alignSelf: 'flex-start' },
+    heroPlayersBadge:  { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.22)', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full, alignSelf: 'flex-end' },
     heroPlayersText:   { fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+    heroLiveBadge:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,230,118,0.30)', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full, alignSelf: 'flex-end', borderWidth: 1, borderColor: 'rgba(0,230,118,0.5)' },
+    heroLiveDot:       { width: 6, height: 6, borderRadius: 3, backgroundColor: '#00E676' },
+    heroLiveText:      { fontSize: 11, fontWeight: '700', color: '#00E676', letterSpacing: 0.3 },
 
     gameCardBody:  { padding: spacing.md },
     gameCardDesc:  { ...typography.small, color: C.textSecondary, lineHeight: 19, marginBottom: spacing.sm },

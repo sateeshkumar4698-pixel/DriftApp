@@ -17,14 +17,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 import { useAuthStore } from '../../store/authStore';
 import {
   getDiscoverFeed,
   getInteractedUids,
-  getActiveStatuses,
+  getActiveStatusesBatched,
   getMyStatus,
+  getUserProfile,
   subscribeToConnections,
   subscribeToUnreadCount,
+  subscribeToOnlineUids,
+  subscribeToLiveUserCount,
 } from '../../utils/firestore-helpers';
 import Avatar from '../../components/Avatar';
 import EmptyState from '../../components/EmptyState';
@@ -51,7 +56,7 @@ const INTENT_FILTERS: Array<{ key: string; label: string; emoji: string; color: 
   { key: 'Networking', label: 'Network', emoji: '💼', color: '#0984E3' },
   { key: 'Events',     label: 'Events',  emoji: '🎉', color: '#E17055' },
   { key: 'Dating',     label: 'Dating',  emoji: '💘', color: '#FF4B6E' },
-  { key: '🟢 Active',  label: 'Active',  emoji: '🟢', color: '#00E676' },
+  { key: 'Active',     label: 'Online',  emoji: '🟢', color: '#00E676' },
 ];
 
 const CHIP_PALETTE = [
@@ -334,12 +339,12 @@ function StoriesBar({
   const { C } = useTheme();
 
   return (
-    <View style={{ borderBottomWidth: 1, borderBottomColor: C.border, paddingVertical: spacing.sm }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.md, gap: spacing.md }}>
+    <View style={{ borderBottomWidth: 1, borderBottomColor: C.border, paddingTop: spacing.md, paddingBottom: spacing.sm }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.md, gap: 12 }}>
 
         {/* My Status bubble */}
         <TouchableOpacity
-          style={{ alignItems: 'center', gap: 4, width: 70 }}
+          style={{ alignItems: 'center', gap: 5, width: 68 }}
           onPress={
             myStatus
               ? () => onViewStatus({ status: myStatus, name: currentUser.name, photoURL: currentUser.photoURL, isMine: true })
@@ -349,13 +354,17 @@ function StoriesBar({
         >
           <View style={{ position: 'relative' }}>
             {myStatus ? (
-              <LinearGradient colors={['#FF4B6E', '#6C5CE7']} style={{ width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                <View style={{ width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: C.background }}>
-                  <Avatar name={currentUser.name} photoURL={currentUser.photoURL} size={56} />
+              <LinearGradient
+                colors={['#FF4B6E', '#6C5CE7']}
+                style={{ width: 64, height: 64, borderRadius: 32, padding: 2.5 }}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              >
+                <View style={{ flex: 1, borderRadius: 30, overflow: 'hidden', backgroundColor: C.background }}>
+                  <Avatar name={currentUser.name} photoURL={currentUser.photoURL} size={59} />
                 </View>
               </LinearGradient>
             ) : (
-              <View style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: C.primary, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderStyle: 'dashed', borderColor: C.primary, alignItems: 'center', justifyContent: 'center' }}>
                 <Avatar name={currentUser.name} photoURL={currentUser.photoURL} size={56} />
               </View>
             )}
@@ -365,13 +374,13 @@ function StoriesBar({
               </View>
             )}
             {myStatus && (
-              <View style={{ position: 'absolute', bottom: -2, right: -2, width: 23, height: 23, borderRadius: 12, backgroundColor: C.background, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: C.border }}>
+              <View style={{ position: 'absolute', bottom: -2, right: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: C.background, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: C.border }}>
                 <Text style={{ fontSize: 11 }}>{STATUS_TYPE_EMOJI[myStatus.type] ?? '✨'}</Text>
               </View>
             )}
           </View>
-          <Text style={{ ...typography.small, color: C.textSecondary, textAlign: 'center', maxWidth: 70 }} numberOfLines={1}>
-            {myStatus ? 'My Status' : 'Add Status'}
+          <Text style={{ fontSize: 11, fontWeight: '600', color: myStatus ? C.text : C.textSecondary, textAlign: 'center', maxWidth: 68 }} numberOfLines={1}>
+            {myStatus ? currentUser.name.split(' ')[0] : 'Add Status'}
           </Text>
         </TouchableOpacity>
 
@@ -379,21 +388,26 @@ function StoriesBar({
         {statuses.map((item) => (
           <TouchableOpacity
             key={item.status.uid}
-            style={{ alignItems: 'center', gap: 4, width: 70 }}
+            style={{ alignItems: 'center', gap: 5, width: 68 }}
             onPress={() => onViewStatus(item)}
             activeOpacity={0.8}
           >
             <View style={{ position: 'relative' }}>
-              <LinearGradient colors={['#6C5CE7', '#FF4B6E']} style={{ width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                <View style={{ width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: C.background }}>
-                  <Avatar name={item.name} photoURL={item.photoURL} size={56} />
+              <LinearGradient
+                colors={['#6C5CE7', '#FF4B6E']}
+                style={{ width: 64, height: 64, borderRadius: 32, padding: 2.5 }}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              >
+                <View style={{ flex: 1, borderRadius: 30, overflow: 'hidden', backgroundColor: C.background }}>
+                  <Avatar name={item.name} photoURL={item.photoURL} size={59} />
                 </View>
               </LinearGradient>
-              <View style={{ position: 'absolute', bottom: -2, right: -2, width: 23, height: 23, borderRadius: 12, backgroundColor: C.background, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: C.border }}>
+              <View style={{ position: 'absolute', bottom: -2, right: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: C.background, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: C.border }}>
                 <Text style={{ fontSize: 11 }}>{STATUS_TYPE_EMOJI[item.status.type] ?? '✨'}</Text>
               </View>
             </View>
-            <Text style={{ ...typography.small, color: C.textSecondary, textAlign: 'center', maxWidth: 70 }} numberOfLines={1}>
+            {/* First name only — no snippet */}
+            <Text style={{ fontSize: 11, fontWeight: '600', color: C.text, textAlign: 'center', maxWidth: 68 }} numberOfLines={1}>
               {item.name.split(' ')[0]}
             </Text>
           </TouchableOpacity>
@@ -460,7 +474,7 @@ function NearYouStrip({
 // ─── ProfileCard ──────────────────────────────────────────────────────────────
 
 function ProfileCard({
-  user, currentUser, isActive, onPress, onConnect, mood,
+  user, currentUser, isActive, onPress, onConnect, mood, connectionStatus,
 }: {
   user: UserProfile;
   currentUser: UserProfile;
@@ -470,13 +484,29 @@ function ProfileCard({
   onMeet: () => void;
   onEvent: () => void;
   mood: MoodPreset;
+  connectionStatus: 'none' | 'pending' | 'connected';
 }) {
   const { C, isDark } = useTheme();
-  const { score: matchPct } = dynamicVibeMatch(currentUser, user, mood);
+  const { score: matchPct, breakdown } = dynamicVibeMatch(currentUser, user, mood);
   const grad      = matchGrad(matchPct);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const glowAnim  = useRef(new Animated.Value(0)).current;
-  const interests = (user.interests ?? []).slice(0, 3);
+  const interests = (user.interests ?? []).slice(0, 2);
+
+  // Build a short vibe hint from the match breakdown
+  const vibeHintText = (() => {
+    if (breakdown.sharedInterests.length >= 2)
+      return `Both into ${breakdown.sharedInterests.slice(0, 2).join(' & ')} ✨`;
+    if (breakdown.sharedInterests.length === 1)
+      return `Shared: ${breakdown.sharedInterests[0]} 🎯`;
+    if (breakdown.sharedVibes.length > 0)
+      return `Same vibe: ${breakdown.sharedVibes[0]} 🔥`;
+    if (breakdown.sharedMusic.length > 0)
+      return `Both into ${breakdown.sharedMusic[0]} 🎵`;
+    if (breakdown.sameCity && user.city)
+      return `Both in ${user.city} 📍`;
+    return null;
+  })();
 
   function handlePressIn() {
     Animated.parallel([
@@ -568,10 +598,15 @@ function ProfileCard({
                       backgroundColor: CHIP_PALETTE[i % CHIP_PALETTE.length] + '1A',
                     }]}
                   >
-                    <Text style={[cs.chipTxt, { color: CHIP_PALETTE[i % CHIP_PALETTE.length] }]}>{t}</Text>
+                    <Text style={[cs.chipTxt, { color: CHIP_PALETTE[i % CHIP_PALETTE.length] }]} numberOfLines={1}>{t}</Text>
                   </View>
                 ))}
               </View>
+            )}
+
+            {/* Row 4: vibe hint */}
+            {vibeHintText && (
+              <Text style={cs.vibeHint} numberOfLines={1}>{vibeHintText}</Text>
             )}
           </View>
 
@@ -587,20 +622,43 @@ function ProfileCard({
               </LinearGradient>
             )}
 
-            <TouchableOpacity onPress={onConnect} activeOpacity={0.8} style={cs.connectBtnWrap}>
-              <LinearGradient
-                colors={['#FF4B6E', '#C2185B']}
-                style={cs.connectBtn}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              >
+            <TouchableOpacity
+              onPress={connectionStatus === 'none' ? onConnect : undefined}
+              activeOpacity={connectionStatus === 'none' ? 0.8 : 1}
+              style={cs.connectBtnWrap}
+            >
+              {connectionStatus === 'connected' ? (
+                <View style={[cs.connectBtn, { backgroundColor: '#00B894' }]}>
+                  <Ionicons name="checkmark" size={17} color="#fff" />
+                </View>
+              ) : connectionStatus === 'pending' ? (
+                <View style={[cs.connectBtn, { backgroundColor: '#F6A623' }]}>
+                  <Ionicons name="time-outline" size={15} color="#fff" />
+                </View>
+              ) : (
                 <LinearGradient
-                  colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0)']}
-                  style={cs.shine}
-                  start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
-                />
-                <Ionicons name="person-add-outline" size={15} color="#fff" />
-              </LinearGradient>
+                  colors={['#FF4B6E', '#C2185B']}
+                  style={cs.connectBtn}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                >
+                  <LinearGradient
+                    colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0)']}
+                    style={cs.shine}
+                    start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+                  />
+                  <Ionicons name="person-add-outline" size={15} color="#fff" />
+                </LinearGradient>
+              )}
             </TouchableOpacity>
+
+            {/* Status label under icon */}
+            <Text style={[
+              cs.connectLabel,
+              connectionStatus === 'connected' && { color: '#00B894' },
+              connectionStatus === 'pending' && { color: '#F6A623' },
+            ]}>
+              {connectionStatus === 'connected' ? 'Friends' : connectionStatus === 'pending' ? 'Sent' : 'Connect'}
+            </Text>
           </View>
         </TouchableOpacity>
       </Animated.View>
@@ -622,9 +680,9 @@ const cs = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 110,
-    paddingRight: 12,
-    paddingVertical: 10,
+    paddingRight: 10,
+    paddingVertical: 12,
+    paddingLeft: 0,
     gap: 10,
   },
   stripe: {
@@ -632,40 +690,46 @@ const cs = StyleSheet.create({
     alignSelf: 'stretch',
   },
 
-  avatarWrap:  { position: 'relative', marginLeft: 6 },
-  avatarRing:  { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
-  avatarInner: { width: 58, height: 58, borderRadius: 29, overflow: 'hidden' },
-  activeDot:   { position: 'absolute', bottom: 1, right: 1, width: 13, height: 13, borderRadius: 6.5, backgroundColor: '#00E676', borderWidth: 2.5, borderColor: 'rgba(0,0,0,0.5)' },
+  avatarWrap:  { position: 'relative', marginLeft: 6, flexShrink: 0 },
+  avatarRing:  { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
+  avatarInner: { width: 54, height: 54, borderRadius: 27, overflow: 'hidden' },
+  activeDot:   { position: 'absolute', bottom: 1, right: 1, width: 12, height: 12, borderRadius: 6, backgroundColor: '#00E676', borderWidth: 2, borderColor: 'rgba(0,0,0,0.5)' },
 
-  info:     { flex: 1, gap: 5, minWidth: 0 },
-  row1:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  chipsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'nowrap' },
+  // Info block takes all remaining space — MUST have minWidth:0 to allow text truncation
+  info:     { flex: 1, minWidth: 0, gap: 4 },
+  row1:     { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'nowrap' },
+  // Allow chips to wrap onto a 2nd line — prevents overflow
+  chipsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 2 },
 
-  name:     { fontSize: 15, fontWeight: '800', flexShrink: 1 },
-  age:      { fontSize: 13, fontWeight: '500' },
-  cityText: { fontSize: 12, fontWeight: '500' },
+  name:     { fontSize: 14.5, fontWeight: '800', flexShrink: 1, flexGrow: 0 },
+  age:      { fontSize: 12.5, fontWeight: '500', flexShrink: 0 },
+  cityText: { fontSize: 11.5, fontWeight: '500' },
 
-  livePill: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#00E67622', borderRadius: 20, paddingHorizontal: 6, paddingVertical: 2 },
+  livePill: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#00E67222', borderRadius: 20, paddingHorizontal: 5, paddingVertical: 1 },
   liveDot:  { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#00E676' },
-  liveText: { fontSize: 9, fontWeight: '800', color: '#00E676' },
+  liveText: { fontSize: 8.5, fontWeight: '800', color: '#00E676' },
 
-  chip:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
+  // Chips are short — cap text at 10 chars with ellipsis if needed
+  chip:    { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20, borderWidth: 1, maxWidth: 90 },
   chipTxt: { fontSize: 10, fontWeight: '700' },
 
-  right:          { alignItems: 'center', gap: 8, paddingLeft: 4 },
-  scorePill:      { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, minWidth: 44, alignItems: 'center' },
-  scoreText:      { fontSize: 11.5, fontWeight: '900', color: '#fff' },
+  // Fixed-width right column so it never competes with info block
+  right:          { width: 56, alignItems: 'center', gap: 5, flexShrink: 0 },
+  scorePill:      { paddingHorizontal: 6, paddingVertical: 4, borderRadius: 10, minWidth: 42, alignItems: 'center' },
+  scoreText:      { fontSize: 11, fontWeight: '900', color: '#fff' },
   connectBtnWrap: {},
   connectBtn: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
     shadowColor: '#FF4B6E',
-    shadowOpacity: 0.55,
-    shadowRadius: 7,
+    shadowOpacity: 0.50,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 5,
+    elevation: 4,
   },
+  connectLabel: { fontSize: 9, fontWeight: '700', color: '#FF4B6E', letterSpacing: 0.2 },
+  vibeHint: { fontSize: 10.5, color: '#6C5CE7', fontWeight: '600', marginTop: 1 },
   shine: {
     position: 'absolute',
     top: 0, left: 0, right: 0,
@@ -696,6 +760,9 @@ export default function DiscoverScreen() {
   const [connectionStatuses, setConnectionStatuses] = useState<StatusViewItem[]>([]);
   const [viewingStatus, setViewingStatus] = useState<StatusViewItem | null>(null); // kept for legacy, now navigates to screen
   const [activeUids, setActiveUids]     = useState<Set<string>>(new Set());
+  const [pendingUids, setPendingUids]   = useState<Set<string>>(new Set());
+  const [connectedUids, setConnectedUids] = useState<Set<string>>(new Set());
+  const [onlineCount, setOnlineCount]   = useState(0);
   const [unreadCount, setUnreadCount]   = useState(0);
 
   useEffect(() => {
@@ -744,24 +811,51 @@ export default function DiscoverScreen() {
 
   useEffect(() => {
     if (!uid) return;
+    const q = query(
+      collection(db, 'connectionRequests'),
+      where('fromUid', '==', uid),
+      where('status', '==', 'pending'),
+    );
+    return onSnapshot(q, (snap) => {
+      setPendingUids(new Set(snap.docs.map((d) => d.data().toUid as string)));
+    });
+  }, [uid]);
+
+  // Real-time online presence — drives "Live" badges and 🟢 Active filter
+  useEffect(() => {
+    if (!uid) return;
+    return subscribeToOnlineUids(setActiveUids);
+  }, [uid]);
+
+  // City-level online count for header
+  useEffect(() => {
+    if (!userProfile?.city) return;
+    return subscribeToLiveUserCount(userProfile.city, setOnlineCount);
+  }, [userProfile?.city]);
+
+  // Connections list — drives connectedUids + stories bar statuses
+  useEffect(() => {
+    if (!uid) return;
     const unsub = subscribeToConnections(uid, async (connections: Connection[]) => {
+      const allOtherUids = connections.map((c) => (c.users[0] === uid ? c.users[1] : c.users[0]));
+      setConnectedUids(new Set(allOtherUids));
+
       if (connections.length === 0) {
         setConnectionStatuses([]);
-        setActiveUids(new Set());
         return;
       }
-      const otherUids = connections
-        .map((c) => (c.users[0] === uid ? c.users[1] : c.users[0]))
-        .slice(0, 15);
       try {
-        const statuses = await getActiveStatuses(otherUids);
-        setActiveUids(new Set(statuses.map((s) => s.uid)));
-        const statusMap = new Map(statuses.map((s) => [s.uid, s]));
-        // Only put users WITH an active status into connectionStatuses (for the story ring)
-        setConnectionStatuses(
+        const statuses = await getActiveStatusesBatched(allOtherUids.slice(0, 30));
+        const profileResults = await Promise.all(
           statuses.map((s) => {
             const found = users.find((u) => u.uid === s.uid);
-            return { status: s, name: found?.name ?? s.uid.slice(0, 8), photoURL: found?.photoURL };
+            return found ? Promise.resolve(found) : getUserProfile(s.uid);
+          }),
+        );
+        setConnectionStatuses(
+          statuses.map((s, i) => {
+            const profile = profileResults[i];
+            return { status: s, name: profile?.name ?? 'Unknown', photoURL: profile?.photoURL };
           }),
         );
       } catch { /* non-critical */ }
@@ -786,7 +880,7 @@ export default function DiscoverScreen() {
         interests.some((i) => i.toLowerCase().includes(search.toLowerCase())) ||
         (u.vibeProfile?.primaryVibes ?? []).some((v) => v.toLowerCase().includes(search.toLowerCase()));
       let matchesFilter = true;
-      if (activeFilter === '🟢 Active') {
+      if (activeFilter === 'Active') {
         matchesFilter = activeUids.has(u.uid);
       } else if (activeFilter !== 'All') {
         matchesFilter = lookingFor.includes(activeFilter.toLowerCase() as any);
@@ -802,7 +896,10 @@ export default function DiscoverScreen() {
     ? users.filter((u) => u.city && u.city.toLowerCase() === (userProfile.city ?? '').toLowerCase()).slice(0, 12)
     : [];
 
-  function handleConnect(user: UserProfile) { navigation.navigate('ConnectRequest', { user }); }
+  function handleConnect(user: UserProfile) {
+    setPendingUids((prev) => new Set([...prev, user.uid]));
+    navigation.navigate('ConnectRequest', { user });
+  }
   function handleMeet(user: UserProfile)    { (navigation as any).navigate('MeetupSuggest', { connectedUser: user, connectionId: '' }); }
   function handleEvent(_user: UserProfile)  { (navigation as any).navigate('Events'); }
 
@@ -845,7 +942,9 @@ export default function DiscoverScreen() {
             <>
               <View>
                 <Text style={sc.headerTitle}>Drift</Text>
-                <Text style={sc.headerSub}>Discover your people</Text>
+                <Text style={sc.headerSub}>
+                  {onlineCount > 0 ? `${onlineCount} online near you` : 'Discover your people'}
+                </Text>
               </View>
               <View style={sc.headerActions}>
                 <TouchableOpacity style={sc.iconBtn} onPress={() => setShowSearch(true)}>
@@ -858,7 +957,7 @@ export default function DiscoverScreen() {
                   <Ionicons name="qr-code-outline" size={20} color={C.text} />
                 </TouchableOpacity>
                 <TouchableOpacity style={sc.bellBtn} onPress={() => navigation.navigate('Notifications')}>
-                  <Ionicons name="notifications-outline" size={22} color={C.text} />
+                  <Ionicons name="notifications-outline" size={20} color={C.text} />
                   {unreadCount > 0 && (
                     <View style={sc.bellBadge}>
                       <Text style={sc.bellBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
@@ -866,7 +965,7 @@ export default function DiscoverScreen() {
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity style={sc.iconBtn} onPress={() => navigation.navigate('Connections')}>
-                  <Ionicons name="git-network-outline" size={20} color={C.text} />
+                  <Ionicons name="chatbubbles-outline" size={22} color={C.text} />
                 </TouchableOpacity>
               </View>
             </>
@@ -899,6 +998,7 @@ export default function DiscoverScreen() {
         >
           {INTENT_FILTERS.map(({ key, label, emoji, color }) => {
             const active = activeFilter === key;
+            const liveCount = key === 'Active' ? activeUids.size : null;
             return (
               <TouchableOpacity
                 key={key}
@@ -923,7 +1023,7 @@ export default function DiscoverScreen() {
                   color: active ? '#fff' : C.textSecondary,
                   letterSpacing: -0.1,
                 }}>
-                  {label}
+                  {liveCount != null && liveCount > 0 ? `${label} ${liveCount}` : label}
                 </Text>
               </TouchableOpacity>
             );
@@ -976,6 +1076,11 @@ export default function DiscoverScreen() {
                   currentUser={userProfile}
                   isActive={activeUids.has(item.uid)}
                   mood={moodPreset}
+                  connectionStatus={
+                    connectedUids.has(item.uid) ? 'connected'
+                    : pendingUids.has(item.uid) ? 'pending'
+                    : 'none'
+                  }
                   onPress={() => navigation.navigate('ProfileDetail', { user: item })}
                   onConnect={() => handleConnect(item)}
                   onMeet={() => handleMeet(item)}
@@ -1006,9 +1111,9 @@ function makeMainStyles(C: AppColors) {
     headerTitle:   { ...typography.h2, color: C.primary, fontWeight: '800', letterSpacing: -1 },
     headerSub:     { ...typography.small, color: C.textSecondary, marginTop: 1 },
     headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-    iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
-    bellBtn: { position: 'relative', padding: 4 },
-    bellBadge: { position: 'absolute', top: 0, right: 0, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3, borderWidth: 2, borderColor: C.background },
+    iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+    bellBtn: { position: 'relative', width: 38, height: 38, borderRadius: 19, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+    bellBadge: { position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3, borderWidth: 2, borderColor: C.background },
     bellBadgeText: { fontSize: 10, color: '#fff', fontWeight: '800' },
 
     searchRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

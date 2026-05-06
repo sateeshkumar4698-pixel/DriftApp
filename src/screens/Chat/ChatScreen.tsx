@@ -25,6 +25,8 @@ import {
   sendMessage,
   createGameRoom,
   sendGameInvite,
+  respondToGameInvite,
+  joinGameRoom,
 } from '../../utils/firestore-helpers';
 import { formatTime } from '../../utils/helpers';
 import Avatar from '../../components/Avatar';
@@ -333,14 +335,41 @@ export default function ChatScreen() {
 
     await sendGameInvite(invite);
 
-    // Send a chat message to let them know
+    // Send a chat message with metadata so the recipient can join from the bubble
     const notif: Message = {
       id:        `${now}_invite_${myUid}`,
       senderId:  myUid,
-      text:      `🎮 I invited you to play ${gameId === 'ludo' ? 'Ludo 🎲' : 'Truth or Dare 🎯'}! Check the notification banner.`,
+      text:      `🎮 I invited you to play ${gameId === 'ludo' ? 'Ludo 🎲' : 'Truth or Dare 🎯'}! Tap Join to play.`,
       createdAt: now,
+      metadata:  { type: 'game_invite', gameId, roomId, inviteId: invite.id },
     };
     await sendMessage(connectionId, notif);
+  }
+
+  // ── Join a game from an invite bubble in chat ────────────────────────────
+  async function handleJoinFromChat(msg: Message) {
+    if (!firebaseUser || !userProfile) return;
+    const { roomId, gameId, inviteId } = msg.metadata ?? {};
+    if (!roomId || !gameId) { Alert.alert('Invite expired', 'This invite is no longer valid.'); return; }
+    try {
+      if (inviteId) await respondToGameInvite(inviteId, 'accepted').catch(() => {});
+      const player: GameRoomPlayer = {
+        uid:      myUid,
+        name:     userProfile.name,
+        ...(userProfile.photoURL ? { photoURL: userProfile.photoURL } : {}),
+        ready:    false,
+        isHost:   false,
+        joinedAt: Date.now(),
+      };
+      await joinGameRoom(roomId, player);
+      // ChatScreen lives inside DiscoverStack → getParent() reaches the Tab navigator
+      (navigation.getParent() ?? navigation as any).navigate('Play', {
+        screen: 'GameLobby',
+        params: { roomId, gameId },
+      });
+    } catch {
+      Alert.alert('Error', 'Could not join the room. It may no longer be active.');
+    }
   }
 
   return (
@@ -366,6 +395,32 @@ export default function ChatScreen() {
         </TouchableOpacity>
 
         {/* Action buttons */}
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() =>
+            (navigation as any).navigate('Call', {
+              connectionId,
+              remoteUser: connectedUser,
+              callType: 'audio',
+              isOutgoing: true,
+            })
+          }
+        >
+          <Ionicons name="call" size={20} color={C.success} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() =>
+            (navigation as any).navigate('Call', {
+              connectionId,
+              remoteUser: connectedUser,
+              callType: 'video',
+              isOutgoing: true,
+            })
+          }
+        >
+          <Ionicons name="videocam" size={20} color={C.secondary} />
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionBtn}
           onPress={() => setShowGamePicker(true)}
@@ -420,9 +475,29 @@ export default function ChatScreen() {
           }
           renderItem={({ item }) => {
             const isMine = item.senderId === firebaseUser?.uid;
-            const isInviteMsg = item.text.startsWith('🎮 I invited');
+            const isInviteMsg = item.metadata?.type === 'game_invite' || item.text.startsWith('🎮 I invited');
+            const canJoin     = isInviteMsg && !isMine && !!item.metadata?.roomId;
+
+            const bubble = (
+              <View
+                style={[
+                  styles.bubble,
+                  isMine ? styles.bubbleMine : styles.bubbleTheirs,
+                  isInviteMsg && styles.bubbleInvite,
+                ]}
+              >
+                <Text style={[styles.bubbleText, isMine ? styles.textMine : styles.textTheirs]}>
+                  {item.text}
+                </Text>
+                <Text style={[styles.bubbleTime, isMine ? styles.timeMine : styles.timeTheirs]}>
+                  {formatTime(item.createdAt)}
+                </Text>
+              </View>
+            );
+
             return (
               <View
+                key={item.id}
                 style={[
                   styles.bubbleWrapper,
                   isMine ? styles.bubbleWrapperMine : styles.bubbleWrapperTheirs,
@@ -431,20 +506,18 @@ export default function ChatScreen() {
                 {!isMine && (
                   <Avatar name={connectedUser.name} photoURL={connectedUser.photoURL} size={28} />
                 )}
-                <View
-                  style={[
-                    styles.bubble,
-                    isMine ? styles.bubbleMine : styles.bubbleTheirs,
-                    isInviteMsg && styles.bubbleInvite,
-                  ]}
-                >
-                  <Text style={[styles.bubbleText, isMine ? styles.textMine : styles.textTheirs]}>
-                    {item.text}
-                  </Text>
-                  <Text style={[styles.bubbleTime, isMine ? styles.timeMine : styles.timeTheirs]}>
-                    {formatTime(item.createdAt)}
-                  </Text>
-                </View>
+                {canJoin ? (
+                  <View style={styles.inviteColumn}>
+                    {bubble}
+                    <TouchableOpacity
+                      style={styles.joinBtn}
+                      onPress={() => handleJoinFromChat(item)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.joinBtnText}>🎮 Join Game</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : bubble}
               </View>
             );
           }}
@@ -569,6 +642,12 @@ function makeStyles(C: AppColors, isDark: boolean) {
       borderWidth: 1, borderColor: `${C.secondary}40`,
       backgroundColor: `${C.secondary}10`,
     },
+    inviteColumn: { flexDirection: 'column', alignItems: 'flex-start', gap: spacing.xs, maxWidth: '72%' },
+    joinBtn: {
+      backgroundColor: C.primary, borderRadius: radius.md,
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+    },
+    joinBtnText: { ...typography.caption, color: '#fff', fontWeight: '700' },
     bubbleText: { ...typography.body, lineHeight: 22 },
     textMine:   { color: C.background },
     textTheirs: { color: C.text },

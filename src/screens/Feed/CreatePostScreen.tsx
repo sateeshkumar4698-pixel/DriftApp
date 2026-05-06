@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../../config/firebase';
 import { useAuthStore } from '../../store/authStore';
@@ -515,45 +516,57 @@ export default function CreatePostScreen() {
     <SafeAreaView style={styles.flex}>
       {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
-          <Ionicons name="close" size={26} color={C.text} />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="close" size={24} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New Post</Text>
         <TouchableOpacity
-          style={[styles.postBtn, isValid && !loading ? { backgroundColor: accent } : styles.postBtnDisabled]}
           onPress={handlePost}
           disabled={!isValid || loading}
           activeOpacity={0.85}
+          style={[styles.postBtnWrap, (!isValid || loading) && { opacity: 0.5 }]}
         >
-          {loading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={[styles.postBtnText, !isValid && styles.postBtnTextDisabled]}>Post</Text>
-          )}
+          <LinearGradient
+            colors={[accent, accent + 'CC']}
+            style={styles.postBtn}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.postBtnText}>Post</Text>
+            )}
+          </LinearGradient>
         </TouchableOpacity>
       </View>
 
       {/* ── Tab selector ── */}
       <View style={styles.tabsWrap}>
         {TAB_DEFS.map((tab) => {
-          const active = activeTab === tab.id;
+          const active   = activeTab === tab.id;
           const tabColor = tab.colorFn(C);
           return (
             <TouchableOpacity
               key={tab.id}
-              style={[
-                styles.tab,
-                active
-                  ? { backgroundColor: tabColor, borderColor: tabColor }
-                  : { borderColor: C.border },
-              ]}
               onPress={() => switchTab(tab.id)}
               activeOpacity={0.8}
+              style={styles.tabOuter}
             >
-              <Text style={styles.tabEmoji}>{tab.emoji}</Text>
-              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
-                {tab.label}
-              </Text>
+              {active ? (
+                <LinearGradient
+                  colors={[tabColor, tabColor + 'AA']}
+                  style={styles.tab}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                >
+                  <Text style={styles.tabEmoji}>{tab.emoji}</Text>
+                  <Text style={styles.tabLabelActive}>{tab.label}</Text>
+                </LinearGradient>
+              ) : (
+                <View style={[styles.tab, { backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.border }]}>
+                  <Text style={styles.tabEmoji}>{tab.emoji}</Text>
+                  <Text style={[styles.tabLabel, { color: C.textSecondary }]}>{tab.label}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           );
         })}
@@ -725,34 +738,32 @@ function makeStyles(C: AppColors) {
 
     header: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md, paddingVertical: 12,
       borderBottomWidth: 1, borderBottomColor: C.border,
+      backgroundColor: C.background,
     },
-    closeBtn:            { padding: spacing.xs },
-    headerTitle:         { ...typography.body, fontWeight: '700', color: C.text },
-    postBtn: {
-      paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-      borderRadius: radius.full, minWidth: 64, alignItems: 'center',
-    },
-    postBtnDisabled:     { backgroundColor: C.border },
-    postBtnText:         { ...typography.caption, fontWeight: '700', color: '#fff' },
-    postBtnTextDisabled: { color: C.textSecondary },
+    closeBtn:      { padding: spacing.xs },
+    headerTitle:   { fontSize: 16, fontWeight: '700', color: C.text },
+    postBtnWrap:   { borderRadius: radius.full, overflow: 'hidden' },
+    postBtn:       { paddingHorizontal: 20, paddingVertical: 9, borderRadius: radius.full, alignItems: 'center', minWidth: 68 },
+    postBtnText:   { fontSize: 14, fontWeight: '700', color: '#fff' },
 
     tabsWrap: {
       flexDirection: 'row',
-      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md, paddingVertical: 10,
       gap: spacing.sm,
       borderBottomWidth: 1, borderBottomColor: C.border,
       backgroundColor: C.background,
     },
+    tabOuter: { flex: 1 },
     tab: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      gap: 4, paddingVertical: 8, borderRadius: radius.md, borderWidth: 1.5,
-      backgroundColor: C.surface,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+      gap: 4, paddingVertical: 9, borderRadius: radius.md,
+      overflow: 'hidden',
     },
     tabEmoji:       { fontSize: 14 },
-    tabLabel:       { ...typography.small, fontWeight: '600', color: C.textSecondary },
-    tabLabelActive: { color: '#fff', fontWeight: '700' },
+    tabLabel:       { fontSize: 12, fontWeight: '600' },
+    tabLabelActive: { fontSize: 12, fontWeight: '700', color: '#fff' },
 
     scroll: { padding: spacing.md, paddingBottom: spacing.xxl },
 

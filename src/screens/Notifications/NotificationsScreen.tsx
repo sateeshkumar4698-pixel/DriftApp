@@ -150,8 +150,8 @@ export default function NotificationsScreen() {
         break;
       }
       case 'game_invite':
-        // The GameInviteBanner handles accepting — just go to games
-        (navigation as any).navigate('Play');
+        // Accept invite and navigate directly into the lobby
+        handleAcceptGame(item);
         break;
       case 'event_invite':
       case 'event_rsvp':
@@ -215,7 +215,8 @@ export default function NotificationsScreen() {
       };
       await joinGameRoom(roomId, player);
       markNotificationRead(item.id).catch(() => {});
-      (navigation as any).navigate('Play', {
+      // NotificationsScreen is inside DiscoverStack → getParent() = Tab navigator
+      (navigation.getParent() ?? navigation as any).navigate('Play', {
         screen: 'GameLobby',
         params: { roomId, gameId },
       });

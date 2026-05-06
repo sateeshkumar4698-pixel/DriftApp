@@ -1,0 +1,53 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+# .env is sometimes needed for EAS if using local env files, but usually EAS handles secrets.
+# I'll leave .env ignored as we're passing secrets via EAS or they don't matter for the preview build here, except google-services.json.
+.env.local
+.env*.local
+
+# secrets — never commit these
+# REMOVED for EAS build to upload: google-services.json
+google-service-account.json
+backend/service-account.json
+backend/.env
+GoogleService-Info.plist
+*.p8
+*.p12
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android

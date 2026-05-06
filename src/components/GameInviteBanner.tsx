@@ -7,15 +7,13 @@ import {
   View,
   Alert,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NavigationProp } from '@react-navigation/native';
-
 import { useAuthStore } from '../store/authStore';
 import {
   subscribeToIncomingInvites,
   respondToGameInvite,
   joinGameRoom,
 } from '../utils/firestore-helpers';
+import { navigateToGameLobby } from '../utils/navRef';
 import Avatar from './Avatar';
 import { useTheme, AppColors, spacing, typography, radius, shadows } from '../utils/useTheme';
 import { GameInvite, GameRoomPlayer } from '../types';
@@ -33,11 +31,6 @@ const AUTO_HIDE_MS = 15_000;
  */
 export default function GameInviteBanner() {
   const { firebaseUser, userProfile } = useAuthStore();
-  // We use a loose NavigationProp so this can be mounted anywhere inside the
-  // nav tree — actual navigation happens by name.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const navigation = useNavigation<NavigationProp<any>>();
-
   const { C } = useTheme();
 
   const [current, setCurrent] = useState<GameInvite | null>(null);
@@ -108,15 +101,12 @@ export default function GameInviteBanner() {
       };
       await joinGameRoom(current.roomId, selfPlayer);
 
-      // Navigate into the Play tab → GameLobby
+      // Navigate into the Play tab → GameLobby using the global navRef
+      // (banner renders outside Tab.Navigator so useNavigation gives the Root stack)
       const inviteRoomId = current.roomId;
-      const inviteGameId = current.gameId;
+      const inviteGameId = current.gameId as 'ludo' | 'truth-dare';
       dismiss();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (navigation as any).navigate('Play', {
-        screen: 'GameLobby',
-        params: { roomId: inviteRoomId, gameId: inviteGameId },
-      });
+      navigateToGameLobby(inviteRoomId, inviteGameId);
     } catch (err) {
       console.error(err);
       Alert.alert('Could not join', 'The room may no longer be available.');

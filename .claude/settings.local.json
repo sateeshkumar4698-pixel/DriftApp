@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(npm install *)",
-      "Bash(npx expo *)"
+      "Bash(npx expo *)",
+      "Bash(npx tsc *)",
+      "Bash(kill %1)",
+      "Bash(npx expo-doctor *)",
+      "Bash(xargs -I{} cat {})",
+      "Bash(npm dedupe *)"
     ]
   }
 }

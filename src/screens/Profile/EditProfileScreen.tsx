@@ -368,6 +368,26 @@ export default function EditProfileScreen() {
                   );
                 })}
               </View>
+
+              {/* ── Avatar Builder shortcut ─── */}
+              <TouchableOpacity
+                style={[sc.avatarBuilderBtn, { borderColor: isDark ? D.border : C.border, backgroundColor: isDark ? D.bgInput : C.background }]}
+                onPress={() => (navigation as any).navigate('AvatarBuilder')}
+                activeOpacity={0.8}
+              >
+                <LinearGradient colors={['#6C5CE7', '#4834D4']} style={sc.avatarBuilderIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                  <Text style={{ fontSize: 18 }}>🎨</Text>
+                </LinearGradient>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: isDark ? D.text : C.text }}>
+                    Create Cartoon Avatar
+                  </Text>
+                  <Text style={{ fontSize: 12, color: isDark ? D.textSub : C.textSecondary, marginTop: 2 }}>
+                    No real photo? Build a fun illustrated avatar
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={isDark ? D.textSub : C.textSecondary} />
+              </TouchableOpacity>
             </GlassCard>
 
             {/* ── Basic info ────────────────────────────────────────────── */}
@@ -615,6 +635,15 @@ const sc = StyleSheet.create({
   photoRemove:   { position: 'absolute', top: 5, right: 5, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', justifyContent: 'center' },
   mainBadge:     { position: 'absolute', bottom: 5, left: 5, borderRadius: radius.full, paddingHorizontal: 6, paddingVertical: 2 },
   mainBadgeText: { fontSize: 8, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+  avatarBuilderBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    marginTop: spacing.md, padding: spacing.sm,
+    borderRadius: radius.md, borderWidth: 1.5,
+  },
+  avatarBuilderIcon: {
+    width: 42, height: 42, borderRadius: radius.sm,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
   photoAddBtn:   { width: '100%', height: '100%' },
   photoAddGrad:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
   photoAddLabel: { fontSize: 10, color: D.pink, fontWeight: '600' },

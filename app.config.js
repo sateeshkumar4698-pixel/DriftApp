@@ -14,7 +14,7 @@ module.exports = {
   expo: {
     name:                'Drift',
     slug:                'drift-app',
-    version:             '1.0.0',
+    version:             '1.0.2',
     runtimeVersion:      { policy: 'appVersion' },
     orientation:         'portrait',
     icon:                './assets/icon.png',
@@ -55,7 +55,7 @@ module.exports = {
     ios: {
       supportsTablet:   false,
       bundleIdentifier: 'com.drift.app',
-      buildNumber:      '1',
+      buildNumber:      '2',
       infoPlist: {
         NSCameraUsageDescription:            'Drift uses the camera to scan QR codes and take profile photos.',
         NSPhotoLibraryUsageDescription:      'Drift accesses your photos to let you set a profile picture and share images.',
@@ -67,7 +67,7 @@ module.exports = {
 
     android: {
       package:     'com.drift.app',
-      versionCode: 1,
+      versionCode: 2,
 
       permissions: [
         'CAMERA',

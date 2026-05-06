@@ -9,6 +9,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -20,7 +21,6 @@ import { postStatus } from '../../utils/firestore-helpers';
 import { useTheme, AppColors, spacing, typography, radius } from '../../utils/useTheme';
 import { DriftStatus, StatusType } from '../../types';
 
-// StatusCreate lives in both Profile and Discover stacks
 type StatusCreateRoute =
   | RouteProp<ProfileStackParamList, 'StatusCreate'>
   | RouteProp<DiscoverStackParamList, 'StatusCreate'>;
@@ -42,8 +42,8 @@ const STATUS_TYPES: StatusConfig[] = [
     type: 'vibe_check',
     emoji: '✨',
     label: 'Vibe Check',
-    description: "What's the energy right now?",
-    placeholder: 'Main character vibes today…',
+    description: "What's your energy right now?",
+    placeholder: 'Main character energy today…',
     color: '#6C5CE7',
     grad: ['#6C5CE7', '#A29BFE'],
   },
@@ -94,53 +94,140 @@ const STATUS_TYPES: StatusConfig[] = [
   },
 ];
 
-// ─── Type selector card ───────────────────────────────────────────────────────
+// ─── Live Preview Card ────────────────────────────────────────────────────────
 
-function TypeCard({
+function PreviewCard({
   config,
-  selected,
-  onPress,
+  text,
+  venue,
+  city,
   C,
 }: {
   config: StatusConfig;
-  selected: boolean;
-  onPress: () => void;
+  text: string;
+  venue: string;
+  city: string;
   C: AppColors;
 }) {
-  const styles = makeStyles(C);
+  const isLocation = config.type === 'location_drop';
+  const displayText = isLocation
+    ? venue || 'Your location…'
+    : text || config.placeholder;
+
   return (
-    <TouchableOpacity
-      style={[
-        styles.typeCard,
-        selected && { borderColor: config.color, backgroundColor: config.color + '12' },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.8}
+    <LinearGradient
+      colors={[config.color + '18', config.color + '05']}
+      style={previewStyles.card}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
     >
-      <View style={[styles.typeEmojiWrap, { backgroundColor: config.color + '18' }]}>
-        <Text style={styles.typeEmoji}>{config.emoji}</Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.typeLabel, selected && { color: config.color }]}>
-          {config.label}
+      <View style={[previewStyles.border, { borderColor: config.color + '40' }]}>
+        {/* Type pill */}
+        <LinearGradient
+          colors={config.grad}
+          style={previewStyles.pill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+        >
+          <Text style={{ fontSize: 13 }}>{config.emoji}</Text>
+          <Text style={previewStyles.pillLabel}>{config.label}</Text>
+        </LinearGradient>
+
+        {/* Content */}
+        <Text
+          style={[
+            previewStyles.contentText,
+            { color: (isLocation ? venue : text) ? C.text : C.textTertiary },
+          ]}
+          numberOfLines={3}
+        >
+          {isLocation && venue ? `📍 ${venue}${city ? ` · ${city}` : ''}` : displayText}
         </Text>
-        <Text style={styles.typeDesc}>{config.description}</Text>
-      </View>
-      {selected ? (
-        <View style={[styles.selectedDot, { backgroundColor: config.color }]}>
-          <Ionicons name="checkmark" size={12} color="#fff" />
+
+        {/* Footer */}
+        <View style={previewStyles.footer}>
+          <View style={[previewStyles.expiry, { backgroundColor: C.surface }]}>
+            <Ionicons name="time-outline" size={10} color={C.textTertiary} />
+            <Text style={[previewStyles.expiryText, { color: C.textTertiary }]}>24h</Text>
+          </View>
         </View>
-      ) : (
-        <Ionicons name="chevron-forward" size={16} color={C.textTertiary} />
-      )}
-    </TouchableOpacity>
+      </View>
+    </LinearGradient>
   );
 }
+
+const previewStyles = StyleSheet.create({
+  card:        { borderRadius: radius.lg, overflow: 'hidden', marginBottom: spacing.md },
+  border:      { borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, gap: spacing.sm, minHeight: 110 },
+  pill:        { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full },
+  pillLabel:   { fontSize: 11, fontWeight: '700', color: '#fff' },
+  contentText: { fontSize: 17, fontWeight: '600', lineHeight: 24, flex: 1 },
+  footer:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
+  expiry:      { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.full },
+  expiryText:  { fontSize: 10, fontWeight: '600' },
+});
+
+// ─── Type Selector ────────────────────────────────────────────────────────────
+
+function TypeSelector({
+  types,
+  selected,
+  onSelect,
+  C,
+}: {
+  types: StatusConfig[];
+  selected: StatusConfig;
+  onSelect: (c: StatusConfig) => void;
+  C: AppColors;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.xs }}
+    >
+      {types.map((config) => {
+        const active = selected.type === config.type;
+        return (
+          <TouchableOpacity
+            key={config.type}
+            onPress={() => onSelect(config)}
+            activeOpacity={0.75}
+          >
+            {active ? (
+              <LinearGradient
+                colors={config.grad}
+                style={selectorStyles.chipActive}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={{ fontSize: 14 }}>{config.emoji}</Text>
+                <Text style={selectorStyles.chipLabelActive}>{config.label}</Text>
+              </LinearGradient>
+            ) : (
+              <View style={[selectorStyles.chip, { borderColor: C.border, backgroundColor: C.surface }]}>
+                <Text style={{ fontSize: 14 }}>{config.emoji}</Text>
+                <Text style={[selectorStyles.chipLabel, { color: C.textSecondary }]}>{config.label}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+const selectorStyles = StyleSheet.create({
+  chip:            { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.full, borderWidth: 1.5 },
+  chipActive:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.full },
+  chipLabel:       { fontSize: 13, fontWeight: '500' },
+  chipLabelActive: { fontSize: 13, fontWeight: '700', color: '#fff' },
+});
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function StatusCreateScreen() {
-  const { C, isDark } = useTheme();
+  const { C } = useTheme();
   const styles = makeStyles(C);
   const navigation = useNavigation<any>();
   const route      = useRoute<StatusCreateRoute>();
@@ -149,7 +236,7 @@ export default function StatusCreateScreen() {
   const findConfig = (type: StatusType) =>
     STATUS_TYPES.find((c) => c.type === type) ?? STATUS_TYPES[0];
 
-  const { firebaseUser } = useAuthStore();
+  const { firebaseUser, userProfile } = useAuthStore();
   const [selectedType, setSelectedType] = useState<StatusConfig>(
     initialStatus ? findConfig(initialStatus.type) : STATUS_TYPES[0],
   );
@@ -161,23 +248,20 @@ export default function StatusCreateScreen() {
   );
   const [saving, setSaving] = useState(false);
 
-  function isLocationDrop() { return selectedType.type === 'location_drop'; }
-
-  function canPost(): boolean {
-    if (isLocationDrop()) return !!venue.trim();
-    return text.trim().length >= 3;
-  }
+  const isLocationDrop = selectedType.type === 'location_drop';
+  const canPost = isLocationDrop ? !!venue.trim() : text.trim().length >= 3;
+  const charPct = Math.min(1, text.length / 200);
 
   async function handlePost() {
-    if (!firebaseUser || !canPost()) return;
+    if (!firebaseUser || !canPost) return;
     setSaving(true);
     try {
       const now = Date.now();
       const status: DriftStatus = {
         uid:       firebaseUser.uid,
         type:      selectedType.type,
-        text:      isLocationDrop() ? undefined : text.trim(),
-        location:  isLocationDrop() ? { venue: venue.trim(), city: city.trim() } : undefined,
+        text:      isLocationDrop ? undefined : text.trim(),
+        location:  isLocationDrop ? { venue: venue.trim(), city: city.trim() } : undefined,
         audience,
         expiresAt: now + 24 * 60 * 60 * 1000,
         views:     [],
@@ -185,7 +269,6 @@ export default function StatusCreateScreen() {
         createdAt: now,
       };
       await postStatus(firebaseUser.uid, status);
-      setSaving(false);
       navigation.goBack();
     } catch (err: unknown) {
       setSaving(false);
@@ -197,34 +280,43 @@ export default function StatusCreateScreen() {
     }
   }
 
-  const activeColor = selectedType.color;
-  const charPct     = text.length / 200;
-
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
-      {/* ── Header ── */}
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.cancelBtn}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
           <Ionicons name="close" size={22} color={C.text} />
         </TouchableOpacity>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={styles.headerTitle}>Drift Status</Text>
-          <Text style={styles.headerSub}>Disappears in 24 hours</Text>
+        <View style={styles.headerCenter}>
+          <LinearGradient
+            colors={selectedType.grad}
+            style={styles.headerIconBg}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Text style={{ fontSize: 14 }}>{selectedType.emoji}</Text>
+          </LinearGradient>
+          <View>
+            <Text style={styles.headerTitle}>Drift Status</Text>
+            <Text style={styles.headerSub}>Disappears in 24 hours</Text>
+          </View>
         </View>
         <TouchableOpacity
           onPress={handlePost}
-          disabled={!canPost() || saving}
+          disabled={!canPost || saving}
           activeOpacity={0.85}
+          style={styles.postBtnWrap}
         >
           <LinearGradient
-            colors={canPost() ? selectedType.grad : [C.border, C.border]}
+            colors={canPost ? selectedType.grad : [C.border, C.border]}
             style={styles.postBtn}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
           >
-            <Text style={[styles.postBtnText, !canPost() && { color: C.textTertiary }]}>
-              {saving ? '…' : 'Post'}
-            </Text>
+            {saving
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Text style={[styles.postBtnText, !canPost && { color: C.textTertiary }]}>Post</Text>
+            }
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -238,33 +330,35 @@ export default function StatusCreateScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── Selected type preview banner ── */}
-          <LinearGradient
-            colors={[selectedType.color + '18', selectedType.color + '06']}
-            style={styles.previewBanner}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Text style={styles.previewEmoji}>{selectedType.emoji}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.previewLabel, { color: selectedType.color }]}>{selectedType.label}</Text>
-              <Text style={styles.previewDesc}>{selectedType.description}</Text>
-            </View>
-          </LinearGradient>
+          {/* Type selector (horizontal chips) */}
+          <Text style={styles.sectionLabel}>Type</Text>
+          <TypeSelector
+            types={STATUS_TYPES}
+            selected={selectedType}
+            onSelect={(c) => { setSelectedType(c); setText(''); setVenue(''); setCity(''); }}
+            C={C}
+          />
 
-          {/* ── Input area ── */}
-          <View style={[styles.inputCard, { borderColor: activeColor + '60' }]}>
-            {isLocationDrop() ? (
+          <View style={styles.divider} />
+
+          {/* Input area */}
+          <Text style={styles.sectionLabel}>
+            {isLocationDrop ? 'Where are you?' : 'What\'s happening?'}
+          </Text>
+
+          <View style={[styles.inputCard, { borderColor: selectedType.color + '60' }]}>
+            {isLocationDrop ? (
               <View style={{ gap: spacing.sm }}>
                 <View style={styles.inputRow}>
-                  <Ionicons name="location" size={18} color={activeColor} />
+                  <Ionicons name="location" size={18} color={selectedType.color} />
                   <TextInput
                     style={[styles.input, { color: C.text }]}
                     value={venue}
                     onChangeText={setVenue}
-                    placeholder="Venue / place name *"
+                    placeholder="Venue or place name *"
                     placeholderTextColor={C.textTertiary}
                     maxLength={60}
+                    autoFocus
                   />
                 </View>
                 <View style={[styles.inputRow, { borderTopWidth: 1, borderTopColor: C.border, paddingTop: spacing.sm }]}>
@@ -280,61 +374,51 @@ export default function StatusCreateScreen() {
                 </View>
               </View>
             ) : (
-              <TextInput
-                style={[styles.textArea, { color: C.text }]}
-                value={text}
-                onChangeText={setText}
-                placeholder={selectedType.placeholder}
-                placeholderTextColor={C.textTertiary}
-                multiline
-                maxLength={200}
-                textAlignVertical="top"
-              />
+              <>
+                <TextInput
+                  style={[styles.textArea, { color: C.text }]}
+                  value={text}
+                  onChangeText={setText}
+                  placeholder={selectedType.placeholder}
+                  placeholderTextColor={C.textTertiary}
+                  multiline
+                  maxLength={200}
+                  textAlignVertical="top"
+                  autoFocus
+                />
+                {/* Char progress bar */}
+                <View style={styles.charRow}>
+                  <Text style={[
+                    styles.charCount,
+                    text.trim().length > 0 && text.trim().length < 3 && { color: C.error },
+                    text.trim().length >= 3 && { color: C.textSecondary },
+                  ]}>
+                    {text.trim().length < 3 && text.length > 0
+                      ? `${text.trim().length}/3 min`
+                      : `${text.length}/200`}
+                  </Text>
+                  <View style={styles.charTrack}>
+                    <View style={[styles.charFill, {
+                      width: `${charPct * 100}%`,
+                      backgroundColor: charPct > 0.9 ? C.error : selectedType.color,
+                    }]} />
+                  </View>
+                </View>
+              </>
             )}
           </View>
 
-          {/* Char count */}
-          {!isLocationDrop() && (
-            <View style={styles.charRow}>
-              <Text style={[
-                styles.charCount,
-                text.trim().length > 0 && text.trim().length < 3 && { color: C.error },
-                text.trim().length >= 3 && { color: C.textSecondary },
-              ]}>
-                {text.trim().length < 3
-                  ? `${text.trim().length}/3 minimum`
-                  : `${text.length} / 200`}
-              </Text>
-              {/* Char progress ring hint */}
-              <View style={styles.charTrack}>
-                <View style={[styles.charFill, {
-                  width: `${Math.min(100, charPct * 100)}%`,
-                  backgroundColor: charPct > 0.9 ? C.error : activeColor,
-                }]} />
-              </View>
-            </View>
-          )}
+          {/* Live preview */}
+          <Text style={styles.sectionLabel}>Preview</Text>
+          <PreviewCard
+            config={selectedType}
+            text={text}
+            venue={venue}
+            city={city}
+            C={C}
+          />
 
-          {/* ── Type selector ── */}
-          <Text style={styles.sectionLabel}>Type of status</Text>
-          <View style={styles.typeGrid}>
-            {STATUS_TYPES.map((config) => (
-              <TypeCard
-                key={config.type}
-                config={config}
-                selected={selectedType.type === config.type}
-                C={C}
-                onPress={() => {
-                  setSelectedType(config);
-                  setText('');
-                  setVenue('');
-                  setCity('');
-                }}
-              />
-            ))}
-          </View>
-
-          {/* ── Audience toggle ── */}
+          {/* Audience toggle */}
           <Text style={styles.sectionLabel}>Who can see this?</Text>
           <View style={styles.audienceRow}>
             {(['connections', 'everyone'] as const).map((aud) => {
@@ -342,36 +426,40 @@ export default function StatusCreateScreen() {
               return (
                 <TouchableOpacity
                   key={aud}
-                  style={[
-                    styles.audienceBtn,
-                    active && { backgroundColor: activeColor + '15', borderColor: activeColor },
-                  ]}
+                  style={[styles.audienceBtn, active && {
+                    backgroundColor: selectedType.color + '12',
+                    borderColor: selectedType.color,
+                  }]}
                   onPress={() => setAudience(aud)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.audienceEmoji}>{aud === 'connections' ? '🫂' : '🌍'}</Text>
+                  <Text style={styles.audienceEmoji}>
+                    {aud === 'connections' ? '🫂' : '🌍'}
+                  </Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.audienceTitle, active && { color: activeColor }]}>
+                    <Text style={[styles.audienceTitle, active && { color: selectedType.color }]}>
                       {aud === 'connections' ? 'Connections' : 'Everyone'}
                     </Text>
                     <Text style={styles.audienceSub}>
-                      {aud === 'connections' ? 'Only your connections' : 'All Drift users'}
+                      {aud === 'connections' ? 'Only people you\'re connected with' : 'All Drift users'}
                     </Text>
                   </View>
                   {active && (
-                    <View style={[styles.audienceCheck, { backgroundColor: activeColor }]}>
+                    <LinearGradient
+                      colors={selectedType.grad}
+                      style={styles.audienceCheck}
+                    >
                       <Ionicons name="checkmark" size={12} color="#fff" />
-                    </View>
+                    </LinearGradient>
                   )}
                 </TouchableOpacity>
               );
             })}
           </View>
 
-          {/* ── Expiry note ── */}
           <View style={styles.expiryNote}>
-            <Ionicons name="time-outline" size={14} color={C.textTertiary} />
-            <Text style={styles.expiryText}>Disappears automatically after 24 hours</Text>
+            <Ionicons name="time-outline" size={13} color={C.textTertiary} />
+            <Text style={styles.expiryText}>Automatically disappears after 24 hours</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -385,93 +473,101 @@ function makeStyles(C: AppColors) {
   return StyleSheet.create({
     flex: { flex: 1, backgroundColor: C.background },
 
-    // Header
     header: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-      borderBottomWidth: 1, borderBottomColor: C.border,
-    },
-    cancelBtn:  { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-    headerTitle:{ ...typography.body, fontWeight: '700', color: C.text },
-    headerSub:  { ...typography.small, color: C.textSecondary, marginTop: 1 },
-    postBtn: {
-      paddingHorizontal: spacing.md + 4,
-      paddingVertical: spacing.sm,
-      borderRadius: radius.full,
-      minWidth: 64,
+      flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
     },
-    postBtnText: { ...typography.caption, color: '#fff', fontWeight: '700' },
+    closeBtn: {
+      width: 36, height: 36,
+      alignItems: 'center', justifyContent: 'center',
+      backgroundColor: C.surface, borderRadius: radius.full,
+      borderWidth: 1, borderColor: C.border,
+    },
+    headerCenter: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    },
+    headerIconBg: {
+      width: 34, height: 34, borderRadius: 10,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    headerTitle: { ...typography.body, fontWeight: '700', color: C.text },
+    headerSub:   { ...typography.small, color: C.textSecondary, marginTop: 1 },
+
+    postBtnWrap: { borderRadius: radius.full, overflow: 'hidden' },
+    postBtn: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: 9,
+      borderRadius: radius.full,
+      minWidth: 68,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    postBtnText: { ...typography.label, color: '#fff', fontWeight: '700' },
 
     container: { padding: spacing.lg, paddingBottom: 100 },
 
-    // Preview banner
-    previewBanner: {
-      flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-      padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.md,
+    sectionLabel: {
+      ...typography.label,
+      color: C.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.7,
+      marginBottom: spacing.sm,
     },
-    previewEmoji: { fontSize: 28 },
-    previewLabel: { ...typography.body, fontWeight: '700' },
-    previewDesc:  { ...typography.small, color: C.textSecondary, marginTop: 2 },
 
-    // Input
-    inputCard: {
-      backgroundColor: C.inputBg, borderRadius: radius.md,
-      borderWidth: 1.5, padding: spacing.md,
-      marginBottom: spacing.xs,
+    divider: {
+      height: 1,
+      backgroundColor: C.border,
+      marginVertical: spacing.md,
     },
-    inputRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+
+    inputCard: {
+      backgroundColor: C.inputBg,
+      borderRadius: radius.md,
+      borderWidth: 1.5,
+      padding: spacing.md,
+      marginBottom: spacing.md,
+    },
+    inputRow: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    },
     input: {
       flex: 1, ...typography.body, paddingVertical: 2,
     },
     textArea: {
-      ...typography.body, minHeight: 96, paddingVertical: 0,
+      ...typography.bodyLg, minHeight: 100, paddingVertical: 0,
     },
 
-    // Char count
-    charRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
-    charCount: { ...typography.small },
-    charTrack: { flex: 1, height: 3, backgroundColor: C.border, borderRadius: 2, overflow: 'hidden' },
-    charFill:  { height: 3, borderRadius: 2 },
-
-    // Section label
-    sectionLabel: {
-      ...typography.label, color: C.textSecondary,
-      marginBottom: spacing.sm, marginTop: spacing.md,
-      textTransform: 'uppercase', letterSpacing: 0.6,
+    charRow: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+      marginTop: spacing.sm,
     },
+    charCount:  { ...typography.small, color: C.textTertiary, minWidth: 45 },
+    charTrack:  { flex: 1, height: 3, backgroundColor: C.border, borderRadius: 2, overflow: 'hidden' },
+    charFill:   { height: 3, borderRadius: 2 },
 
-    // Type grid
-    typeGrid:   { gap: spacing.sm, marginBottom: spacing.md },
-    typeCard: {
+    audienceRow: { gap: spacing.sm, marginBottom: spacing.md },
+    audienceBtn: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.md,
       padding: spacing.md, borderRadius: radius.md,
       borderWidth: 1.5, borderColor: C.border,
       backgroundColor: C.surface,
     },
-    typeEmojiWrap: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-    typeEmoji:    { fontSize: 20 },
-    typeLabel:    { ...typography.body, fontWeight: '600', color: C.text },
-    typeDesc:     { ...typography.small, color: C.textSecondary, marginTop: 1 },
-    selectedDot:  { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-
-    // Audience
-    audienceRow:  { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-    audienceBtn: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-      padding: spacing.md, borderRadius: radius.md,
-      borderWidth: 1.5, borderColor: C.border,
-      backgroundColor: C.surface,
+    audienceEmoji: { fontSize: 22 },
+    audienceTitle: { ...typography.caption, fontWeight: '700', color: C.text },
+    audienceSub:   { ...typography.small, color: C.textSecondary, marginTop: 2 },
+    audienceCheck: {
+      width: 22, height: 22, borderRadius: 11,
+      alignItems: 'center', justifyContent: 'center',
     },
-    audienceEmoji:{ fontSize: 22 },
-    audienceTitle:{ ...typography.caption, fontWeight: '700', color: C.text },
-    audienceSub:  { ...typography.small, color: C.textSecondary, marginTop: 1 },
-    audienceCheck:{ width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
 
-    // Expiry
     expiryNote: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-      justifyContent: 'center', marginTop: spacing.md,
+      justifyContent: 'center', marginTop: spacing.sm,
     },
     expiryText: { ...typography.small, color: C.textTertiary },
   });

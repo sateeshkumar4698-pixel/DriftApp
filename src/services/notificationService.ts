@@ -83,24 +83,41 @@ export async function registerForPushNotifications(uid: string): Promise<string 
       lightColor:         '#6C5CE7',
       sound:              'default',
     });
+    await Notifications.setNotificationChannelAsync('calls', {
+      name:               'Incoming Calls',
+      importance:         Notifications.AndroidImportance.MAX,
+      vibrationPattern:   [0, 500, 200, 500],
+      lightColor:         '#10B981',
+      sound:              'default',
+      bypassDnd:          true,
+    });
   }
 
   try {
-    // projectId is the EAS project ID. Falls back to undefined if not configured,
-    // which is fine for Expo Go testing (token won't work for real pushes but
-    // doesn't block app startup).
-    const tokenData = await Notifications.getExpoPushTokenAsync().catch(async () => {
-      // Expo Go with no projectId configured — use a silent fallback
-      return { data: null };
+    // EAS project ID — required since Expo SDK 49 for getExpoPushTokenAsync.
+    // Without this, the call silently returns null or throws, causing no token
+    // to be saved and all push notifications to fail.
+    const EAS_PROJECT_ID = 'fc2e6166-1ac7-4be0-9ea0-3cf975f0ba64';
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId: EAS_PROJECT_ID,
+    }).catch((err) => {
+      console.warn('[Notifications] getExpoPushTokenAsync failed:', err?.message ?? err);
+      return { data: null as string | null };
     });
+
     const token = tokenData.data;
     if (!token) {
-      console.log('[Notifications] Could not get push token (Expo Go without project ID)');
+      console.warn('[Notifications] No push token returned — check EAS project ID and device setup.');
       return null;
     }
 
+    if (!token.startsWith('ExponentPushToken[')) {
+      console.warn('[Notifications] Token format unexpected (not an Expo token):', token);
+    }
+
     // Persist to Firestore — save as both pushToken and fcmToken so the
-    // backend (/notifications/send) and Expo push APIs both work.
+    // Cloud Functions (Expo push SDK) and backend (/notifications/send) both work.
     await setDoc(
       doc(db, 'users', uid),
       {
@@ -112,10 +129,10 @@ export async function registerForPushNotifications(uid: string): Promise<string 
       { merge: true },
     );
 
-    console.log('[Notifications] Registered push token:', token);
+    console.log('[Notifications] Push token registered:', token);
     return token;
   } catch (err) {
-    console.warn('[Notifications] Failed to get push token:', err);
+    console.warn('[Notifications] Failed to register push token:', err);
     return null;
   }
 }

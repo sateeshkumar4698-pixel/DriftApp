@@ -23,16 +23,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { WebView } from 'react-native-webview';
 import {
   GameChatMessage,
   subscribeToGameChat,
   sendGameChatMessage,
 } from '../utils/firestore-helpers';
-import {
-  createVoiceClient,
-  fetchVoiceToken,
-  VoiceClient,
-} from '../services/voiceService';
+import { fetchVoiceToken } from '../services/voiceService';
 import { useTheme, AppColors, spacing, radius, typography } from '../utils/useTheme';
 import { formatRelativeTime } from '../utils/helpers';
 
@@ -55,10 +52,10 @@ export default function GameChatVoice({ roomId, myUid, myName, accentColor }: Pr
   const [sending,       setSending]       = useState(false);
   const [unread,        setUnread]        = useState(0);
   const [voiceState,    setVoiceState]    = useState<VoiceState>('idle');
-  const [muted,         setMuted]         = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
+  const [voiceRoomUrl,  setVoiceRoomUrl]  = useState<string | null>(null);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
 
-  const voiceRef  = useRef<VoiceClient | null>(null);
   const listRef   = useRef<FlatList>(null);
   const lastSeenRef = useRef(0);
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -80,7 +77,7 @@ export default function GameChatVoice({ roomId, myUid, myName, accentColor }: Pr
 
   // ── Clean up voice on unmount ──
   useEffect(() => {
-    return () => { voiceRef.current?.leave().catch(() => {}); };
+    return () => { setShowVoiceModal(false); };
   }, []);
 
   // ── Slide animation ──
@@ -98,35 +95,28 @@ export default function GameChatVoice({ roomId, myUid, myName, accentColor }: Pr
     }
   }, [open]);
 
-  // ── Voice ──
+  // ── Voice (WebView-based — works in Expo managed without native modules) ──
   async function joinVoice() {
     if (!roomId || voiceState !== 'idle') return;
     setVoiceState('joining');
     try {
-      const token  = await fetchVoiceToken(roomId);
-      const client = createVoiceClient();
-      client.on('joined', () => { setVoiceState('joined'); setParticipantCount((n) => n + 1); });
-      client.on('left',   () => { setVoiceState('idle');   setParticipantCount((n) => Math.max(0, n - 1)); });
-      client.on('participant-joined', () => setParticipantCount((n) => n + 1));
-      client.on('participant-left',   () => setParticipantCount((n) => Math.max(0, n - 1)));
-      client.on('error',  (e: unknown) => { console.warn('[GameChatVoice voice]', e); setVoiceState('error'); });
-      await client.join(token.token, token.roomUrl);
-      voiceRef.current = client;
-    } catch {
+      const token = await fetchVoiceToken(roomId, 'audio');
+      // Append Daily.co prebuilt params: audio-only, no nav chrome
+      const url = `${token.roomUrl}?embed&startVideoOff=true&startAudioOff=false&noNav=true`;
+      setVoiceRoomUrl(url);
+      setVoiceState('joined');
+      setParticipantCount((n) => n + 1);
+      setShowVoiceModal(true);
+    } catch (err) {
+      console.warn('[GameChatVoice] joinVoice error:', err);
       setVoiceState('error');
     }
   }
 
-  async function toggleMute() {
-    if (!voiceRef.current) return;
-    try { setMuted(await voiceRef.current.toggleMute()); } catch { /* ignore */ }
-  }
-
-  async function leaveVoice() {
-    try { await voiceRef.current?.leave(); } catch { /* ignore */ }
-    voiceRef.current = null;
+  function leaveVoice() {
+    setShowVoiceModal(false);
+    setVoiceRoomUrl(null);
     setVoiceState('idle');
-    setMuted(false);
     setParticipantCount(0);
   }
 
@@ -157,6 +147,7 @@ export default function GameChatVoice({ roomId, myUid, myName, accentColor }: Pr
   const sc = makeStyles(C, accent);
 
   const isVoiceActive = voiceState === 'joined';
+  const muted = false; // mute is handled inside the Daily.co WebView UI
 
   return (
     <>
@@ -188,6 +179,45 @@ export default function GameChatVoice({ roomId, myUid, myName, accentColor }: Pr
           )}
         </TouchableOpacity>
       </View>
+
+      {/* ── Voice WebView Modal ── */}
+      <Modal
+        visible={showVoiceModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowVoiceModal(false)}
+      >
+        <View style={sc.voiceModalWrap}>
+          <View style={sc.voiceModalHeader}>
+            <Ionicons name="mic" size={16} color="#A855F7" />
+            <Text style={sc.voiceModalTitle}>Voice Chat</Text>
+            <TouchableOpacity onPress={() => setShowVoiceModal(false)} style={sc.closeBtn}>
+              <Ionicons name="chevron-down" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          {voiceRoomUrl ? (
+            <WebView
+              source={{ uri: voiceRoomUrl }}
+              style={{ flex: 1 }}
+              allowsInlineMediaPlayback
+              mediaPlaybackRequiresUserAction={false}
+              javaScriptEnabled
+              domStorageEnabled
+              originWhitelist={['*']}
+            />
+          ) : (
+            <View style={sc.voiceModalLoading}>
+              <ActivityIndicator color="#A855F7" size="large" />
+            </View>
+          )}
+          <TouchableOpacity style={sc.voiceLeaveFullBtn} onPress={leaveVoice}>
+            <LinearGradient colors={['#EF4444', '#DC2626']} style={sc.voiceLeaveFullGrad}>
+              <Ionicons name="call" size={20} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+              <Text style={sc.voiceLeaveFullText}>Leave Voice</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
       {/* ── Slide-up panel ── */}
       <Modal
@@ -247,8 +277,8 @@ export default function GameChatVoice({ roomId, myUid, myName, accentColor }: Pr
                 )}
                 {voiceState === 'joined' && (
                   <>
-                    <TouchableOpacity onPress={toggleMute} style={[sc.voiceIconBtn, muted && sc.voiceIconBtnMuted]}>
-                      <Ionicons name={muted ? 'mic-off' : 'mic'} size={15} color={muted ? C.textSecondary : '#fff'} />
+                    <TouchableOpacity onPress={() => setShowVoiceModal(true)} style={sc.voiceIconBtn}>
+                      <Ionicons name="mic" size={15} color="#fff" />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={leaveVoice} style={sc.voiceLeaveBtn}>
                       <Ionicons name="call" size={13} color={C.error} />
@@ -450,5 +480,52 @@ function makeStyles(C: AppColors, accent: string) {
     },
     sendBtn:         { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
     sendBtnDisabled: { opacity: 0.4 },
+
+    // Voice WebView modal
+    voiceModalWrap: {
+      flex: 1,
+      backgroundColor: '#0D0D1A',
+      marginTop: 60,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      overflow: 'hidden',
+    },
+    voiceModalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(255,255,255,0.1)',
+    },
+    voiceModalTitle: {
+      flex: 1,
+      ...typography.body,
+      fontWeight: '700',
+      color: '#fff',
+    },
+    voiceModalLoading: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    voiceLeaveFullBtn: {
+      margin: spacing.lg,
+      borderRadius: radius.lg,
+      overflow: 'hidden',
+    },
+    voiceLeaveFullGrad: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.sm,
+      paddingVertical: spacing.md,
+    },
+    voiceLeaveFullText: {
+      ...typography.body,
+      fontWeight: '700',
+      color: '#fff',
+    },
   });
 }

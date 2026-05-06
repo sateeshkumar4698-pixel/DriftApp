@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,54 +8,64 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
+  StatusBar,
 } from 'react-native';
 import {
   ConfirmationResult,
   signInWithPhoneNumber,
   type ApplicationVerifier,
 } from 'firebase/auth';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { auth } from '../../config/firebase';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { auth, firebaseConfig } from '../../config/firebase';
 import { spacing, typography, radius, shadows } from '../../utils/theme';
 import { useTheme, AppColors } from '../../utils/useTheme';
 import { normalizePhone, formatIndianNumber } from '../../utils/helpers';
-import { isBackendOtpEnabled, sendBackendOtp, verifyBackendOtp } from '../../services/otpService';
 import { RootStackParamList } from '../../types';
-
-/**
- * Firebase SDK v12 requires an ApplicationVerifier even when
- * appVerificationDisabledForTesting = true. In React Native there is no DOM
- * so we cannot use RecaptchaVerifier. This mock satisfies the interface and
- * is silently ignored by Firebase when testing-mode is on.
- *
- * _reset() is an internal Firebase method called after verification to clear
- * the reCAPTCHA widget. Must be present (even as a no-op) or iOS throws
- * "verify?._reset is not a function".
- */
-const mockVerifier = {
-  type: 'recaptcha' as const,
-  verify: (): Promise<string> => Promise.resolve('test-token'),
-  _reset: (): void => { /* no-op — no DOM widget to reset in React Native */ },
-} as unknown as ApplicationVerifier;
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function PhoneLoginScreen() {
-  const { C } = useTheme();
+  const { C, isDark } = useTheme();
   const styles = makeStyles(C);
   const navigation = useNavigation<Nav>();
+
   const [digits, setDigits]             = useState('');
   const [otp, setOtp]                   = useState('');
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
-  const [backendSent, setBackendSent]   = useState(false);
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState('');
+  const [resendCountdown, setResendCountdown] = useState(0);
 
-  const useBackend = isBackendOtpEnabled();
-  const otpStage   = useBackend ? backendSent : !!confirmation;
-  const e164       = normalizePhone(digits);
+  const recaptchaRef    = useRef<FirebaseRecaptchaVerifierModal>(null);
+  const resendTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const otpInputRef     = useRef<TextInput>(null);
+
+  const e164     = normalizePhone(digits);
+  const otpStage = !!confirmation;
+  const canSend  = digits.length === 10 && /^[6-9]/.test(digits);
+
+  useEffect(() => {
+    return () => { if (resendTimerRef.current) clearInterval(resendTimerRef.current); };
+  }, []);
+
+  // Auto-focus OTP input when stage changes
+  useEffect(() => {
+    if (otpStage) setTimeout(() => otpInputRef.current?.focus(), 200);
+  }, [otpStage]);
+
+  function startResendCountdown() {
+    setResendCountdown(60);
+    resendTimerRef.current = setInterval(() => {
+      setResendCountdown((prev) => {
+        if (prev <= 1) { clearInterval(resendTimerRef.current!); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+  }
 
   function onPhoneChange(val: string) {
     setDigits(val.replace(/\D/g, '').slice(0, 10));
@@ -64,20 +74,18 @@ export default function PhoneLoginScreen() {
 
   // ─── Send OTP ─────────────────────────────────────────────────────────────
   async function sendOtp() {
-    if (digits.length !== 10) { setError('Enter your 10-digit mobile number'); return; }
-    if (!/^[6-9]/.test(digits)) { setError('Number must start with 6, 7, 8 or 9'); return; }
+    if (!canSend || loading) return;
     setError('');
     setLoading(true);
     try {
-      if (useBackend) {
-        await sendBackendOtp(e164);
-        setBackendSent(true);
-      } else {
-        // Pass mockVerifier — required by Firebase SDK v12 even in test mode.
-        // Firebase ignores the token when appVerificationDisabledForTesting = true.
-        const result = await signInWithPhoneNumber(auth, e164, mockVerifier);
-        setConfirmation(result);
+      const verifier = (recaptchaRef.current ?? undefined) as ApplicationVerifier | undefined;
+      if (!verifier) {
+        setError('Verification not ready. Please wait a moment and try again.');
+        return;
       }
+      const result = await signInWithPhoneNumber(auth, e164, verifier);
+      setConfirmation(result);
+      startResendCountdown();
     } catch (err: unknown) {
       setError(parseAuthError(err));
     } finally {
@@ -88,15 +96,11 @@ export default function PhoneLoginScreen() {
   // ─── Verify OTP ───────────────────────────────────────────────────────────
   async function verifyOtp() {
     const code = otp.trim();
-    if (code.length !== 6) { setError('Enter the 6-digit code'); return; }
+    if (code.length !== 6 || loading) return;
     setError('');
     setLoading(true);
     try {
-      if (useBackend) {
-        await verifyBackendOtp(e164, code);
-      } else {
-        await confirmation!.confirm(code);
-      }
+      await confirmation!.confirm(code);
       // onAuthStateChanged in App.tsx handles navigation automatically
     } catch (err: unknown) {
       setError(parseOtpError(err));
@@ -105,9 +109,28 @@ export default function PhoneLoginScreen() {
     }
   }
 
+  async function resendOtp() {
+    if (resendCountdown > 0 || loading) return;
+    setOtp('');
+    setError('');
+    setLoading(true);
+    try {
+      const verifier = (recaptchaRef.current ?? undefined) as ApplicationVerifier | undefined;
+      if (!verifier) { setError('Verification not ready. Try again.'); return; }
+      const result = await signInWithPhoneNumber(auth, e164, verifier);
+      setConfirmation(result);
+      startResendCountdown();
+    } catch (err: unknown) {
+      setError(parseAuthError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function changeNumber() {
+    if (resendTimerRef.current) clearInterval(resendTimerRef.current);
+    setResendCountdown(0);
     setConfirmation(null);
-    setBackendSent(false);
     setOtp('');
     setDigits('');
     setError('');
@@ -119,22 +142,35 @@ export default function PhoneLoginScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* ── Logo ── */}
-      <View style={styles.logoSection}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+
+      {/* reCAPTCHA — invisible WebView, required for real phone numbers */}
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaRef}
+        firebaseConfig={firebaseConfig}
+        attemptInvisibleVerification
+        title="Quick verification"
+        cancelLabel="Cancel"
+      />
+
+      {/* ── Brand top section ── */}
+      <View style={styles.brand}>
         <Text style={styles.logo}>Drift</Text>
-        <Text style={styles.tagline}>Connect. Meet. Drift with purpose.</Text>
+        <Text style={styles.tagline}>Meet people. Make memories.</Text>
       </View>
 
-      {/* ── Form ── */}
-      <View style={styles.form}>
+      {/* ── Card ── */}
+      <View style={styles.card}>
         {!otpStage ? (
+          /* ── Phone entry ── */
           <>
-            <Text style={styles.label}>Mobile Number</Text>
+            <Text style={styles.cardTitle}>Enter your number</Text>
+            <Text style={styles.cardSub}>We'll send a one-time code via SMS</Text>
 
-            <View style={[styles.phoneRow, error ? styles.inputErr : null]}>
+            <View style={[styles.phoneRow, error ? styles.fieldErr : null]}>
               <Text style={styles.flag}>🇮🇳</Text>
-              <Text style={styles.code}>+91</Text>
-              <View style={styles.divider} />
+              <Text style={styles.dialCode}>+91</Text>
+              <View style={styles.sep} />
               <TextInput
                 style={styles.phoneInput}
                 value={formatIndianNumber(digits)}
@@ -147,27 +183,28 @@ export default function PhoneLoginScreen() {
                 onSubmitEditing={sendOtp}
                 autoFocus
               />
-              {digits.length === 10 && <Text style={styles.tick}>✓</Text>}
+              {canSend && (
+                <Ionicons name="checkmark-circle" size={22} color={C.success} />
+              )}
             </View>
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {error ? <Text style={styles.errText}>{error}</Text> : null}
 
             <TouchableOpacity
-              style={[styles.btn, (loading || digits.length !== 10) && styles.btnOff]}
+              style={[styles.primaryBtn, (!canSend || loading) && styles.btnDisabled]}
               onPress={sendOtp}
-              disabled={loading || digits.length !== 10}
+              disabled={!canSend || loading}
               activeOpacity={0.82}
             >
               {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.btnText}>Send OTP</Text>}
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={styles.primaryBtnText}>Send OTP →</Text>}
             </TouchableOpacity>
 
-            {/* ── OR divider ── */}
-            <View style={styles.orRow}>
-              <View style={styles.orLine} />
-              <Text style={styles.orText}>OR</Text>
-              <View style={styles.orLine} />
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
             </View>
 
             <TouchableOpacity
@@ -175,18 +212,24 @@ export default function PhoneLoginScreen() {
               onPress={() => navigation.navigate('EmailAuth')}
               activeOpacity={0.82}
             >
-              <Text style={styles.emailBtnText}>Continue with Email →</Text>
+              <Ionicons name="mail-outline" size={18} color={C.primary} style={{ marginRight: 8 }} />
+              <Text style={styles.emailBtnText}>Continue with Email</Text>
             </TouchableOpacity>
           </>
         ) : (
+          /* ── OTP entry ── */
           <>
-            <Text style={styles.label}>Enter OTP</Text>
-            <Text style={styles.sentTo}>
-              Sent to +91 {formatIndianNumber(digits)}
-            </Text>
+            <TouchableOpacity style={styles.backRow} onPress={changeNumber}>
+              <Ionicons name="arrow-back" size={20} color={C.primary} />
+              <Text style={styles.backRowText}>+91 {formatIndianNumber(digits)}</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.cardTitle}>Enter the code</Text>
+            <Text style={styles.cardSub}>6-digit code sent to your number</Text>
 
             <TextInput
-              style={[styles.otpInput, error ? styles.inputErr : null]}
+              ref={otpInputRef}
+              style={[styles.otpInput, error ? styles.fieldErr : null]}
               value={otp}
               onChangeText={(v) => { setOtp(v.replace(/\D/g, '').slice(0, 6)); setError(''); }}
               placeholder="• • • • • •"
@@ -195,38 +238,41 @@ export default function PhoneLoginScreen() {
               maxLength={6}
               returnKeyType="done"
               onSubmitEditing={verifyOtp}
-              autoFocus
               textAlign="center"
             />
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {error ? <Text style={styles.errText}>{error}</Text> : null}
 
             <TouchableOpacity
-              style={[styles.btn, (loading || otp.length !== 6) && styles.btnOff]}
+              style={[styles.primaryBtn, (loading || otp.length !== 6) && styles.btnDisabled]}
               onPress={verifyOtp}
               disabled={loading || otp.length !== 6}
               activeOpacity={0.82}
             >
               {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.btnText}>Verify & Sign In</Text>}
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={styles.primaryBtnText}>Verify & Continue →</Text>}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.changeBtn} onPress={changeNumber}>
-              <Text style={styles.changeBtnText}>← Change number</Text>
+            <TouchableOpacity
+              style={[styles.resendBtn, (resendCountdown > 0 || loading) && { opacity: 0.4 }]}
+              onPress={resendOtp}
+              disabled={resendCountdown > 0 || loading}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resendText}>
+                {resendCountdown > 0
+                  ? `Resend code in ${resendCountdown}s`
+                  : 'Resend code'}
+              </Text>
             </TouchableOpacity>
-
-            {__DEV__ && !useBackend && (
-              <TouchableOpacity
-                onPress={() => Alert.alert('Dev tip', 'Use the test OTP code you set in Firebase Console → Auth → Phone → Test numbers.')}
-                style={styles.hint}
-              >
-                <Text style={styles.hintText}>Not getting code?</Text>
-              </TouchableOpacity>
-            )}
           </>
         )}
       </View>
+
+      <Text style={styles.legal}>
+        By continuing you agree to our Terms of Service and Privacy Policy.
+      </Text>
     </KeyboardAvoidingView>
   );
 }
@@ -237,15 +283,15 @@ function parseAuthError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   if (msg.includes('invalid-phone-number') || msg.includes('INVALID_PHONE_NUMBER'))
     return 'Invalid phone number. Please check and try again.';
-  if (msg.includes('too-many-requests'))
-    return 'Too many attempts. Wait a few minutes.';
-  if (msg.includes('argument-error'))
-    return __DEV__
-      ? 'Add this number as a Firebase test number (Console → Auth → Phone → Test numbers).'
-      : 'Verification failed. Try again.';
-  if (msg.includes('network') || msg.includes('Network'))
-    return 'No internet. Check your connection.';
-  return __DEV__ ? msg : 'Failed to send OTP. Try again.';
+  if (msg.includes('too-many-requests') || msg.includes('quota-exceeded'))
+    return 'Too many attempts. Please wait a few minutes.';
+  if (msg.includes('network') || msg.includes('Network') || msg.includes('fetch'))
+    return 'Network error. Check your internet connection.';
+  if (msg.includes('app-not-authorized') || msg.includes('APP_NOT_AUTHORIZED'))
+    return 'App not authorised for SMS. Please contact support.';
+  if (msg.includes('captcha') || msg.includes('recaptcha'))
+    return 'Verification failed. Please try again.';
+  return __DEV__ ? `OTP error: ${msg}` : 'Failed to send OTP. Please try again.';
 }
 
 function parseOtpError(err: unknown): string {
@@ -253,8 +299,10 @@ function parseOtpError(err: unknown): string {
   if (msg.includes('invalid-verification-code') || msg.includes('INVALID_CODE'))
     return 'Wrong code. Check your SMS and try again.';
   if (msg.includes('code-expired') || msg.includes('SESSION_EXPIRED'))
-    return 'Code expired. Go back and request a new one.';
-  return __DEV__ ? msg : 'Invalid code. Try again.';
+    return 'Code expired. Request a new one.';
+  if (msg.includes('network') || msg.includes('Network'))
+    return 'Network error. Check your connection.';
+  return __DEV__ ? `Verify error: ${msg}` : 'Invalid code. Please try again.';
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -264,40 +312,45 @@ function makeStyles(C: AppColors) {
     root: {
       flex: 1,
       backgroundColor: C.background,
-      justifyContent: 'center',
       paddingHorizontal: spacing.lg,
+      justifyContent: 'center',
     },
 
-    // Logo
-    logoSection: {
+    // Brand
+    brand: {
       alignItems: 'center',
       marginBottom: spacing.xxl,
     },
     logo: {
-      fontSize: 56,
+      fontSize: 52,
       fontWeight: '800',
       color: C.primary,
       letterSpacing: -2,
-      marginBottom: spacing.xs,
+      marginBottom: 4,
     },
     tagline: {
       ...typography.body,
       color: C.textSecondary,
-      textAlign: 'center',
     },
 
-    // Form card
-    form: {
-      backgroundColor: C.background,
+    // Card
+    card: {
+      backgroundColor: C.surface,
+      borderRadius: radius.xl,
+      padding: spacing.xl,
+      ...shadows.modal,
+      borderWidth: 1,
+      borderColor: C.border,
     },
-
-    label: {
-      ...typography.caption,
-      fontWeight: '700',
+    cardTitle: {
+      ...typography.h2,
+      color: C.text,
+      marginBottom: spacing.xs,
+    },
+    cardSub: {
+      ...typography.body,
       color: C.textSecondary,
-      letterSpacing: 0.8,
-      marginBottom: spacing.sm,
-      textTransform: 'uppercase',
+      marginBottom: spacing.lg,
     },
 
     // Phone row
@@ -312,9 +365,9 @@ function makeStyles(C: AppColors) {
       paddingHorizontal: spacing.md,
       marginBottom: spacing.sm,
     },
-    flag:      { fontSize: 22, marginRight: 6 },
-    code:      { ...typography.body, fontWeight: '700', color: C.text, marginRight: 8 },
-    divider:   { width: 1, height: 26, backgroundColor: C.border, marginRight: 10 },
+    flag:      { fontSize: 20 },
+    dialCode:  { ...typography.body, fontWeight: '700', color: C.text, marginHorizontal: 8 },
+    sep:       { width: 1, height: 24, backgroundColor: C.border, marginRight: 10 },
     phoneInput: {
       flex: 1,
       ...typography.body,
@@ -322,7 +375,7 @@ function makeStyles(C: AppColors) {
       color: C.text,
       letterSpacing: 0.5,
     },
-    tick: { fontSize: 18, color: C.success, fontWeight: '700', marginLeft: 4 },
+    fieldErr: { borderColor: C.error },
 
     // OTP input
     otpInput: {
@@ -330,77 +383,102 @@ function makeStyles(C: AppColors) {
       borderColor: C.inputBorder,
       borderRadius: radius.md,
       backgroundColor: C.inputBg,
-      height: 64,
-      fontSize: 28,
+      height: 68,
+      fontSize: 30,
       fontWeight: '700',
-      letterSpacing: 14,
+      letterSpacing: 16,
       color: C.text,
       marginBottom: spacing.sm,
     },
 
-    inputErr: { borderColor: C.error },
-
-    sentTo: {
-      ...typography.body,
-      color: C.textSecondary,
-      marginBottom: spacing.md,
-    },
-
-    errorText: {
+    errText: {
       ...typography.small,
       color: C.error,
       marginBottom: spacing.sm,
     },
 
-    // Button
-    btn: {
+    // Primary button
+    primaryBtn: {
       backgroundColor: C.primary,
       borderRadius: radius.md,
       height: 52,
+      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       marginTop: spacing.xs,
       ...shadows.card,
     },
-    btnOff: { opacity: 0.4 },
-    btnText: { ...typography.body, fontWeight: '700', color: '#fff', fontSize: 16 },
+    btnDisabled: { opacity: 0.4 },
+    primaryBtnText: {
+      ...typography.body,
+      fontWeight: '700',
+      color: '#fff',
+      fontSize: 16,
+    },
 
-    changeBtn:     { alignSelf: 'center', marginTop: spacing.lg },
-    changeBtnText: { ...typography.body, color: C.primary },
-
-    hint:     { alignSelf: 'center', marginTop: spacing.md },
-    hintText: { ...typography.small, color: C.textSecondary, textDecorationLine: 'underline' },
-
-    // OR divider + email button
-    orRow: {
+    // Divider
+    dividerRow: {
       flexDirection: 'row',
       alignItems: 'center',
       marginVertical: spacing.lg,
     },
-    orLine: {
-      flex: 1,
-      height: 1,
-      backgroundColor: C.border,
-    },
-    orText: {
+    dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
+    dividerText: {
       ...typography.caption,
       color: C.textSecondary,
-      marginHorizontal: spacing.sm,
+      marginHorizontal: spacing.md,
       fontWeight: '600',
     },
+
+    // Email button
     emailBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
       borderWidth: 1.5,
       borderColor: C.primary,
       borderRadius: radius.md,
       height: 52,
-      alignItems: 'center',
-      justifyContent: 'center',
     },
     emailBtnText: {
       ...typography.body,
       fontWeight: '700',
       color: C.primary,
       fontSize: 16,
+    },
+
+    // Back row (OTP stage)
+    backRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: spacing.lg,
+    },
+    backRowText: {
+      ...typography.body,
+      color: C.primary,
+      fontWeight: '600',
+    },
+
+    // Resend
+    resendBtn: {
+      alignSelf: 'center',
+      marginTop: spacing.lg,
+      paddingVertical: spacing.sm,
+    },
+    resendText: {
+      ...typography.body,
+      color: C.primary,
+      fontWeight: '600',
+    },
+
+    // Legal
+    legal: {
+      ...typography.small,
+      color: C.textTertiary,
+      textAlign: 'center',
+      marginTop: spacing.xl,
+      lineHeight: 18,
     },
   });
 }

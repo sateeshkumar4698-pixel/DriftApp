@@ -24,6 +24,7 @@ import ConnectRequestScreen from '../screens/Discover/ConnectRequestScreen';
 import ConnectionsScreen from '../screens/Discover/ConnectionsScreen';
 import MeetupSuggestionScreen from '../screens/Discover/MeetupSuggestionScreen';
 import ChatScreen from '../screens/Chat/ChatScreen';
+import CallScreen from '../screens/Chat/CallScreen';
 import NotificationsScreen from '../screens/Notifications/NotificationsScreen';
 
 // Events stack
@@ -48,10 +49,12 @@ import GameLobbyScreen from '../screens/Games/GameLobbyScreen';
 
 // Root-mounted overlays
 import GameInviteBanner from '../components/GameInviteBanner';
+import IncomingCallBanner from '../components/IncomingCallBanner';
 
 // Profile stack
 import ProfileScreen from '../screens/Profile/ProfileScreen';
 import EditProfileScreen from '../screens/Profile/EditProfileScreen';
+import AvatarBuilderScreen from '../screens/Profile/AvatarBuilderScreen';
 import DriftIdScreen from '../screens/Profile/DriftIdScreen';
 import VibeQuizScreen from '../screens/Profile/VibeQuizScreen';
 import ViewMemoriesScreen from '../screens/Profile/ViewMemoriesScreen';
@@ -85,6 +88,7 @@ function DiscoverNavigator() {
       <DiscoverStack.Screen name="Connections"     component={ConnectionsScreen} />
       <DiscoverStack.Screen name="MeetupSuggest"   component={MeetupSuggestionScreen} />
       <DiscoverStack.Screen name="Chat"            component={ChatScreen} />
+      <DiscoverStack.Screen name="Call"            component={CallScreen} options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
       <DiscoverStack.Screen name="Notifications"   component={NotificationsScreen} />
       <DiscoverStack.Screen name="StatusCreate"    component={StatusCreateScreen} />
       {/* Phase 1 extras */}
@@ -135,6 +139,7 @@ function ProfileNavigator() {
     <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
       <ProfileStack.Screen name="ProfileMain"    component={ProfileScreen} />
       <ProfileStack.Screen name="EditProfile"    component={EditProfileScreen} />
+      <ProfileStack.Screen name="AvatarBuilder"  component={AvatarBuilderScreen} />
       <ProfileStack.Screen name="DriftId"        component={DriftIdScreen} />
       <ProfileStack.Screen name="VibeQuiz"       component={VibeQuizScreen} />
       <ProfileStack.Screen name="ViewMemories"   component={ViewMemoriesScreen} />
@@ -229,6 +234,7 @@ export default function MainTabs() {
       />
     </Tab.Navigator>
     <GameInviteBanner />
+    <IncomingCallBanner />
     </>
   );
 }

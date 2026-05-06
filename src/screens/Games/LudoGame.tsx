@@ -12,8 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ref as rtdbRef, set as rtdbSet, update as rtdbUpdate, onValue } from 'firebase/database';
-import { getDoc, doc } from 'firebase/firestore';
+import { ref as rtdbRef, set as rtdbSet, update as rtdbUpdate, onValue, get } from 'firebase/database';
+import { getDoc, doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { rtdb, db } from '../../config/firebase';
 import { GameRoom } from '../../types';
 import { GamesStackParamList } from '../../types';
@@ -552,9 +552,13 @@ export default function LudoGame(): React.ReactElement {
 
   // ── Multiplayer sync state ─────────────────────────────────────────────────
   const [myColor,   setMyColor]   = useState<PlayerColor | null>(null);
+  const [opponentLeft, setOpponentLeft] = useState(false);
+  const [rejoinCountdown, setRejoinCountdown] = useState(0);
   const myColorRef = useRef<PlayerColor | null>(null);
   const isHostRef  = useRef(false);
-  const suppressRemoteRef = useRef(false); // true while we're writing our own state
+  const suppressRemoteRef  = useRef(false); // true while we're writing our own state
+  const hasInitialStateRef = useRef(false); // first RTDB snapshot always applied (resume-safe)
+  const rejoinTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Piece animations — translateX/Y only (NOT left/top) ─────────────────────
   // Stores absolute board-pixel position; applied via transform, not layout props
@@ -593,7 +597,7 @@ export default function LudoGame(): React.ReactElement {
     if (!roomId || !firebaseUser) return;
     let cancelled = false;
 
-    getDoc(doc(db, 'gameRooms', roomId)).then((snap) => {
+    getDoc(doc(db, 'gameRooms', roomId)).then(async (snap) => {
       if (cancelled || !snap.exists()) return;
       const room = snap.data() as GameRoom;
       const players = Object.values(room.players).sort((a, b) => a.joinedAt - b.joinedAt);
@@ -607,24 +611,33 @@ export default function LudoGame(): React.ReactElement {
       myColorRef.current = me;
       isHostRef.current  = room.hostUid === firebaseUser.uid;
 
-      // Host initialises RTDB game state
+      // Host initialises RTDB game state — only if no state exists yet (resume-safe)
       if (room.hostUid === firebaseUser.uid) {
-        const initPieces = makePieces();
-        const initState = {
-          pieces:     initPieces,
-          turnColor:  'red' as PlayerColor,
-          dice:       null,
-          phase:      'idle',
-          winner:     null,
-          bonusRoll:  false,
-          msg:        '🔴 Red — roll the dice!',
-          players:    colorMap,
-          updatedBy:  firebaseUser.uid,
-          updatedAt:  Date.now(),
-        };
-        rtdbSet(rtdbRef(rtdb, `gameRooms/${roomId}/ludo`), initState).catch(console.error);
-        setGs({ ...INIT_GS, pieces: initPieces });
+        const stateRef  = rtdbRef(rtdb, `gameRooms/${roomId}/ludo`);
+        const existing  = await get(stateRef);
+        if (!existing.exists()) {
+          const initPieces = makePieces();
+          const initState  = {
+            pieces:    initPieces,
+            turnColor: 'red' as PlayerColor,
+            dice:      null,
+            phase:     'idle',
+            winner:    null,
+            bonusRoll: false,
+            msg:       '🔴 Red — roll the dice!',
+            players:   colorMap,
+            updatedBy: firebaseUser.uid,
+            updatedAt: Date.now(),
+          };
+          await rtdbSet(stateRef, initState).catch(console.error);
+          setGs({ ...INIT_GS, pieces: initPieces });
+        }
       }
+
+      // All players (host AND joiner) mark themselves as reconnected on entry
+      updateDoc(doc(db, 'gameRooms', roomId), {
+        [`players.${firebaseUser.uid}.disconnected`]: false,
+      }).catch(() => {});
     }).catch(console.error);
 
     return () => { cancelled = true; };
@@ -644,27 +657,64 @@ export default function LudoGame(): React.ReactElement {
         msg: string; updatedBy: string;
       };
 
-      // Skip echo from our own writes
-      if (data.updatedBy === firebaseUser.uid) return;
+      // First snapshot always applied — needed for resume (player rejoining sees current state
+      // even if updatedBy === their own uid from their last move before leaving).
+      // After first load, skip echoes from our own writes to prevent state flicker.
+      if (hasInitialStateRef.current && data.updatedBy === firebaseUser.uid) return;
+      hasInitialStateRef.current = true;
 
       suppressRemoteRef.current = true;
       setGs(prev => ({
         ...prev,
-        pieces:    data.pieces,
-        turn:      data.turnColor,
-        dice:      data.dice,
-        phase:     data.phase,
-        winner:    data.winner,
-        bonusRoll: data.bonusRoll,
-        msg:       data.msg,
+        pieces:    data.pieces || INIT_GS.pieces,
+        turn:      data.turnColor || 'red',
+        dice:      data.dice !== undefined ? data.dice : null,
+        phase:     data.phase || 'idle',
+        winner:    data.winner !== undefined ? data.winner : null,
+        bonusRoll: data.bonusRoll || false,
+        msg:       data.msg || '',
       }));
-      if (data.dice !== null) setDD(data.dice); else setDD(null);
+      if (data.dice !== undefined && data.dice !== null) setDD(data.dice); else setDD(null);
       suppressRemoteRef.current = false;
     });
 
     return () => unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, firebaseUser?.uid]);
+
+  // ── Detect opponent disconnect via Firestore room subscription ────────────────
+  useEffect(() => {
+    if (!roomId || !firebaseUser) return;
+    const unsub = onSnapshot(doc(db, 'gameRooms', roomId), (snap) => {
+      if (!snap.exists()) return;
+      const room = snap.data() as GameRoom;
+      const players = Object.values(room.players);
+      const opponent = players.find((p) => p.uid !== firebaseUser.uid);
+      if (!opponent) return;
+      if ((opponent as any).disconnected && !opponentLeft) {
+        setOpponentLeft(true);
+        let secs = 120;
+        setRejoinCountdown(secs);
+        if (rejoinTimerRef.current) clearInterval(rejoinTimerRef.current);
+        rejoinTimerRef.current = setInterval(() => {
+          secs -= 1;
+          setRejoinCountdown(secs);
+          if (secs <= 0) {
+            clearInterval(rejoinTimerRef.current!);
+            rejoinTimerRef.current = null;
+            setGs(prev => ({ ...prev, winner: myColorRef.current, phase: 'won',
+              msg: `Opponent forfeited — you win! 🏆` }));
+          }
+        }, 1000);
+      } else if (!(opponent as any).disconnected && opponentLeft) {
+        setOpponentLeft(false);
+        setRejoinCountdown(0);
+        if (rejoinTimerRef.current) { clearInterval(rejoinTimerRef.current); rejoinTimerRef.current = null; }
+      }
+    });
+    return () => { unsub(); if (rejoinTimerRef.current) clearInterval(rejoinTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, firebaseUser?.uid, opponentLeft]);
 
   // Sync non-moving pieces when state changes
   useEffect(() => {
@@ -1217,8 +1267,34 @@ export default function LudoGame(): React.ReactElement {
         </View>
       )}
 
+      {/* Opponent left / reconnect banner */}
+      {opponentLeft && roomId && (
+        <View style={st.disconnectBanner}>
+          <Text style={st.disconnectEmoji}>⚠️</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={st.disconnectTitle}>Opponent left the game</Text>
+            <Text style={st.disconnectSub}>
+              {rejoinCountdown > 0 ? `Game ends in ${rejoinCountdown}s if they don't return` : 'You win by forfeit!'}
+            </Text>
+          </View>
+        </View>
+      )}
+
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={st.backBtn}
+          onPress={() => {
+            // Mark self as disconnected so opponent sees the banner
+            if (roomId && firebaseUser) {
+              updateDoc(doc(db, 'gameRooms', roomId), {
+                [`players.${firebaseUser.uid}.disconnected`]: true,
+                [`players.${firebaseUser.uid}.disconnectedAt`]: Date.now(),
+              }).catch(() => {});
+            }
+            navigation.goBack();
+          }}
+          activeOpacity={0.7}
+        >
           <Text style={st.backTxt}>← Back</Text>
         </TouchableOpacity>
         <Text style={st.title}>Ludo</Text>
@@ -1370,6 +1446,15 @@ function makeStyles(C: AppColors) {
   root:  { flex: 1, backgroundColor: '#F0F4F8' },
   mpBanner: { backgroundColor: C.secondary, paddingVertical: 5, alignItems: 'center' },
   mpTxt:    { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  disconnectBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FFF3CD', borderBottomWidth: 1, borderBottomColor: '#FFC107',
+    paddingHorizontal: 14, paddingVertical: 10,
+  },
+  disconnectEmoji: { fontSize: 20 },
+  disconnectTitle: { fontSize: 13, fontWeight: '700', color: '#856404' },
+  disconnectSub:   { fontSize: 11, color: '#6B4F00', marginTop: 2 },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

@@ -36,10 +36,14 @@ export default function ProfileSetupScreen() {
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [bio, setBio] = useState('');
+  const [phone, setPhone] = useState('');           // optional — for email-only users
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [lookingFor, setLookingFor] = useState<LookingForOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // email users have no firebaseUser.phoneNumber — show optional phone field for them
+  const isEmailUser = !!firebaseUser?.email && !firebaseUser?.phoneNumber;
 
   function toggleInterest(interest: string) {
     setSelectedInterests((prev) =>
@@ -70,9 +74,13 @@ export default function ProfileSetupScreen() {
     if (!validate() || !firebaseUser) return;
     setLoading(true);
     try {
-      const profile: UserProfile = {
+      // Resolve phone: use Firebase phone number (phone auth) or the optional typed value (email auth)
+      const resolvedPhone = firebaseUser.phoneNumber
+        ?? (phone.trim().length === 10 ? `+91${phone.trim()}` : '');
+
+      const profileData: Partial<UserProfile> & { uid: string } = {
         uid: firebaseUser.uid,
-        phoneNumber: firebaseUser.phoneNumber ?? '',
+        phoneNumber: resolvedPhone,
         name: name.trim(),
         age: parseInt(age, 10),
         bio: bio.trim(),
@@ -85,10 +93,50 @@ export default function ProfileSetupScreen() {
         isBanned: false,
         createdAt: Date.now(),
       };
+      if (firebaseUser.email) {
+        profileData.email = firebaseUser.email;
+      }
+      const profile = profileData as UserProfile;
       await setUserProfile(firebaseUser.uid, profile);
       setStoreProfile(profile);
     } catch {
       Alert.alert('Error', 'Failed to save profile. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSkip() {
+    if (!firebaseUser) return;
+    setLoading(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const resolvedPhone = firebaseUser.phoneNumber
+        ?? (phone.trim().length === 10 ? `+91${phone.trim()}` : '');
+
+      const minProfileData: Partial<UserProfile> & { uid: string } = {
+        uid: firebaseUser.uid,
+        phoneNumber: resolvedPhone,
+        name: name.trim() || 'Drift User',
+        age: parseInt(age, 10) || 18,
+        bio: '',
+        interests: selectedInterests,
+        lookingFor: lookingFor.length > 0 ? lookingFor : ['friends'],
+        coins: 50,
+        streak: { current: 1, longest: 1, lastLoginDate: today },
+        profileCompleteness: 20,
+        isVerified: false,
+        isBanned: false,
+        createdAt: Date.now(),
+      };
+      if (firebaseUser.email) {
+        minProfileData.email = firebaseUser.email;
+      }
+      const minProfile = minProfileData as UserProfile;
+      await setUserProfile(firebaseUser.uid, minProfile);
+      setStoreProfile(minProfile);
+    } catch {
+      Alert.alert('Error', 'Could not continue. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -104,8 +152,15 @@ export default function ProfileSetupScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>Set up your profile</Text>
-        <Text style={styles.subtitle}>Tell people who you are</Text>
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>Set up your profile</Text>
+            <Text style={styles.subtitle}>Tell people who you are</Text>
+          </View>
+          <TouchableOpacity onPress={handleSkip} disabled={loading} style={styles.skipBtn}>
+            <Text style={styles.skipText}>Skip</Text>
+          </TouchableOpacity>
+        </View>
 
         <Input
           label="Your Name"
@@ -133,6 +188,21 @@ export default function ProfileSetupScreen() {
           style={styles.bioInput}
           error={errors.bio}
         />
+
+        {/* Phone number — optional for email-auth users */}
+        {isEmailUser && (
+          <>
+            <Input
+              label="Mobile Number (Optional)"
+              value={phone}
+              onChangeText={(v) => setPhone(v.replace(/\D/g, '').slice(0, 10))}
+              placeholder="98765 43210"
+              keyboardType="number-pad"
+              maxLength={10}
+            />
+            <Text style={styles.hintText}>📱 Add your number so friends can find you</Text>
+          </>
+        )}
 
         <Text style={styles.sectionLabel}>Interests</Text>
         {errors.interests && <Text style={styles.errorText}>{errors.interests}</Text>}
@@ -178,6 +248,14 @@ export default function ProfileSetupScreen() {
           loading={loading}
           style={styles.saveButton}
         />
+        <TouchableOpacity
+          onPress={handleSkip}
+          disabled={loading}
+          style={styles.skipBottomBtn}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.skipBottomText}>Skip for now →</Text>
+        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -199,7 +277,6 @@ function makeStyles(C: AppColors) {
     subtitle: {
       ...typography.body,
       color: C.textSecondary,
-      marginBottom: spacing.xl,
     },
     bioInput: {
       height: 90,
@@ -249,6 +326,39 @@ function makeStyles(C: AppColors) {
     },
     saveButton: {
       marginTop: spacing.md,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      marginBottom: spacing.xl,
+    },
+    headerText: {
+      flex: 1,
+    },
+    skipBtn: {
+      paddingVertical: spacing.xs,
+      paddingLeft: spacing.md,
+    },
+    skipText: {
+      ...typography.body,
+      color: C.textSecondary,
+      fontWeight: '600',
+    },
+    skipBottomBtn: {
+      alignSelf: 'center',
+      marginTop: spacing.lg,
+      paddingVertical: spacing.sm,
+    },
+    skipBottomText: {
+      ...typography.body,
+      color: C.textSecondary,
+    },
+    hintText: {
+      ...typography.small,
+      color: C.textSecondary,
+      marginTop: -spacing.sm,
+      marginBottom: spacing.md,
     },
   });
 }

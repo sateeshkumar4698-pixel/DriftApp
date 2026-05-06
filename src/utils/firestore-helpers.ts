@@ -182,6 +182,13 @@ export async function sendConnectionRequest(
     status: 'pending',
     createdAt: Date.now(),
   });
+  pushNotification(
+    toUid,
+    'connection_request',
+    `👋 New connection request`,
+    note.trim() || 'Someone wants to connect with you.',
+    { requestId: id, fromUid }
+  ).catch(() => {});
 }
 
 export async function respondToConnectionRequest(
@@ -199,6 +206,13 @@ export async function respondToConnectionRequest(
       users: [fromUid, toUid],
       connectedAt: Date.now(),
     });
+    pushNotification(
+      fromUid,
+      'connection_accepted',
+      `🎉 Request accepted!`,
+      `Your connection request was accepted.`,
+      { connectedUid: toUid }
+    ).catch(() => {});
   }
 }
 
@@ -682,6 +696,13 @@ export function subscribeToGameRoom(
 
 export async function sendGameInvite(invite: GameInvite): Promise<void> {
   await setDoc(doc(db, 'gameInvites', invite.id), stripUndefined(invite));
+  pushNotification(
+    invite.toUid,
+    'game_invite',
+    `🎮 ${invite.fromName} invited you to play!`,
+    `Join the game lobby now.`,
+    { inviteId: invite.id, roomId: invite.roomId, gameId: invite.gameId }
+  ).catch(() => {});
 }
 
 export async function respondToGameInvite(
@@ -893,4 +914,47 @@ export function subscribeToLiveUserCount(
     where('online', '==', true),
   );
   return onSnapshot(q, (snap) => callback(snap.size), () => callback(0));
+}
+
+/** Subscribe to all UIDs that are currently online (active within last 5 min) */
+export function subscribeToOnlineUids(
+  callback: (uids: Set<string>) => void,
+): Unsubscribe {
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  const q = query(
+    collection(db, 'userSessions'),
+    where('online', '==', true),
+    where('lastActive', '>', fiveMinutesAgo),
+  );
+  return onSnapshot(
+    q,
+    (snap) => callback(new Set(snap.docs.map((d) => d.id))),
+    () => callback(new Set()),
+  );
+}
+
+/** Subscribe to count of active game rooms (waiting + playing) */
+export function subscribeToActiveRoomCount(
+  callback: (count: number) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db, 'gameRooms'),
+    where('status', 'in', ['waiting', 'playing']),
+  );
+  return onSnapshot(q, (snap) => callback(snap.size), () => callback(0));
+}
+
+/** Get active statuses for up to 30 UIDs (batches Firestore `in` queries) */
+export async function getActiveStatusesBatched(uids: string[]): Promise<DriftStatus[]> {
+  if (uids.length === 0) return [];
+  const now = Date.now();
+  const batches: string[][] = [];
+  for (let i = 0; i < uids.length; i += 10) batches.push(uids.slice(i, i + 10));
+  const results = await Promise.all(
+    batches.map((batch) =>
+      getDocs(query(collection(db, 'statuses'), where('__name__', 'in', batch)))
+        .then((snap) => snap.docs.map((d) => d.data() as DriftStatus).filter((s) => s.expiresAt > now)),
+    ),
+  );
+  return results.flat();
 }

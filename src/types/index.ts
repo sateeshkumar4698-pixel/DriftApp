@@ -95,6 +95,12 @@ export interface Message {
   text: string;
   createdAt: number;
   readBy?: string[];
+  metadata?: {
+    type?: 'game_invite';
+    gameId?: 'ludo' | 'truth-dare';
+    roomId?: string;
+    inviteId?: string;
+  };
 }
 
 // ─── Memory ───────────────────────────────────────────────────────────────────
@@ -261,6 +267,16 @@ export type DiscoverStackParamList = {
   Notifications: undefined;
   StatusCreate: { initialStatus?: DriftStatus } | undefined;
   ViewStatus: { status: DriftStatus; name: string; photoURL?: string; isMine: boolean };
+  // ── Calls ──────────────────────────────────────────────────────────────────
+  Call: {
+    connectionId: string;
+    remoteUser: UserProfile;
+    callType: CallType;
+    isOutgoing: boolean;
+    // For incoming calls received via push notification
+    roomName?: string;
+    roomUrl?: string;
+  };
   // ── Profile Share (Phase 1) ────────────────────────────────────────────────
   QRScanner: undefined;
   ShakeShare: undefined;
@@ -340,18 +356,32 @@ export interface GameInvite {
   expiresAt:   number;       // 5 minutes after creation
 }
 
-// ─── Voice Room ───────────────────────────────────────────────────────────────
+// ─── Voice / Video Room ───────────────────────────────────────────────────────
+
+export type CallType = 'audio' | 'video';
 
 export interface VoiceRoomToken {
-  token:       string;      // Daily.co meeting token
-  roomUrl:     string;      // https://drift.daily.co/roomId
-  roomName:    string;
-  expiresAt:   number;
+  token:     string;
+  roomUrl:   string;
+  roomName:  string;
+  callType?: CallType;
+  expiresAt: number;
+}
+
+export interface IncomingCallPayload {
+  type:           'incoming_call';
+  callType:       CallType;
+  roomName:       string;
+  roomUrl:        string;
+  callerUid:      string;
+  callerName:     string;
+  callerPhotoURL: string;
 }
 
 export type ProfileStackParamList = {
   ProfileMain: undefined;
   EditProfile: undefined;
+  AvatarBuilder: undefined;
   DriftId: undefined;
   ViewMemories: undefined;
   VibeQuiz: undefined;

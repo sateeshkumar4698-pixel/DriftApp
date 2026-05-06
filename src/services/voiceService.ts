@@ -13,31 +13,80 @@ import { VoiceRoomToken } from '../types';
 const BACKEND_URL =
   process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
+// Warn in dev if still pointing at local network — calls won't work on remote devices
+if (__DEV__ && (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('192.168.'))) {
+  console.warn(
+    '[voiceService] EXPO_PUBLIC_BACKEND_URL is a local address (' + BACKEND_URL + ').\n' +
+    'Calls will only work on devices on the same Wi-Fi network.\n' +
+    'Deploy backend to Railway and update EXPO_PUBLIC_BACKEND_URL for production.',
+  );
+}
+
 // ─── Backend token fetch ──────────────────────────────────────────────────────
 
-export async function fetchVoiceToken(roomName: string): Promise<VoiceRoomToken> {
+export async function fetchVoiceToken(
+  roomName: string,
+  callType: 'audio' | 'video' = 'audio',
+): Promise<VoiceRoomToken> {
   const user = auth.currentUser;
-  if (!user) {
-    throw new Error('Must be signed in to fetch a voice token');
-  }
+  if (!user) throw new Error('Must be signed in to fetch a voice token');
   const idToken = await user.getIdToken();
 
-  const res = await fetch(`${BACKEND_URL}/voice/token`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify({ roomName }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND_URL}/voice/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ roomName, callType }),
+    });
+  } catch (networkErr) {
+    const isLocal = BACKEND_URL.includes('localhost') || BACKEND_URL.includes('192.168.');
+    throw new Error(
+      isLocal
+        ? 'Cannot reach the call server. Make sure you are on the same Wi-Fi network, or deploy the backend to Railway.'
+        : `Network error reaching call server: ${String(networkErr)}`,
+    );
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`Voice token request failed (${res.status}): ${text}`);
   }
+  return (await res.json()) as VoiceRoomToken;
+}
 
-  const data = (await res.json()) as VoiceRoomToken;
-  return data;
+export async function initiateCall(params: {
+  roomName: string;
+  callType: 'audio' | 'video';
+  toUid: string;
+  callerName: string;
+  callerPhotoURL?: string;
+}): Promise<VoiceRoomToken> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Must be signed in to initiate a call');
+  const idToken = await user.getIdToken();
+
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND_URL}/voice/initiate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify(params),
+    });
+  } catch (networkErr) {
+    const isLocal = BACKEND_URL.includes('localhost') || BACKEND_URL.includes('192.168.');
+    throw new Error(
+      isLocal
+        ? 'Cannot reach the call server. Make sure you are on the same Wi-Fi network, or deploy the backend to Railway.'
+        : `Network error reaching call server: ${String(networkErr)}`,
+    );
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Call initiation failed (${res.status}): ${text}`);
+  }
+  return (await res.json()) as VoiceRoomToken;
 }
 
 // ─── Voice client (real or stub) ──────────────────────────────────────────────

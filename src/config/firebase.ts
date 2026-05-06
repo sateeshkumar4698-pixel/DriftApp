@@ -5,15 +5,18 @@ import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: 'AIzaSyCNDRrFb7R0G3lukOnORMOj1-6AV8rhOAE',
   authDomain: 'community-app-5a4d1.firebaseapp.com',
   projectId: 'community-app-5a4d1',
   storageBucket: 'community-app-5a4d1.firebasestorage.app',
   messagingSenderId: '1068329993869',
   appId: '1:1068329993869:web:87130665a386fab63004c4',
-  measurementId: 'G-FKY6CC78TX',
-  databaseURL: 'https://community-app-5a4d1-default-rtdb.firebaseio.com',
+  // measurementId omitted — Firebase Analytics is browser-only and throws
+  // 'getElementsByTagName of undefined' in React Native. Never call getAnalytics()
+  // in a React Native app; use @react-native-firebase/analytics if you need it.
+  // asia-southeast1 region — use the regional URL, NOT the default firebaseio.com URL
+  databaseURL: 'https://community-app-5a4d1-default-rtdb.asia-southeast1.firebasedatabase.app',
 };
 
 // getReactNativePersistence is only exported in Firebase's react-native bundle.

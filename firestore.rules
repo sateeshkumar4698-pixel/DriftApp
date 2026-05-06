@@ -247,8 +247,7 @@ service cloud.firestore {
       allow read: if isSignedIn()
         && resource.data.uid == request.auth.uid;
 
-      allow create: if isSignedIn()
-        && request.resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn();
 
       allow update: if isSignedIn()
         && resource.data.uid == request.auth.uid
@@ -342,6 +341,14 @@ service cloud.firestore {
         && request.resource.data.rating is number
         && request.resource.data.rating >= 1
         && request.resource.data.rating <= 5;
+      allow read, update, delete: if false;
+    }
+
+    // ─── App Logs ─────────────────────────────────────────────────────────────
+    // Write-only access for app crash logs or remote logging.
+    match /appLogs/{logId} {
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
       allow read, update, delete: if false;
     }
 

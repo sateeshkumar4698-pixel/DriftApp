@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,10 @@ import { useTheme, AppColors } from '../../utils/useTheme';
 import { gameSounds } from '../../services/gameSounds';
 import { useAuthStore } from '../../store/authStore';
 import GameChatVoice from '../../components/GameChatVoice';
+import { ref as rtdbRef, set as rtdbSet, update as rtdbUpdate, onValue } from 'firebase/database';
+import { getDoc, doc } from 'firebase/firestore';
+import { rtdb, db } from '../../config/firebase';
+import { GameRoom } from '../../types';
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
 
@@ -34,6 +38,7 @@ type SpiceLevel = 'mild' | 'spicy' | 'wild' | 'adult' | 'extreme';
 type CardType = 'truth' | 'dare';
 
 interface Player {
+  uid?: string;
   name: string;
   color: string;
   truths: number;
@@ -393,6 +398,100 @@ export default function TruthOrDareScreen(): React.JSX.Element {
   const cardAnim = useRef(new Animated.Value(0)).current;
   const slideOutAnim = useRef(new Animated.Value(0)).current;
 
+  // ── Multiplayer state ──
+  const isHostRef = useRef(false);
+  const suppressRemoteRef = useRef(false);
+
+  useEffect(() => {
+    if (!roomId || !firebaseUser) return;
+    let cancelled = false;
+
+    getDoc(doc(db, 'gameRooms', roomId)).then((snap) => {
+      if (cancelled || !snap.exists()) return;
+      const room = snap.data() as GameRoom;
+      const roomPlayers = Object.values(room.players).sort((a, b) => a.joinedAt - b.joinedAt);
+
+      isHostRef.current = room.hostUid === firebaseUser.uid;
+
+      if (room.hostUid === firebaseUser.uid) {
+        const initialPlayers: Player[] = roomPlayers.map((p, i) => ({
+          uid: p.uid,
+          name: p.name,
+          color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+          truths: 0,
+          dares: 0,
+          skips: 0,
+        }));
+        
+        const initState = {
+          phase: 'setup',
+          spiceLevel: 'mild',
+          players: initialPlayers,
+          currentPlayerIndex: 0,
+          round: 1,
+          skipsLeft: MAX_SKIPS,
+          totalTruths: 0,
+          totalDares: 0,
+          card: { type: 'truth', text: '', visible: false },
+          updatedBy: firebaseUser.uid,
+          updatedAt: Date.now(),
+        };
+        rtdbSet(rtdbRef(rtdb, `gameRooms/${roomId}/tod`), initState).catch(console.error);
+        setPlayers(initialPlayers);
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [roomId, firebaseUser?.uid]);
+
+  useEffect(() => {
+    if (!roomId || !firebaseUser) return;
+    const r = rtdbRef(rtdb, `gameRooms/${roomId}/tod`);
+    const unsub = onValue(r, (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.val();
+      if (data.updatedBy === firebaseUser.uid) return;
+
+      suppressRemoteRef.current = true;
+      if (data.phase) setPhase(data.phase);
+      if (data.spiceLevel) setSpiceLevel(data.spiceLevel);
+      if (data.players) setPlayers(data.players);
+      if (data.currentPlayerIndex !== undefined) setCurrentPlayerIndex(data.currentPlayerIndex);
+      if (data.round) setRound(data.round);
+      if (data.skipsLeft !== undefined) setSkipsLeft(data.skipsLeft);
+      if (data.totalTruths !== undefined) setTotalTruths(data.totalTruths);
+      if (data.totalDares !== undefined) setTotalDares(data.totalDares);
+      
+      if (data.card) {
+        setCard((prev) => {
+          if (data.card.visible && !prev.visible) {
+            cardAnim.setValue(0);
+            Animated.spring(cardAnim, {
+              toValue: 1,
+              friction: 6,
+              tension: 80,
+              useNativeDriver: true,
+            }).start();
+          }
+          return data.card;
+        });
+      }
+      suppressRemoteRef.current = false;
+    });
+
+    return () => unsub();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, firebaseUser?.uid]);
+
+  function syncToRTDB(patch: any) {
+    if (!roomId || !firebaseUser) return;
+    rtdbUpdate(rtdbRef(rtdb, `gameRooms/${roomId}/tod`), {
+      ...patch,
+      updatedBy: firebaseUser.uid,
+      updatedAt: Date.now(),
+    }).catch(console.error);
+  }
+
   // ─── Setup Handlers ────────────────────────────────────────────────────────
 
   const updatePlayerName = useCallback((index: number, name: string) => {
@@ -416,6 +515,7 @@ export default function TruthOrDareScreen(): React.JSX.Element {
   }, [playerNames.length]);
 
   const handleSpiceSelect = useCallback((opt: SpiceOption) => {
+    if (roomId && !isHostRef.current) return;
     if (opt.ageGate) {
       Alert.alert(
         `${opt.emoji} ${opt.label} Mode`,
@@ -425,26 +525,34 @@ export default function TruthOrDareScreen(): React.JSX.Element {
           {
             text: 'Yes, I\'m 18+',
             style: 'destructive',
-            onPress: () => setSpiceLevel(opt.level),
+            onPress: () => {
+              setSpiceLevel(opt.level);
+              if (roomId) syncToRTDB({ spiceLevel: opt.level });
+            },
           },
         ],
       );
     } else {
       setSpiceLevel(opt.level);
+      if (roomId) syncToRTDB({ spiceLevel: opt.level });
     }
-  }, []);
+  }, [roomId]);
 
-  const canStart = playerNames.every((n) => n.trim().length > 0);
+  const canStart = roomId ? true : playerNames.every((n) => n.trim().length > 0);
 
   const startGame = useCallback(() => {
-    const initialPlayers: Player[] = playerNames.map((name, i) => ({
-      name: name.trim(),
-      color: PLAYER_COLORS[i % PLAYER_COLORS.length],
-      truths: 0,
-      dares: 0,
-      skips: 0,
-    }));
-    setPlayers(initialPlayers);
+    if (roomId && !isHostRef.current) return;
+    let initialPlayers = players;
+    if (!roomId) {
+      initialPlayers = playerNames.map((name, i) => ({
+        name: name.trim(),
+        color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+        truths: 0,
+        dares: 0,
+        skips: 0,
+      }));
+      setPlayers(initialPlayers);
+    }
     setCurrentPlayerIndex(0);
     setRound(1);
     setSkipsLeft(MAX_SKIPS);
@@ -453,18 +561,34 @@ export default function TruthOrDareScreen(): React.JSX.Element {
     setCard({ type: 'truth', text: '', visible: false });
     cardAnim.setValue(0);
     setPhase('playing');
-  }, [playerNames, cardAnim]);
+    
+    if (roomId) {
+      syncToRTDB({
+        phase: 'playing',
+        players: initialPlayers,
+        currentPlayerIndex: 0,
+        round: 1,
+        skipsLeft: MAX_SKIPS,
+        totalTruths: 0,
+        totalDares: 0,
+        card: { type: 'truth', text: '', visible: false },
+        spiceLevel,
+      });
+    }
+  }, [roomId, players, playerNames, cardAnim, spiceLevel]);
 
   // ─── Game Handlers ─────────────────────────────────────────────────────────
 
   const revealCard = useCallback((type: CardType) => {
+    if (roomId && players[currentPlayerIndex]?.uid !== firebaseUser?.uid) return;
     const pool = getPool(type, spiceLevel);
     const text = pickRandom(pool, card.visible && card.type === type ? card.text : undefined);
 
     gameSounds.fire('spin');
     setTimeout(() => gameSounds.fire(type === 'truth' ? 'truth' : 'dare'), 400);
 
-    setCard({ type, text, visible: true });
+    const newCard = { type, text, visible: true };
+    setCard(newCard);
     cardAnim.setValue(0);
 
     Animated.spring(cardAnim, {
@@ -473,28 +597,33 @@ export default function TruthOrDareScreen(): React.JSX.Element {
       tension: 80,
       useNativeDriver: true,
     }).start();
-  }, [spiceLevel, card, cardAnim]);
+    
+    if (roomId) syncToRTDB({ card: newCard });
+  }, [roomId, players, currentPlayerIndex, firebaseUser?.uid, spiceLevel, card, cardAnim]);
 
   const advanceToNextPlayer = useCallback((wasSkip: boolean) => {
-    setPlayers((prev) => {
-      const next = [...prev];
-      const current = { ...next[currentPlayerIndex] };
-      if (!wasSkip) {
-        if (card.type === 'truth') current.truths += 1;
-        else current.dares += 1;
-      } else {
-        current.skips += 1;
-      }
-      next[currentPlayerIndex] = current;
-      return next;
-    });
-
-    const nextIndex = (currentPlayerIndex + 1) % players.length;
-    const isNewRound = nextIndex === 0;
-
+    const nextPlayers = [...players];
+    const current = { ...nextPlayers[currentPlayerIndex] };
+    
     if (!wasSkip) {
-      if (card.type === 'truth') setTotalTruths((t) => t + 1);
-      else setTotalDares((d) => d + 1);
+      if (card.type === 'truth') current.truths += 1;
+      else current.dares += 1;
+    } else {
+      current.skips += 1;
+    }
+    nextPlayers[currentPlayerIndex] = current;
+    
+    const nextIndex = (currentPlayerIndex + 1) % nextPlayers.length;
+    const isNewRound = nextIndex === 0;
+    
+    const nextTruths = !wasSkip && card.type === 'truth' ? totalTruths + 1 : totalTruths;
+    const nextDares = !wasSkip && card.type === 'dare' ? totalDares + 1 : totalDares;
+    const nextRound = isNewRound ? round + 1 : round;
+
+    setPlayers(nextPlayers);
+    if (!wasSkip) {
+      if (card.type === 'truth') setTotalTruths(nextTruths);
+      else setTotalDares(nextDares);
     }
 
     Animated.timing(slideOutAnim, {
@@ -504,32 +633,51 @@ export default function TruthOrDareScreen(): React.JSX.Element {
     }).start(() => {
       slideOutAnim.setValue(0);
       cardAnim.setValue(0);
-      setCard({ type: 'truth', text: '', visible: false });
+      const newCard = { type: 'truth' as CardType, text: '', visible: false };
+      setCard(newCard);
       setCurrentPlayerIndex(nextIndex);
-      if (isNewRound) setRound((r) => r + 1);
+      if (isNewRound) setRound(nextRound);
+
+      if (roomId) {
+        syncToRTDB({
+          players: nextPlayers,
+          currentPlayerIndex: nextIndex,
+          round: nextRound,
+          totalTruths: nextTruths,
+          totalDares: nextDares,
+          card: newCard,
+        });
+      }
     });
-  }, [currentPlayerIndex, players.length, card.type, cardAnim, slideOutAnim]);
+  }, [currentPlayerIndex, players, card.type, totalTruths, totalDares, round, roomId, cardAnim, slideOutAnim]);
 
   const handleDone = useCallback(() => {
+    if (roomId && players[currentPlayerIndex]?.uid !== firebaseUser?.uid) return;
     gameSounds.fire('button_tap');
     advanceToNextPlayer(false);
-  }, [advanceToNextPlayer]);
+  }, [roomId, players, currentPlayerIndex, firebaseUser?.uid, advanceToNextPlayer]);
 
   const handleSkip = useCallback(() => {
+    if (roomId && players[currentPlayerIndex]?.uid !== firebaseUser?.uid) return;
     if (skipsLeft <= 0) { gameSounds.fire('error'); return; }
     gameSounds.fire('turn_change');
     setSkipsLeft((s) => s - 1);
+    if (roomId) syncToRTDB({ skipsLeft: skipsLeft - 1 });
     advanceToNextPlayer(true);
-  }, [skipsLeft, advanceToNextPlayer]);
+  }, [roomId, players, currentPlayerIndex, firebaseUser?.uid, skipsLeft, advanceToNextPlayer]);
 
   const endGame = useCallback(() => {
+    if (roomId && !isHostRef.current) return;
     setPhase('gameover');
-  }, []);
+    if (roomId) syncToRTDB({ phase: 'gameover' });
+  }, [roomId]);
 
   const playAgain = useCallback(() => {
+    if (roomId && !isHostRef.current) return;
     setPhase('setup');
-    setPlayerNames(players.map((p) => p.name));
-  }, [players]);
+    if (!roomId) setPlayerNames(players.map((p) => p.name));
+    if (roomId) syncToRTDB({ phase: 'setup' });
+  }, [roomId, players]);
 
   // ─── Derived animation values ───────────────────────────────────────────────
 
@@ -598,29 +746,40 @@ export default function TruthOrDareScreen(): React.JSX.Element {
             {/* Players */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Players</Text>
-              {playerNames.map((name, i) => (
-                <View key={i} style={styles.playerRow}>
-                  <View style={[styles.playerDot, { backgroundColor: PLAYER_COLORS[i % PLAYER_COLORS.length] }]} />
-                  <TextInput
-                    style={styles.playerInput}
-                    placeholder={`Player ${i + 1} name`}
-                    placeholderTextColor={C.textSecondary}
-                    value={name}
-                    onChangeText={(v) => updatePlayerName(i, v)}
-                    maxLength={20}
-                    returnKeyType="done"
-                  />
-                  {playerNames.length > MIN_PLAYERS && (
-                    <TouchableOpacity onPress={() => removePlayer(i)} style={styles.removeBtn}>
-                      <Text style={styles.removeBtnText}>✕</Text>
+              {roomId ? (
+                players.map((p, i) => (
+                  <View key={i} style={styles.playerRow}>
+                    <View style={[styles.playerDot, { backgroundColor: p.color }]} />
+                    <Text style={[styles.playerInput, { color: C.text }]}>{p.name}</Text>
+                  </View>
+                ))
+              ) : (
+                <>
+                  {playerNames.map((name, i) => (
+                    <View key={i} style={styles.playerRow}>
+                      <View style={[styles.playerDot, { backgroundColor: PLAYER_COLORS[i % PLAYER_COLORS.length] }]} />
+                      <TextInput
+                        style={styles.playerInput}
+                        placeholder={`Player ${i + 1} name`}
+                        placeholderTextColor={C.textSecondary}
+                        value={name}
+                        onChangeText={(v) => updatePlayerName(i, v)}
+                        maxLength={20}
+                        returnKeyType="done"
+                      />
+                      {playerNames.length > MIN_PLAYERS && (
+                        <TouchableOpacity onPress={() => removePlayer(i)} style={styles.removeBtn}>
+                          <Text style={styles.removeBtnText}>✕</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))}
+                  {playerNames.length < MAX_PLAYERS && (
+                    <TouchableOpacity onPress={addPlayer} style={styles.addPlayerBtn}>
+                      <Text style={styles.addPlayerText}>+ Add Player</Text>
                     </TouchableOpacity>
                   )}
-                </View>
-              ))}
-              {playerNames.length < MAX_PLAYERS && (
-                <TouchableOpacity onPress={addPlayer} style={styles.addPlayerBtn}>
-                  <Text style={styles.addPlayerText}>+ Add Player</Text>
-                </TouchableOpacity>
+                </>
               )}
             </View>
 
@@ -690,20 +849,28 @@ export default function TruthOrDareScreen(): React.JSX.Element {
             </View>
 
             {/* Start */}
-            <TouchableOpacity
-              onPress={startGame}
-              disabled={!canStart}
-              style={[
-                styles.startBtn,
-                !canStart && styles.startBtnDisabled,
-                canStart && { backgroundColor: SPICE_OPTIONS.find((s) => s.level === spiceLevel)?.color ?? C.primary },
-              ]}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.startBtnText}>
-                {SPICE_OPTIONS.find((s) => s.level === spiceLevel)?.emoji} Start Game →
-              </Text>
-            </TouchableOpacity>
+            {roomId && !isHostRef.current ? (
+              <View style={[styles.startBtn, styles.startBtnDisabled]}>
+                <Text style={styles.startBtnText}>
+                  Waiting for host to start...
+                </Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={startGame}
+                disabled={!canStart}
+                style={[
+                  styles.startBtn,
+                  !canStart && styles.startBtnDisabled,
+                  canStart && { backgroundColor: SPICE_OPTIONS.find((s) => s.level === spiceLevel)?.color ?? C.primary },
+                ]}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.startBtnText}>
+                  {SPICE_OPTIONS.find((s) => s.level === spiceLevel)?.emoji} Start Game →
+                </Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>

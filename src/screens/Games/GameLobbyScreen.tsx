@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, ScrollView,
+  ActivityIndicator, Alert, Modal, ScrollView,
   StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -16,11 +17,7 @@ import {
   startGameRoom,
   leaveGameRoom,
 } from '../../utils/firestore-helpers';
-import {
-  fetchVoiceToken,
-  createVoiceClient,
-  VoiceClient,
-} from '../../services/voiceService';
+import { fetchVoiceToken } from '../../services/voiceService';
 import Avatar from '../../components/Avatar';
 import { spacing, typography, radius } from '../../utils/theme';
 import { useTheme, AppColors } from '../../utils/useTheme';
@@ -47,9 +44,9 @@ export default function GameLobbyScreen() {
 
   const [room, setRoom] = useState<GameRoom | null>(null);
   const [busy, setBusy] = useState(false);
-  const [voiceState, setVoiceState] = useState<'idle' | 'joining' | 'joined' | 'leaving'>('idle');
-  const [muted, setMuted] = useState(false);
-  const voiceRef = useRef<VoiceClient | null>(null);
+  const [voiceState, setVoiceState] = useState<'idle' | 'joining' | 'joined' | 'error'>('idle');
+  const [voiceRoomUrl, setVoiceRoomUrl] = useState<string | null>(null);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
   const hasNavigatedToGame = useRef(false);
 
   const gameColor = GAME_COLOR[gameId] ?? C.primary;
@@ -69,7 +66,7 @@ export default function GameLobbyScreen() {
   }, [room, gameId, navigation, roomId]);
 
   useEffect(() => {
-    return () => { voiceRef.current?.leave().catch(() => {}); voiceRef.current = null; };
+    return () => { setShowVoiceModal(false); setVoiceRoomUrl(null); };
   }, []);
 
   if (!firebaseUser) {
@@ -119,42 +116,42 @@ export default function GameLobbyScreen() {
 
   async function leaveRoom() {
     try {
-      await voiceRef.current?.leave().catch(() => {});
-      voiceRef.current = null;
+      setShowVoiceModal(false);
+      setVoiceRoomUrl(null);
       await leaveGameRoom(roomId, firebaseUser!.uid);
       navigation.goBack();
     } catch { Alert.alert('Error', 'Could not leave the room.'); }
   }
 
-  // ── Voice ────────────────────────────────────────────────────────────────────
+  // ── Voice (WebView-based — no native module needed) ──────────────────────────
 
   async function joinVoice() {
-    if (voiceState !== 'idle') return;
+    if (voiceState !== 'idle' && voiceState !== 'error') return;
     setVoiceState('joining');
     try {
-      const token = await fetchVoiceToken(roomId);
-      const client = createVoiceClient();
-      client.on('joined', () => setVoiceState('joined'));
-      client.on('left',   () => setVoiceState('idle'));
-      client.on('error',  (e) => console.warn('[voice] error', e));
-      await client.join(token.token, token.roomUrl);
-      voiceRef.current = client;
-    } catch {
-      Alert.alert('Voice unavailable', 'Could not join voice. Check your backend or try a dev build.');
-      setVoiceState('idle');
+      const token = await fetchVoiceToken(roomId, 'audio');
+      const url = `${token.roomUrl}?embed&startVideoOff=true&startAudioOff=false&noNav=true`;
+      setVoiceRoomUrl(url);
+      setVoiceState('joined');
+      setShowVoiceModal(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('localhost') || msg.includes('Failed to fetch') || msg.includes('Network')) {
+        Alert.alert(
+          'Voice unavailable',
+          'Backend server not reachable. Set EXPO_PUBLIC_BACKEND_URL in your .env to enable voice chat.',
+        );
+      } else {
+        Alert.alert('Voice error', 'Could not join voice. Please try again.');
+      }
+      setVoiceState('error');
     }
   }
 
-  async function toggleMute() {
-    if (!voiceRef.current) return;
-    try { setMuted(await voiceRef.current.toggleMute()); } catch { /* ignore */ }
-  }
-
-  async function leaveVoice() {
-    if (!voiceRef.current) return;
-    setVoiceState('leaving');
-    try { await voiceRef.current.leave(); }
-    finally { voiceRef.current = null; setVoiceState('idle'); setMuted(false); }
+  function leaveVoice() {
+    setShowVoiceModal(false);
+    setVoiceRoomUrl(null);
+    setVoiceState('idle');
   }
 
   return (
@@ -218,13 +215,18 @@ export default function GameLobbyScreen() {
           {/* Voice Chat */}
           <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>VOICE CHAT</Text>
           <View style={styles.voiceCard}>
-            {voiceState === 'idle' && (
-              <TouchableOpacity onPress={joinVoice} activeOpacity={0.85}>
-                <LinearGradient colors={['#6C5CE7', '#A855F7']} style={styles.voiceJoinBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                  <Ionicons name="mic-outline" size={18} color="#fff" />
-                  <Text style={styles.voiceJoinText}>Join Voice Chat</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+            {(voiceState === 'idle' || voiceState === 'error') && (
+              <>
+                <TouchableOpacity onPress={joinVoice} activeOpacity={0.85}>
+                  <LinearGradient colors={['#6C5CE7', '#A855F7']} style={styles.voiceJoinBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                    <Ionicons name="mic-outline" size={18} color="#fff" />
+                    <Text style={styles.voiceJoinText}>Join Voice Chat</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+                {voiceState === 'error' && (
+                  <Text style={styles.voiceErrorHint}>⚠️ Backend not reachable. Set EXPO_PUBLIC_BACKEND_URL to enable voice.</Text>
+                )}
+              </>
             )}
             {voiceState === 'joining' && (
               <View style={styles.voiceRow}>
@@ -234,9 +236,13 @@ export default function GameLobbyScreen() {
             )}
             {voiceState === 'joined' && (
               <View style={styles.voiceRow}>
-                <TouchableOpacity style={[styles.voiceBtn, muted && styles.voiceBtnMuted]} onPress={toggleMute} activeOpacity={0.8}>
-                  <Ionicons name={muted ? 'mic-off-outline' : 'mic-outline'} size={16} color="#fff" />
-                  <Text style={styles.voiceBtnText}>{muted ? 'Unmute' : 'Mute'}</Text>
+                <TouchableOpacity
+                  style={styles.voiceBtn}
+                  onPress={() => setShowVoiceModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="mic-outline" size={16} color="#fff" />
+                  <Text style={styles.voiceBtnText}>Open Voice</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.voiceLeaveBtn} onPress={leaveVoice}>
                   <Ionicons name="call-outline" size={16} color={C.error} />
@@ -244,13 +250,41 @@ export default function GameLobbyScreen() {
                 </TouchableOpacity>
               </View>
             )}
-            {voiceState === 'leaving' && (
-              <View style={styles.voiceRow}>
-                <ActivityIndicator color={C.primary} />
-                <Text style={styles.voiceHint}>Leaving voice…</Text>
-              </View>
-            )}
           </View>
+
+          {/* Voice WebView Modal */}
+          <Modal visible={showVoiceModal} transparent animationType="slide" onRequestClose={() => setShowVoiceModal(false)}>
+            <View style={styles.voiceModalWrap}>
+              <View style={styles.voiceModalHeader}>
+                <Ionicons name="mic" size={16} color="#A855F7" />
+                <Text style={styles.voiceModalTitle}>Voice Chat · {GAME_NAME[gameId] ?? 'Game'}</Text>
+                <TouchableOpacity onPress={() => setShowVoiceModal(false)} style={{ padding: 4 }}>
+                  <Ionicons name="chevron-down" size={22} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              {voiceRoomUrl ? (
+                <WebView
+                  source={{ uri: voiceRoomUrl }}
+                  style={{ flex: 1 }}
+                  allowsInlineMediaPlayback
+                  mediaPlaybackRequiresUserAction={false}
+                  javaScriptEnabled
+                  domStorageEnabled
+                  originWhitelist={['*']}
+                />
+              ) : (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                  <ActivityIndicator color="#A855F7" size="large" />
+                </View>
+              )}
+              <TouchableOpacity style={styles.voiceLeaveFullBtn} onPress={leaveVoice}>
+                <LinearGradient colors={['#EF4444', '#DC2626']} style={styles.voiceLeaveFullGrad}>
+                  <Ionicons name="call" size={20} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+                  <Text style={styles.voiceLeaveFullText}>Leave Voice</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </Modal>
 
           {/* Ready / Start */}
           <View style={{ marginTop: spacing.xl, gap: spacing.md }}>
@@ -354,6 +388,13 @@ function makeStyles(C: AppColors) {
     voiceBtnText: { ...typography.caption, color: '#fff', fontWeight: '700' },
     voiceLeaveBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: C.error + '50', backgroundColor: C.error + '12' },
     voiceLeaveText: { ...typography.caption, color: C.error, fontWeight: '700' },
+    voiceErrorHint: { ...typography.caption, color: C.error, marginTop: 6 },
+    voiceModalWrap: { flex: 1, backgroundColor: '#000' },
+    voiceModalHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: spacing.md, paddingTop: spacing.lg, borderBottomWidth: 1, borderBottomColor: '#222' },
+    voiceModalTitle: { ...typography.body, color: '#fff', fontWeight: '700', flex: 1 },
+    voiceLeaveFullBtn: { margin: spacing.md },
+    voiceLeaveFullGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: spacing.md, borderRadius: radius.lg },
+    voiceLeaveFullText: { ...typography.body, color: '#fff', fontWeight: '700' },
 
     readyBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: spacing.md, borderRadius: radius.lg },
     readyBtnText: { ...typography.body, fontWeight: '700', color: '#fff' },
