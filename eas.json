@@ -12,8 +12,7 @@
         "gradleCommand": ":app:assembleDebug"
       },
       "env": {
-        "APP_ENV": "development",
-        "EXPO_PUBLIC_BACKEND_URL": "http://192.168.0.8:4000"
+        "APP_ENV": "development"
       }
     },
     "preview": {
@@ -22,8 +21,7 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_ENV": "preview",
-        "EXPO_PUBLIC_BACKEND_URL": "https://driftapp-production.up.railway.app"
+        "APP_ENV": "preview"
       }
     },
     "production": {
@@ -32,8 +30,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "APP_ENV": "production",
-        "EXPO_PUBLIC_BACKEND_URL": "https://driftapp-production.up.railway.app"
+        "APP_ENV": "production"
       }
     }
   },
