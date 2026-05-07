@@ -827,9 +827,18 @@ export default function DiscoverScreen() {
             <>
               <View>
                 <Text style={sc.headerTitle}>Drift</Text>
-                <Text style={sc.headerSub}>
-                  {onlineCount > 0 ? `${onlineCount} online near you` : 'Discover your people'}
-                </Text>
+                <View style={sc.headerSubRow}>
+                  {userProfile?.city ? (
+                    <Ionicons name="location" size={11} color={C.primary} />
+                  ) : null}
+                  <Text style={sc.headerSub}>
+                    {userProfile?.city
+                      ? `${userProfile.city}${onlineCount > 0 ? ` · ${onlineCount} online` : ''}`
+                      : onlineCount > 0
+                        ? `${onlineCount} online near you`
+                        : 'Discover your people'}
+                  </Text>
+                </View>
               </View>
               <View style={sc.headerActions}>
                 <TouchableOpacity style={sc.iconBtn} onPress={() => setShowSearch(true)}>
@@ -944,13 +953,15 @@ export default function DiscoverScreen() {
             ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
             ListEmptyComponent={
               feedError ? (
-                <EmptyState emoji="📡" title="Could not load people" subtitle="Check your connection and tap retry.">
-                  <TouchableOpacity style={sc.retryBtn} onPress={() => loadFeed(true)}>
+                <EmptyState emoji="📡" title="Hmm, couldn't load" subtitle="A quick pull-to-refresh usually does it.">
+                  <TouchableOpacity style={sc.retryBtn} onPress={() => loadFeed(true)} activeOpacity={0.85}>
                     <Text style={sc.retryText}>Try Again</Text>
                   </TouchableOpacity>
                 </EmptyState>
+              ) : search ? (
+                <EmptyState emoji="🔍" title="Nothing matches" subtitle={`No one found for "${search}". Try a different name or vibe.`} />
               ) : (
-                <EmptyState emoji="🌊" title="No one here yet" subtitle="Check back soon — more people are joining Drift every day." />
+                <EmptyState emoji="🌊" title="The tide's quiet right now" subtitle="More people drift in every hour — pull down to refresh, or change your mood above." />
               )
             }
             ListFooterComponent={loadingMore ? <ActivityIndicator color={C.primary} style={{ paddingVertical: spacing.lg }} /> : null}

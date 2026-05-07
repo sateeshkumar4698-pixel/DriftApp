@@ -40,6 +40,7 @@ const GAME_INFO: Record<GameId, { name: string; emoji: string; maxPlayers: numbe
   ludo:         { name: 'Ludo',             emoji: '🎲', maxPlayers: 4 },
   'truth-dare': { name: 'Truth or Dare',    emoji: '🎯', maxPlayers: 8 },
   wyr:          { name: 'Would You Rather', emoji: '🤔', maxPlayers: 2 },
+  nhie:         { name: 'Never Have I Ever',emoji: '🙈', maxPlayers: 8 },
 };
 
 function makeRoomId(): string {

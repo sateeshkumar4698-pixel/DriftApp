@@ -376,6 +376,97 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    // ─── Communities ─────────────────────────────────────────────────────────
+
+    match /communities/{communityId} {
+      // Any authenticated user can browse communities
+      allow read: if isSignedIn();
+
+      // Any authenticated user can create a community they own
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 3
+        && request.resource.data.memberCount == 0;
+
+      // Only the creator or an admin member may update community metadata
+      allow update: if isSignedIn()
+        && (resource.data.createdBy == request.auth.uid
+            || exists(/databases/$(database)/documents/communities/$(communityId)/members/$(request.auth.uid))
+               && get(/databases/$(database)/documents/communities/$(communityId)/members/$(request.auth.uid)).data.role in ['admin', 'moderator']);
+
+      // Only the creator can delete the community
+      allow delete: if isSignedIn()
+        && resource.data.createdBy == request.auth.uid;
+
+      // ─── Community Members subcollection ──────────────────────────────────
+      match /members/{uid} {
+        // Any signed-in user can see who's in a community
+        allow read: if isSignedIn();
+
+        // Users can only write their own membership document (join / update role)
+        allow create, update: if isSignedIn()
+          && request.auth.uid == uid
+          && request.resource.data.uid == uid;
+
+        // Users can remove only themselves
+        allow delete: if isSignedIn()
+          && request.auth.uid == uid;
+      }
+    }
+
+    // ─── Community Posts ──────────────────────────────────────────────────────
+
+    match /communityPosts/{postId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        && request.resource.data.content.size() <= 5000;
+
+      // Author can edit their own post; any member can update social fields
+      allow update: if isSignedIn()
+        && (resource.data.authorUid == request.auth.uid
+            || request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['likes', 'commentsCount', 'reactions']));
+
+      allow delete: if isSignedIn()
+        && resource.data.authorUid == request.auth.uid;
+
+      // ─── Community Comments subcollection ─────────────────────────────────
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+
+        allow create: if isSignedIn()
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 1000;
+
+        // Only the comment author can delete their own comment
+        allow delete: if isSignedIn()
+          && resource.data.authorUid == request.auth.uid;
+
+        allow update: if false;
+      }
+    }
+
+    // ─── User Community Memberships ───────────────────────────────────────────
+    // Stores which communities a user has joined for O(1) membership lookups.
+
+    match /userCommunities/{uid} {
+      // The top-level doc isn't used; only the subcollection matters.
+      allow read, write: if false;
+
+      match /joined/{communityId} {
+        // Users can only read and write their own joined list
+        allow read, write: if isSignedIn()
+          && request.auth.uid == uid;
+      }
+    }
+
     // ─── Deny everything else ─────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

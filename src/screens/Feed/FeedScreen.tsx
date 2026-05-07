@@ -691,17 +691,20 @@ export default function FeedScreen() {
 
   const [posts, setPosts]         = useState<Post[]>([]);
   const [loading, setLoading]     = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [commentPost, setCommentPost] = useState<Post | null>(null);
   const [sharePost, setSharePost]     = useState<Post | null>(null);
+  const [activeTab, setActiveTab]   = useState<'forYou' | 'following' | 'trending'>('forYou');
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
+    setLoadError(false);
     try {
       const data = await getPosts();
       setPosts(data);
     } catch {
-      Alert.alert('Error', 'Failed to load feed.');
+      setLoadError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -773,6 +776,8 @@ export default function FeedScreen() {
           style={styles.newPostBtn}
           onPress={() => navigation.navigate('CreatePost')}
           activeOpacity={0.85}
+          accessibilityLabel="Create post"
+          accessibilityRole="button"
         >
           <LinearGradient colors={['#FF4B6E', '#6C5CE7']} style={styles.newPostGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
             <Ionicons name="add" size={18} color="#fff" />
@@ -780,6 +785,29 @@ export default function FeedScreen() {
           </LinearGradient>
         </TouchableOpacity>
       </LinearGradient>
+
+      {/* Segmented tabs */}
+      <View style={styles.tabsRow}>
+        {([
+          { key: 'forYou',    label: 'For You'    },
+          { key: 'following', label: 'Following'  },
+          { key: 'trending',  label: 'Trending'   },
+        ] as const).map((t) => {
+          const active = activeTab === t.key;
+          return (
+            <TouchableOpacity
+              key={t.key}
+              style={[styles.tabPill, active && styles.tabPillActive]}
+              onPress={() => setActiveTab(t.key)}
+              activeOpacity={0.8}
+              accessibilityLabel={t.label}
+              accessibilityRole="tab"
+            >
+              <Text style={[styles.tabPillText, active && styles.tabPillTextActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {/* Feed */}
       {loading ? (
@@ -798,10 +826,78 @@ export default function FeedScreen() {
               onRefresh={() => { setRefreshing(true); load(true); }}
               tintColor={C.primary}
               colors={[C.primary]}
+              progressBackgroundColor={isDark ? '#15152A' : '#FFFFFF'}
             />
           }
+          ListHeaderComponent={
+            <TouchableOpacity
+              style={styles.composeCard}
+              onPress={() => navigation.navigate('CreatePost')}
+              activeOpacity={0.85}
+              accessibilityLabel="Open create post"
+              accessibilityRole="button"
+            >
+              <Avatar name={userName || '?'} photoURL={userPhotoURL} size={38} />
+              <View style={styles.composeInput}>
+                <Text style={{ fontSize: 14, color: C.textSecondary, fontWeight: '500' }}>
+                  What's on your mind?
+                </Text>
+              </View>
+              <View style={styles.composeIcons}>
+                <View style={[styles.composeIconBtn, { backgroundColor: '#0984E315' }]}>
+                  <Ionicons name="image-outline" size={18} color="#0984E3" />
+                </View>
+                <View style={[styles.composeIconBtn, { backgroundColor: '#00B89415' }]}>
+                  <Ionicons name="bar-chart-outline" size={18} color="#00B894" />
+                </View>
+              </View>
+            </TouchableOpacity>
+          }
           ListEmptyComponent={
-            <EmptyState emoji="🌊" title="No posts yet" subtitle="Be the first to share something amazing!" />
+            loadError ? (
+              <EmptyState emoji="📡" title="Couldn't reach the feed" subtitle="A quick refresh usually fixes it.">
+                <TouchableOpacity
+                  onPress={() => load(false)}
+                  style={{
+                    marginTop: spacing.md,
+                    paddingHorizontal: spacing.xl,
+                    paddingVertical: spacing.sm + 2,
+                    backgroundColor: C.primary,
+                    borderRadius: radius.full,
+                    alignSelf: 'center',
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Try Again</Text>
+                </TouchableOpacity>
+              </EmptyState>
+            ) : (
+              <EmptyState
+                emoji="🌊"
+                title="The feed is calm"
+                subtitle="Be the first to drop a thought, photo, or poll for the day."
+              >
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('CreatePost')}
+                  style={{
+                    marginTop: spacing.md,
+                    borderRadius: radius.full,
+                    overflow: 'hidden',
+                    alignSelf: 'center',
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={['#FF4B6E', '#6C5CE7']}
+                    style={{ paddingHorizontal: spacing.xl, paddingVertical: spacing.sm + 2, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons name="add" size={16} color="#fff" />
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Create Post</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </EmptyState>
+            )
           }
           renderItem={({ item }) => (
             <PostCard

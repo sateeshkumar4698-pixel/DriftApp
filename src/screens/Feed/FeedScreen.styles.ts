@@ -13,21 +13,89 @@ export function makeStyles(C: AppColors, isDark: boolean) {
       borderBottomWidth: 1, borderBottomColor: isDark ? 'rgba(255,255,255,0.07)' : C.border,
     },
     wordmark:      { fontSize: 26, fontWeight: '800', color: C.primary, letterSpacing: -0.5 },
-    wordmarkSub:   { fontSize: 11, color: C.textSecondary, marginTop: 1 },
-    newPostBtn:    { borderRadius: radius.full, overflow: 'hidden' },
+    wordmarkSub:   { fontSize: 11, color: C.textSecondary, marginTop: 2, fontWeight: '500' },
+    newPostBtn:    { borderRadius: radius.full, overflow: 'hidden', ...shadows.sm },
     newPostGrad:   { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 16, paddingVertical: 9 },
     newPostText:   { fontSize: 13, fontWeight: '700', color: '#fff' },
     list:          { paddingTop: spacing.sm, paddingBottom: 120 },
     emptyContainer: { flex: 1 },
+
+    // Segmented tabs
+    tabsRow: {
+      flexDirection: 'row',
+      paddingHorizontal: spacing.md,
+      paddingVertical: 10,
+      gap: 8,
+      backgroundColor: isDark ? '#0D0D1A' : C.background,
+      borderBottomWidth: 1,
+      borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : C.border,
+    },
+    tabPill: {
+      flex: 1,
+      paddingVertical: 9,
+      borderRadius: radius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: C.surface,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    tabPillActive: {
+      backgroundColor: C.primary,
+      borderColor: C.primary,
+    },
+    tabPillText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: C.textSecondary,
+      letterSpacing: -0.1,
+    },
+    tabPillTextActive: {
+      color: '#fff',
+      fontWeight: '700',
+    },
+
+    // Compose card
+    composeCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginHorizontal: spacing.md,
+      marginTop: spacing.sm,
+      marginBottom: 4,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 12,
+      backgroundColor: isDark ? '#15152A' : '#FFFFFF',
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)',
+      ...shadows.xs,
+    },
+    composeInput: {
+      flex: 1,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: radius.full,
+      backgroundColor: isDark ? '#1C1C35' : C.surface,
+      fontSize: 14,
+      color: C.textSecondary,
+      fontWeight: '500',
+    },
+    composeIcons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    composeIconBtn: {
+      width: 34, height: 34, borderRadius: 17,
+      alignItems: 'center', justifyContent: 'center',
+    },
+
     fab: {
       position: 'absolute', bottom: 90, right: 20,
-      width: 56, height: 56, borderRadius: 28,
+      width: 58, height: 58, borderRadius: 29,
       overflow: 'hidden',
-      elevation: 8,
+      elevation: 10,
       shadowColor: '#FF4B6E',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.45,
-      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.55,
+      shadowRadius: 14,
     },
     fabGrad: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   });
@@ -40,7 +108,7 @@ export function makeCardStyles(C: AppColors, isDark: boolean) {
     container: {
       backgroundColor: isDark ? '#15152A' : '#FFFFFF',
       marginHorizontal: spacing.md,
-      marginBottom: 10,
+      marginBottom: 12,
       borderRadius: radius.lg,
       borderWidth: 1,
       borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)',
@@ -54,36 +122,36 @@ export function makeCardStyles(C: AppColors, isDark: boolean) {
       paddingBottom: spacing.xs, gap: spacing.sm,
     },
     meta:     { flex: 1 },
-    username: { fontSize: 14, fontWeight: '700', color: C.text },
-    time:     { fontSize: 11, color: C.textSecondary, marginTop: 1 },
+    username: { fontSize: 14.5, fontWeight: '700', color: C.text, letterSpacing: -0.1 },
+    time:     { fontSize: 11, color: C.textSecondary, marginTop: 2 },
     badge: {
-      flexDirection: 'row', alignItems: 'center', gap: 3,
-      paddingHorizontal: 8, paddingVertical: 3,
+      flexDirection: 'row', alignItems: 'center', gap: 4,
+      paddingHorizontal: 9, paddingVertical: 3,
       borderRadius: radius.full, borderWidth: 1,
     },
-    badgeLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
+    badgeLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
     caption: {
-      fontSize: 15, color: C.text, lineHeight: 24,
+      fontSize: 15, color: C.text, lineHeight: 23,
       paddingHorizontal: spacing.md,
       paddingTop: spacing.xs, paddingBottom: spacing.sm,
     },
     pollQuestion: {
-      fontSize: 16, fontWeight: '700', color: C.text,
+      fontSize: 16, fontWeight: '700', color: C.text, lineHeight: 23,
       paddingHorizontal: spacing.md,
       paddingTop: spacing.xs, paddingBottom: spacing.sm,
     },
     imageWrap:    { overflow: 'hidden', position: 'relative', marginBottom: spacing.xs },
     image:        { width: '100%', height: '100%' },
     heartOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-    heartEmoji:   { fontSize: 80 },
+    heartEmoji:   { fontSize: 84 },
     tagsRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
-    tag:          { backgroundColor: C.secondary + '12', paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.full },
-    tagText:      { fontSize: 11, fontWeight: '600' },
-    engRow:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: 6 },
+    tag:          { backgroundColor: C.secondary + '14', paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.full },
+    tagText:      { fontSize: 11, fontWeight: '700' },
+    engRow:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: 7 },
     engText:      { fontSize: 12, color: C.text, fontWeight: '600' },
-    actions:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.border, gap: spacing.md },
+    actions:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: 11, borderTopWidth: 1, borderTopColor: C.border, gap: spacing.lg },
     actionBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5 },
-    actionCount:  { fontSize: 12, color: C.textSecondary, fontWeight: '600' },
+    actionCount:  { fontSize: 12.5, color: C.textSecondary, fontWeight: '600' },
   });
 }
 
@@ -92,7 +160,7 @@ export function makeCardStyles(C: AppColors, isDark: boolean) {
 export function makeCmStyles(C: AppColors) {
   return StyleSheet.create({
     overlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    sheet:        { backgroundColor: C.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, maxHeight: '85%', paddingBottom: 28 },
+    sheet:        { backgroundColor: C.background, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, maxHeight: '85%', paddingBottom: 28 },
     handle:       { width: 40, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: 'center', marginTop: spacing.sm },
     header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: C.border },
     title:        { fontSize: 15, fontWeight: '700', color: C.text },
@@ -122,7 +190,7 @@ export function makeCmStyles(C: AppColors) {
 export function makeShStyles(C: AppColors) {
   return StyleSheet.create({
     overlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    sheet:    { backgroundColor: C.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, maxHeight: '70%', paddingBottom: 32 },
+    sheet:    { backgroundColor: C.background, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, maxHeight: '70%', paddingBottom: 32 },
     handle:   { width: 40, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: 'center', marginTop: spacing.sm },
     header:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: C.border },
     title:    { fontSize: 15, fontWeight: '700', color: C.text },
@@ -136,7 +204,7 @@ export function makeShStyles(C: AppColors) {
   });
 }
 
-// ─── Poll styles (static — no theme dependency) ───────────────────────────────
+// ─── Poll styles ──────────────────────────────────────────────────────────────
 
 export function makePollStyles() {
   return StyleSheet.create({

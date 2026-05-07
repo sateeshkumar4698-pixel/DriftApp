@@ -33,7 +33,7 @@ import { db } from '../../config/firebase';
 type Nav = NativeStackNavigationProp<GamesStackParamList, 'GamesList'>;
 
 interface GameItem {
-  id: 'ludo' | 'truth-dare' | 'uno' | 'chess' | 'bet' | 'wyr';
+  id: 'ludo' | 'truth-dare' | 'uno' | 'chess' | 'bet' | 'wyr' | 'nhie';
   emoji: string;
   name: string;
   tagline: string;
@@ -43,6 +43,7 @@ interface GameItem {
   accentDark: string;
   tags: string[];
   available: true;
+  hotBadge?: boolean;
 }
 
 interface ComingSoonItem {
@@ -65,8 +66,14 @@ const LIVE_GAMES: GameItem[] = [
   {
     id: 'truth-dare', emoji: '🎯', name: 'Truth or Dare', tagline: 'How well do you know each other?',
     description: 'Confess truths, survive dares. 5 spice levels from Mild to 🔞 Extreme — choose wisely.',
-    players: '2–4 players', color: '#FF4B6E', accentDark: '#D4284A',
-    tags: ['Party', '18+ Mode', 'Ice Breaker'], available: true,
+    players: '2–8 players', color: '#FF4B6E', accentDark: '#D4284A',
+    tags: ['Party', '18+ Mode', 'Ice Breaker'], available: true, hotBadge: true,
+  },
+  {
+    id: 'nhie', emoji: '🙈', name: 'Never Have I Ever', tagline: 'Find out who\'s done the most.',
+    description: 'Read a card, raise your hand if you\'ve done it. 5 spice levels, 100+ cards per level. Find out who\'s the most experienced.',
+    players: '2–8 players', color: '#A855F7', accentDark: '#7C3AED',
+    tags: ['Party', '18+ Mode', 'Social'], available: true, hotBadge: true,
   },
   {
     id: 'uno', emoji: '🃏', name: 'UNO', tagline: 'Draw, skip, reverse — and shout UNO!',
@@ -101,6 +108,7 @@ const COMING_SOON: ComingSoonItem[] = [
 const GAME_DISPLAY: Record<string, { name: string; emoji: string }> = {
   ludo: { name: 'Ludo', emoji: '🎲' },
   'truth-dare': { name: 'Truth or Dare', emoji: '🎯' },
+  nhie: { name: 'Never Have I Ever', emoji: '🙈' },
   uno: { name: 'UNO', emoji: '🃏' },
   chess: { name: 'Chess', emoji: '♟️' },
   bet: { name: 'Stake It', emoji: '🎰' },
@@ -108,7 +116,7 @@ const GAME_DISPLAY: Record<string, { name: string; emoji: string }> = {
 };
 
 const GAME_COLOR: Record<string, string> = {
-  ludo: '#6C5CE7', 'truth-dare': '#FF4B6E', uno: '#E17055', chess: '#4A4A6A', bet: '#FDCB6E', wyr: '#00B894',
+  ludo: '#6C5CE7', 'truth-dare': '#FF4B6E', nhie: '#A855F7', uno: '#E17055', chess: '#4A4A6A', bet: '#FDCB6E', wyr: '#00B894',
 };
 
 export default function GamesScreen() {
@@ -152,6 +160,7 @@ export default function GamesScreen() {
   function handleSolo(game: GameItem) {
     if (game.id === 'ludo')            navigation.navigate('LudoGame');
     else if (game.id === 'truth-dare') navigation.navigate('TruthOrDare');
+    else if (game.id === 'nhie')       navigation.navigate('NeverHaveIEver');
     else if (game.id === 'uno')        navigation.navigate('UnoGame');
     else if (game.id === 'chess')      navigation.navigate('ChessGame');
     else if (game.id === 'bet')        navigation.navigate('BetGame');
@@ -162,9 +171,14 @@ export default function GamesScreen() {
     if (game.id === 'uno')   { navigation.navigate('UnoGame');   return; }
     if (game.id === 'chess') { navigation.navigate('ChessGame'); return; }
     if (game.id === 'bet')   { navigation.navigate('BetGame');   return; }
-    // WYR, Ludo, Truth-or-Dare go through the invite/lobby flow
-    if (game.id === 'wyr' || game.id === 'ludo' || game.id === 'truth-dare') {
+    // Party games with invite/lobby flow
+    if (game.id === 'ludo' || game.id === 'truth-dare' || game.id === 'wyr') {
       navigation.navigate('GameInvite', { gameId: game.id as 'ludo' | 'truth-dare' | 'wyr' });
+      return;
+    }
+    // NHIE — solo multi-device play (pass-and-play style)
+    if (game.id === 'nhie') {
+      navigation.navigate('NeverHaveIEver');
       return;
     }
     navigation.navigate('GameInvite', { gameId: game.id as 'ludo' | 'truth-dare' | 'wyr' });
@@ -420,6 +434,13 @@ function GameCard({ game, C, isDark, activeRooms, onSolo, onFriends }: GameCardP
         <View style={[styles.heroPatternDot, styles.heroPatternDot2]} />
         <View style={[styles.heroPatternDot, styles.heroPatternDot3]} />
 
+        {/* HOT badge */}
+        {game.hotBadge && (
+          <View style={styles.hotBadge}>
+            <Text style={styles.hotBadgeText}>HOT 🔥</Text>
+          </View>
+        )}
+
         <View style={styles.gameCardHeroInner}>
           <Text style={styles.heroEmoji}>{game.emoji}</Text>
           <View style={styles.heroTextBlock}>
@@ -571,6 +592,14 @@ function makeStyles(C: AppColors) {
     heroLiveBadge:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,230,118,0.30)', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full, alignSelf: 'flex-end', borderWidth: 1, borderColor: 'rgba(0,230,118,0.5)' },
     heroLiveDot:       { width: 6, height: 6, borderRadius: 3, backgroundColor: '#00E676' },
     heroLiveText:      { fontSize: 11, fontWeight: '700', color: '#00E676', letterSpacing: 0.3 },
+
+    hotBadge: {
+      position: 'absolute', top: spacing.sm, right: spacing.sm,
+      backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: spacing.sm,
+      paddingVertical: 3, borderRadius: radius.full, zIndex: 2,
+      borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)',
+    },
+    hotBadgeText: { fontSize: 11, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
 
     gameCardBody:  { padding: spacing.md },
     gameCardDesc:  { ...typography.small, color: C.textSecondary, lineHeight: 19, marginBottom: spacing.sm },

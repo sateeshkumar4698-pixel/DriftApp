@@ -1,5 +1,5 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -33,9 +33,12 @@ import CreateEventScreen from '../screens/Events/CreateEventScreen';
 import EventDetailScreen from '../screens/Events/EventDetailScreen';
 import EventInviteScreen from '../screens/Events/EventInviteScreen';
 
-// Feed stack
+// Feed / Community stack
 import FeedScreen from '../screens/Feed/FeedScreen';
 import CreatePostScreen from '../screens/Feed/CreatePostScreen';
+import CommunitiesScreen from '../screens/Communities/CommunitiesScreen';
+import CommunityDetailScreen from '../screens/Communities/CommunityDetailScreen';
+import CreateCommunityScreen from '../screens/Communities/CreateCommunityScreen';
 
 // Games stack
 import GamesScreen from '../screens/Games/GamesScreen';
@@ -45,6 +48,7 @@ import UnoGameScreen from '../screens/Games/UnoGame';
 import ChessGameScreen from '../screens/Games/ChessGame';
 import BetGameScreen from '../screens/Games/BetGame';
 import WouldYouRatherScreen from '../screens/Games/WouldYouRather';
+import NeverHaveIEverScreen from '../screens/Games/NeverHaveIEver';
 import GameInviteScreen from '../screens/Games/GameInviteScreen';
 import GameLobbyScreen from '../screens/Games/GameLobbyScreen';
 
@@ -70,6 +74,16 @@ import FeedbackScreen from '../screens/Profile/FeedbackScreen';
 import QRScannerScreen from '../screens/Discover/QRScannerScreen';
 import ShakeToShareScreen from '../screens/Discover/ShakeToShareScreen';
 import ViewStatusScreen from '../screens/Discover/ViewStatusScreen';
+
+// ─── Stubs ────────────────────────────────────────────────────────────────────
+
+function CommunityPostDetailStub() {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ fontSize: 16 }}>Post Detail</Text>
+    </View>
+  );
+}
 
 // ─── Stack Navigators ─────────────────────────────────────────────────────────
 
@@ -114,8 +128,15 @@ function EventsNavigator() {
 function FeedNavigator() {
   return (
     <FeedStack.Navigator screenOptions={{ headerShown: false }}>
-      <FeedStack.Screen name="FeedMain"    component={FeedScreen} />
-      <FeedStack.Screen name="CreatePost"  component={CreatePostScreen} />
+      <FeedStack.Screen name="FeedMain"             component={FeedScreen} />
+      <FeedStack.Screen name="CreatePost"           component={CreatePostScreen} />
+      <FeedStack.Screen name="CommunitiesList"      component={CommunitiesScreen} />
+      <FeedStack.Screen name="CommunityDetail"      component={CommunityDetailScreen} />
+      <FeedStack.Screen name="CreateCommunity"      component={CreateCommunityScreen} />
+      <FeedStack.Screen
+        name="CommunityPostDetail"
+        component={CommunityPostDetailStub}
+      />
     </FeedStack.Navigator>
   );
 }
@@ -123,15 +144,16 @@ function FeedNavigator() {
 function GamesNavigator() {
   return (
     <GamesStack.Navigator screenOptions={{ headerShown: false }}>
-      <GamesStack.Screen name="GamesList"    component={GamesScreen} />
-      <GamesStack.Screen name="LudoGame"     component={LudoGameScreen} />
-      <GamesStack.Screen name="TruthOrDare"  component={TruthOrDareScreen} />
-      <GamesStack.Screen name="UnoGame"      component={UnoGameScreen} />
-      <GamesStack.Screen name="ChessGame"    component={ChessGameScreen} />
-      <GamesStack.Screen name="BetGame"          component={BetGameScreen} />
-      <GamesStack.Screen name="WouldYouRather"   component={WouldYouRatherScreen} />
-      <GamesStack.Screen name="GameInvite"       component={GameInviteScreen} />
-      <GamesStack.Screen name="GameLobby"        component={GameLobbyScreen} />
+      <GamesStack.Screen name="GamesList"       component={GamesScreen} />
+      <GamesStack.Screen name="LudoGame"        component={LudoGameScreen} />
+      <GamesStack.Screen name="TruthOrDare"     component={TruthOrDareScreen} />
+      <GamesStack.Screen name="NeverHaveIEver"  component={NeverHaveIEverScreen} />
+      <GamesStack.Screen name="UnoGame"         component={UnoGameScreen} />
+      <GamesStack.Screen name="ChessGame"       component={ChessGameScreen} />
+      <GamesStack.Screen name="BetGame"         component={BetGameScreen} />
+      <GamesStack.Screen name="WouldYouRather"  component={WouldYouRatherScreen} />
+      <GamesStack.Screen name="GameInvite"      component={GameInviteScreen} />
+      <GamesStack.Screen name="GameLobby"       component={GameLobbyScreen} />
     </GamesStack.Navigator>
   );
 }
@@ -211,11 +233,11 @@ export default function MainTabs() {
         }}
       />
       <Tab.Screen
-        name="Feed"
+        name="Community"
         component={FeedNavigator}
         options={{
-          tabBarIcon: ({ focused, color }) => TabIcon('layers-outline', 'layers', focused, color),
-          tabBarLabel: 'Feed',
+          tabBarIcon: ({ focused, color }) => TabIcon('people-outline', 'people', focused, color),
+          tabBarLabel: 'Community',
         }}
       />
       <Tab.Screen

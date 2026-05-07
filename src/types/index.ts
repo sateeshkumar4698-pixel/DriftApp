@@ -238,6 +238,85 @@ export interface Post {
   repostCount?: number;
 }
 
+// ─── Community ────────────────────────────────────────────────────────────────
+
+export type CommunityCategory =
+  | 'culture_caste'
+  | 'lgbtq'
+  | 'startups'
+  | 'employment'
+  | 'education'
+  | 'students'
+  | 'politics'
+  | 'gossip'
+  | 'gaming'
+  | 'fitness'
+  | 'music_arts'
+  | 'tech'
+  | 'relationships'
+  | 'travel'
+  | 'food_lifestyle'
+  | 'general';
+
+export interface Community {
+  id: string;
+  name: string;
+  description: string;
+  category: CommunityCategory;
+  tags: string[];
+  iconEmoji: string;
+  coverColor: string;       // hex for gradient
+  coverColor2?: string;     // second gradient stop
+  memberCount: number;
+  postCount: number;
+  isPrivate: boolean;
+  isVerified?: boolean;
+  communityType: 'open' | 'request' | 'invite';
+  createdBy: string;
+  createdByName: string;
+  createdAt: number;
+  rules?: string[];
+  pinnedPostId?: string;
+}
+
+export interface CommunityMember {
+  uid: string;
+  role: 'admin' | 'moderator' | 'member';
+  joinedAt: number;
+  displayName: string;
+  photoURL?: string;
+}
+
+export interface CommunityPost {
+  id: string;
+  communityId: string;
+  authorUid: string;
+  authorName: string;
+  authorPhotoURL?: string;
+  content: string;
+  mediaURL?: string;
+  likes: string[];
+  commentsCount: number;
+  isPinned: boolean;
+  isAnnouncement: boolean;
+  tags?: string[];
+  reactions?: Record<string, string[]>; // emoji → uid[]
+  createdAt: number;
+}
+
+export interface CommunityComment {
+  id: string;
+  postId: string;
+  communityId: string;
+  authorUid: string;
+  authorName: string;
+  authorPhotoURL?: string;
+  text: string;
+  likes: string[];
+  replyTo?: { id: string; authorName: string };
+  createdAt: number;
+}
+
 // ─── Navigation ───────────────────────────────────────────────────────────────
 
 export type RootStackParamList = {
@@ -250,11 +329,11 @@ export type RootStackParamList = {
 };
 
 export type MainTabParamList = {
-  Discover: undefined;
-  Events: undefined;
-  Feed: undefined;
-  Play: undefined;
-  Profile: undefined;
+  Discover:   undefined;
+  Events:     undefined;
+  Community:  undefined;   // replaces Feed — houses both Feed posts & Communities
+  Play:       undefined;
+  Profile:    undefined;
 };
 
 export type DiscoverStackParamList = {
@@ -290,9 +369,14 @@ export type EventsStackParamList = {
 };
 
 export type FeedStackParamList = {
-  FeedMain: undefined;
-  CreatePost: undefined;
-  PostDetail: { post: Post };
+  FeedMain:             undefined;
+  CreatePost:           undefined;
+  PostDetail:           { post: Post };
+  // ── Community navigation (nested in Community tab) ─────────────────────────
+  CommunitiesList:      undefined;
+  CommunityDetail:      { communityId: string };
+  CreateCommunity:      undefined;
+  CommunityPostDetail:  { postId: string; communityId: string };
 };
 
 export type GamesStackParamList = {
@@ -300,16 +384,17 @@ export type GamesStackParamList = {
   LudoGame:        { roomId?: string } | undefined;
   TruthOrDare:     { roomId?: string } | undefined;
   WouldYouRather:  { roomId?: string } | undefined;
+  NeverHaveIEver:  { roomId?: string } | undefined;
   UnoGame:         undefined;
   ChessGame:       undefined;
   BetGame:         undefined;
-  GameInvite:      { gameId: 'ludo' | 'truth-dare' | 'wyr' };
-  GameLobby:       { roomId: string; gameId: 'ludo' | 'truth-dare' | 'wyr' };
+  GameInvite:      { gameId: GameId };
+  GameLobby:       { roomId: string; gameId: GameId };
 };
 
 // ─── Multiplayer Game Types ──────────────────────────────────────────────────
 
-export type GameId = 'ludo' | 'truth-dare' | 'wyr';
+export type GameId = 'ludo' | 'truth-dare' | 'wyr' | 'nhie';
 
 export type GameRoomStatus = 'waiting' | 'playing' | 'finished' | 'abandoned';
 

@@ -36,6 +36,11 @@ import {
   AppNotification,
   NotifType,
   EventInvite,
+  Community,
+  CommunityCategory,
+  CommunityMember,
+  CommunityPost,
+  CommunityComment,
 } from '../types';
 import { dynamicVibeMatch } from './vibeMatch';
 import type { MoodPreset } from '../store/moodStore';
@@ -1035,6 +1040,253 @@ export function subscribeToIncomingCalls(
     (snap) => {
       const calls = snap.docs.map((d) => d.data() as CallDoc);
       cb(calls.length > 0 ? calls[0] : null);
+    },
+  );
+}
+
+// ─── Communities ──────────────────────────────────────────────────────────────
+
+/** Create a new community. The caller must set community.id before calling. */
+export async function createCommunity(community: Community): Promise<void> {
+  await setDoc(doc(db, 'communities', community.id), stripUndefined(community));
+}
+
+/**
+ * Fetch communities, optionally filtered by category.
+ * Results are ordered by memberCount descending (most popular first).
+ */
+export async function getCommunities(
+  category?: CommunityCategory,
+  pageSize = 20,
+): Promise<Community[]> {
+  const constraints: QueryConstraint[] = [
+    orderBy('memberCount', 'desc'),
+    limit(pageSize),
+  ];
+  if (category) constraints.unshift(where('category', '==', category));
+  const snap = await getDocs(query(collection(db, 'communities'), ...constraints));
+  return snap.docs.map((d) => d.data() as Community);
+}
+
+/** Fetch a single community by ID. Returns null if not found. */
+export async function getCommunity(communityId: string): Promise<Community | null> {
+  const snap = await getDoc(doc(db, 'communities', communityId));
+  return snap.exists() ? (snap.data() as Community) : null;
+}
+
+/** Partially update a community document (e.g. name, description, rules). */
+export async function updateCommunity(
+  communityId: string,
+  patch: Partial<Community>,
+): Promise<void> {
+  await updateDoc(doc(db, 'communities', communityId), stripUndefined(patch as Record<string, unknown>));
+}
+
+/**
+ * Join a community:
+ *  1. Write the member subdocument.
+ *  2. Increment memberCount on the community doc.
+ *  3. Record membership in the user's personal joined list.
+ */
+export async function joinCommunity(
+  communityId: string,
+  member: CommunityMember,
+): Promise<void> {
+  await Promise.all([
+    setDoc(
+      doc(db, 'communities', communityId, 'members', member.uid),
+      stripUndefined(member as unknown as Record<string, unknown>),
+    ),
+    updateDoc(doc(db, 'communities', communityId), {
+      memberCount: increment(1),
+    }),
+    setDoc(
+      doc(db, 'userCommunities', member.uid, 'joined', communityId),
+      { communityId, joinedAt: member.joinedAt },
+    ),
+  ]);
+}
+
+/**
+ * Leave a community:
+ *  1. Remove the member subdocument.
+ *  2. Decrement memberCount on the community doc.
+ *  3. Remove from the user's personal joined list.
+ */
+export async function leaveCommunity(communityId: string, uid: string): Promise<void> {
+  await Promise.all([
+    deleteDoc(doc(db, 'communities', communityId, 'members', uid)),
+    updateDoc(doc(db, 'communities', communityId), {
+      memberCount: increment(-1),
+    }),
+    deleteDoc(doc(db, 'userCommunities', uid, 'joined', communityId)),
+  ]);
+}
+
+/** Returns true if the given user is a member of the community. */
+export async function isCommunityMember(
+  communityId: string,
+  uid: string,
+): Promise<boolean> {
+  const snap = await getDoc(doc(db, 'communities', communityId, 'members', uid));
+  return snap.exists();
+}
+
+/** Fetch all members of a community. */
+export async function getCommunityMembers(communityId: string): Promise<CommunityMember[]> {
+  const snap = await getDocs(collection(db, 'communities', communityId, 'members'));
+  return snap.docs.map((d) => d.data() as CommunityMember);
+}
+
+/**
+ * Live listener: emits the list of community IDs the user has joined.
+ * Backed by the `userCommunities/{uid}/joined` subcollection.
+ */
+export function subscribeToJoinedCommunities(
+  uid: string,
+  cb: (ids: string[]) => void,
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, 'userCommunities', uid, 'joined'),
+    (snap) => cb(snap.docs.map((d) => d.id)),
+    (err) => {
+      console.warn('[userCommunities] snapshot error:', err.message);
+      cb([]);
+    },
+  );
+}
+
+/** One-time fetch of all community IDs the user has joined. */
+export async function getJoinedCommunityIds(uid: string): Promise<string[]> {
+  const snap = await getDocs(collection(db, 'userCommunities', uid, 'joined'));
+  return snap.docs.map((d) => d.id);
+}
+
+// ─── Community Posts ──────────────────────────────────────────────────────────
+
+/** Write a new community post. The caller must set post.id before calling. */
+export async function createCommunityPost(post: CommunityPost): Promise<void> {
+  await Promise.all([
+    setDoc(doc(db, 'communityPosts', post.id), stripUndefined(post as unknown as Record<string, unknown>)),
+    updateDoc(doc(db, 'communities', post.communityId), {
+      postCount: increment(1),
+    }),
+  ]);
+}
+
+/**
+ * Paginated fetch of posts for a community, ordered newest first.
+ * Pass the `lastDoc` returned from the previous call to fetch the next page.
+ */
+export async function getCommunityPosts(
+  communityId: string,
+  lastDoc?: DocumentSnapshot,
+  pageSize = 20,
+): Promise<{ posts: CommunityPost[]; lastDoc: DocumentSnapshot | null }> {
+  const constraints: QueryConstraint[] = [
+    where('communityId', '==', communityId),
+    orderBy('createdAt', 'desc'),
+    limit(pageSize),
+  ];
+  if (lastDoc) constraints.push(startAfter(lastDoc));
+  const snap = await getDocs(query(collection(db, 'communityPosts'), ...constraints));
+  const posts = snap.docs.map((d) => d.data() as CommunityPost);
+  const last = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+  return { posts, lastDoc: last };
+}
+
+/** Live listener: newest community posts, capped at 30. */
+export function subscribeToCommunityPosts(
+  communityId: string,
+  cb: (posts: CommunityPost[]) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db, 'communityPosts'),
+    where('communityId', '==', communityId),
+    orderBy('createdAt', 'desc'),
+    limit(30),
+  );
+  return onSnapshot(
+    q,
+    (snap) => cb(snap.docs.map((d) => d.data() as CommunityPost)),
+    (err) => {
+      if (err.code === 'failed-precondition') {
+        console.log('[communityPosts] Index building, will retry…');
+        cb([]);
+        return;
+      }
+      console.warn('[communityPosts] snapshot error:', err.message);
+    },
+  );
+}
+
+/**
+ * Toggle a like on a community post.
+ * Pass `liked = true` when the user currently likes the post (to unlike it).
+ */
+export async function toggleCommunityPostLike(
+  postId: string,
+  uid: string,
+  liked: boolean,
+): Promise<void> {
+  await updateDoc(doc(db, 'communityPosts', postId), {
+    likes: liked ? arrayRemove(uid) : arrayUnion(uid),
+  });
+}
+
+/** Delete a community post and decrement the community's postCount. */
+export async function deleteCommunityPost(
+  postId: string,
+  communityId: string,
+): Promise<void> {
+  await Promise.all([
+    deleteDoc(doc(db, 'communityPosts', postId)),
+    updateDoc(doc(db, 'communities', communityId), {
+      postCount: increment(-1),
+    }),
+  ]);
+}
+
+// ─── Community Comments ───────────────────────────────────────────────────────
+
+/** Write a new comment on a community post. The caller must set comment.id. */
+export async function createCommunityComment(comment: CommunityComment): Promise<void> {
+  await Promise.all([
+    setDoc(
+      doc(db, 'communityPosts', comment.postId, 'comments', comment.id),
+      stripUndefined(comment as unknown as Record<string, unknown>),
+    ),
+    updateDoc(doc(db, 'communityPosts', comment.postId), {
+      commentsCount: increment(1),
+    }),
+  ]);
+}
+
+/** Fetch all comments for a post, ordered oldest first. */
+export async function getCommunityComments(postId: string): Promise<CommunityComment[]> {
+  const q = query(
+    collection(db, 'communityPosts', postId, 'comments'),
+    orderBy('createdAt', 'asc'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as CommunityComment);
+}
+
+/** Live listener: comments for a post, ordered oldest first. */
+export function subscribeToCommunityComments(
+  postId: string,
+  cb: (comments: CommunityComment[]) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db, 'communityPosts', postId, 'comments'),
+    orderBy('createdAt', 'asc'),
+  );
+  return onSnapshot(
+    q,
+    (snap) => cb(snap.docs.map((d) => d.data() as CommunityComment)),
+    (err) => {
+      console.warn('[communityComments] snapshot error:', err.message);
+      cb([]);
     },
   );
 }
