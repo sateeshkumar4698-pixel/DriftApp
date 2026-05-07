@@ -17,6 +17,10 @@ module.exports = {
     version:             '1.0.2',
     runtimeVersion:      { policy: 'appVersion' },
     orientation:         'portrait',
+
+    updates: {
+      url: 'https://u.expo.dev/fc2e6166-1ac7-4be0-9ea0-3cf975f0ba64',
+    },
     icon:                './assets/icon.png',
     userInterfaceStyle:  'light',
     newArchEnabled:      true,
@@ -29,6 +33,8 @@ module.exports = {
 
     // ── Permissions ────────────────────────────────────────────────────────────
     plugins: [
+      'expo-audio',
+      'expo-updates',
       [
         'expo-camera',
         {

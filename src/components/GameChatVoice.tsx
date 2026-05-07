@@ -23,7 +23,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { WebView } from 'react-native-webview';
+// ─── Lazy-load react-native-webview so older binaries don't crash ─────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let NativeWebView: React.ComponentType<any> | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  NativeWebView = require('react-native-webview').WebView;
+} catch { /* Native module not compiled into this binary */ }
 import {
   GameChatMessage,
   subscribeToGameChat,
@@ -198,8 +204,8 @@ export default function GameChatVoice({ roomId, myUid, myName, accentColor }: Pr
               <Ionicons name="chevron-down" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
-          {voiceRoomUrl ? (
-            <WebView
+          {voiceRoomUrl && NativeWebView ? (
+            <NativeWebView
               source={{ uri: voiceRoomUrl }}
               style={{ flex: 1 }}
               allowsInlineMediaPlayback
@@ -208,6 +214,12 @@ export default function GameChatVoice({ roomId, myUid, myName, accentColor }: Pr
               domStorageEnabled
               originWhitelist={['*']}
             />
+          ) : voiceRoomUrl && !NativeWebView ? (
+            <View style={[sc.voiceModalLoading, { padding: 24 }]}>
+              <Text style={{ color: '#A855F7', textAlign: 'center', lineHeight: 22 }}>
+                Voice chat requires a development build.{'\n'}Run: npx expo run:ios
+              </Text>
+            </View>
           ) : (
             <View style={sc.voiceModalLoading}>
               <ActivityIndicator color="#A855F7" size="large" />

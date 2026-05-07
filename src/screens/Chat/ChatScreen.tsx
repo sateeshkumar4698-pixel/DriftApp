@@ -49,6 +49,11 @@ function makeRoomId(): string {
   });
 }
 
+function makeRoomCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRTUVWXYZ23467';
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
 type RouteProps = RouteProp<DiscoverStackParamList, 'Chat'>;
 
 // ─── Game picker config ───────────────────────────────────────────────────────
@@ -294,6 +299,7 @@ export default function ChatScreen() {
     if (!firebaseUser || !userProfile) throw new Error('Not signed in');
 
     const roomId = makeRoomId();
+    const code   = makeRoomCode();
     const now    = Date.now();
 
     const host: GameRoomPlayer = {
@@ -308,6 +314,7 @@ export default function ChatScreen() {
 
     const room: GameRoom = {
       id:         roomId,
+      code,
       gameId,
       hostUid:    myUid,
       status:     'waiting',
@@ -474,27 +481,49 @@ export default function ChatScreen() {
             </View>
           }
           renderItem={({ item }) => {
-            const isMine = item.senderId === firebaseUser?.uid;
-            const isInviteMsg = item.metadata?.type === 'game_invite' || item.text.startsWith('🎮 I invited');
+            const isMine      = item.senderId === firebaseUser?.uid;
+            const isInviteMsg = item.metadata?.type === 'game_invite';
             const canJoin     = isInviteMsg && !isMine && !!item.metadata?.roomId;
+            const gameLabel   = item.metadata?.gameId === 'ludo' ? 'Ludo 🎲' : 'Truth or Dare 🎯';
 
-            const bubble = (
-              <View
-                style={[
-                  styles.bubble,
-                  isMine ? styles.bubbleMine : styles.bubbleTheirs,
-                  isInviteMsg && styles.bubbleInvite,
-                ]}
-              >
-                <Text style={[styles.bubbleText, isMine ? styles.textMine : styles.textTheirs]}>
-                  {item.text}
-                </Text>
-                <Text style={[styles.bubbleTime, isMine ? styles.timeMine : styles.timeTheirs]}>
-                  {formatTime(item.createdAt)}
-                </Text>
-              </View>
-            );
+            // ── Game-invite card ──────────────────────────────────────────────
+            if (isInviteMsg) {
+              return (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.bubbleWrapper,
+                    isMine ? styles.bubbleWrapperMine : styles.bubbleWrapperTheirs,
+                  ]}
+                >
+                  {!isMine && (
+                    <Avatar name={connectedUser.name} photoURL={connectedUser.photoURL} size={28} />
+                  )}
+                  <View style={styles.inviteCard}>
+                    <Text style={styles.inviteCardEmoji}>🎮</Text>
+                    <Text style={styles.inviteCardTitle}>
+                      {isMine ? 'Game invite sent!' : `${connectedUser.name} invited you!`}
+                    </Text>
+                    <Text style={styles.inviteCardGame}>{gameLabel}</Text>
+                    <Text style={styles.inviteCardTime}>{formatTime(item.createdAt)}</Text>
+                    {canJoin && (
+                      <TouchableOpacity
+                        style={styles.joinBtn}
+                        onPress={() => handleJoinFromChat(item)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.joinBtnText}>🕹️ Join Game</Text>
+                      </TouchableOpacity>
+                    )}
+                    {isMine && (
+                      <Text style={styles.inviteCardWaiting}>Waiting for response…</Text>
+                    )}
+                  </View>
+                </View>
+              );
+            }
 
+            // ── Regular message bubble ────────────────────────────────────────
             return (
               <View
                 key={item.id}
@@ -506,18 +535,19 @@ export default function ChatScreen() {
                 {!isMine && (
                   <Avatar name={connectedUser.name} photoURL={connectedUser.photoURL} size={28} />
                 )}
-                {canJoin ? (
-                  <View style={styles.inviteColumn}>
-                    {bubble}
-                    <TouchableOpacity
-                      style={styles.joinBtn}
-                      onPress={() => handleJoinFromChat(item)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.joinBtnText}>🎮 Join Game</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : bubble}
+                <View
+                  style={[
+                    styles.bubble,
+                    isMine ? styles.bubbleMine : styles.bubbleTheirs,
+                  ]}
+                >
+                  <Text style={[styles.bubbleText, isMine ? styles.textMine : styles.textTheirs]}>
+                    {item.text}
+                  </Text>
+                  <Text style={[styles.bubbleTime, isMine ? styles.timeMine : styles.timeTheirs]}>
+                    {formatTime(item.createdAt)}
+                  </Text>
+                </View>
               </View>
             );
           }}
@@ -637,23 +667,47 @@ function makeStyles(C: AppColors, isDark: boolean) {
       paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     },
     bubbleMine:   { backgroundColor: C.primary, borderBottomRightRadius: 4 },
-    bubbleTheirs: { backgroundColor: receivedBubbleBg,  borderBottomLeftRadius: 4 },
-    bubbleInvite: {
-      borderWidth: 1, borderColor: `${C.secondary}40`,
-      backgroundColor: `${C.secondary}10`,
+    bubbleTheirs: { backgroundColor: receivedBubbleBg, borderBottomLeftRadius: 4 },
+    bubbleText:   { ...typography.body, lineHeight: 22 },
+    textMine:     { color: '#FFFFFF' },
+    textTheirs:   { color: C.text },
+    bubbleTime:   { ...typography.small, marginTop: 3, alignSelf: 'flex-end' },
+    timeMine:     { color: 'rgba(255,255,255,0.7)' },
+    timeTheirs:   { color: C.textSecondary },
+
+    // ── Game invite card ──────────────────────────────────────────────────────
+    inviteCard: {
+      maxWidth: '72%',
+      backgroundColor: isDark ? '#1A1A35' : '#F0F0FF',
+      borderWidth: 1.5,
+      borderColor: C.secondary,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      alignItems: 'center',
+      gap: spacing.xs,
     },
-    inviteColumn: { flexDirection: 'column', alignItems: 'flex-start', gap: spacing.xs, maxWidth: '72%' },
+    inviteCardEmoji: { fontSize: 36 },
+    inviteCardTitle: {
+      ...typography.body, fontWeight: '700', color: C.text,
+      textAlign: 'center',
+    },
+    inviteCardGame: {
+      ...typography.caption, color: C.secondary, fontWeight: '600',
+      textAlign: 'center',
+    },
+    inviteCardTime: {
+      ...typography.small, color: C.textSecondary,
+    },
+    inviteCardWaiting: {
+      ...typography.small, color: C.textSecondary, fontStyle: 'italic',
+    },
     joinBtn: {
+      marginTop: spacing.xs,
       backgroundColor: C.primary, borderRadius: radius.md,
       paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+      alignSelf: 'stretch', alignItems: 'center',
     },
-    joinBtnText: { ...typography.caption, color: '#fff', fontWeight: '700' },
-    bubbleText: { ...typography.body, lineHeight: 22 },
-    textMine:   { color: C.background },
-    textTheirs: { color: C.text },
-    bubbleTime: { ...typography.small, marginTop: 3, alignSelf: 'flex-end' },
-    timeMine:   { color: `${C.background}90` },
-    timeTheirs: { color: C.textSecondary },
+    joinBtnText: { ...typography.body, color: '#fff', fontWeight: '700' },
 
     typingRow: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.xs,

@@ -1,7 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  Alert, ScrollView,
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,6 +25,7 @@ import {
   respondToGameInvite,
   joinGameRoom,
   subscribeToActiveRoomCount,
+  getGameRoomByCode,
 } from '../../utils/firestore-helpers';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../config/firebase';
@@ -112,6 +121,12 @@ export default function GamesScreen() {
   const [liveRoomCount, setLiveRoomCount] = useState(0);
   const [perGameCounts, setPerGameCounts] = useState<Record<string, number>>({});
 
+  // ── Join by Code modal ────────────────────────────────────────────────────────
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinCode, setJoinCode]           = useState('');
+  const [joining, setJoining]             = useState(false);
+  const joinInputRef = useRef<TextInput>(null);
+
   useEffect(() => {
     if (!firebaseUser) return;
     const unsubInvites = subscribeToIncomingInvites(firebaseUser.uid, setInvites);
@@ -179,6 +194,50 @@ export default function GamesScreen() {
     try { await respondToGameInvite(invite.id, 'declined'); } catch { /* non-fatal */ }
   }
 
+  async function handleJoinByCode() {
+    const code = joinCode.trim().toUpperCase();
+    if (code.length !== 6) {
+      Alert.alert('Invalid Code', 'Please enter a 6-character room code.');
+      return;
+    }
+    if (!firebaseUser || !userProfile) return;
+    setJoining(true);
+    try {
+      const room = await getGameRoomByCode(code);
+      if (!room) {
+        Alert.alert('Room Not Found', 'No active room with that code. It may have expired or already started.');
+        return;
+      }
+      const playerCount = Object.keys(room.players).length;
+      if (playerCount >= room.maxPlayers) {
+        Alert.alert('Room Full', `This room is full (${playerCount}/${room.maxPlayers} players).`);
+        return;
+      }
+      if (room.players[firebaseUser.uid]) {
+        // Already in this room — just navigate
+        setShowJoinModal(false);
+        navigation.navigate('GameLobby', { roomId: room.id, gameId: room.gameId });
+        return;
+      }
+      const player: GameRoomPlayer = {
+        uid:      firebaseUser.uid,
+        name:     userProfile.name,
+        ...(userProfile.photoURL ? { photoURL: userProfile.photoURL } : {}),
+        ready:    false,
+        isHost:   false,
+        joinedAt: Date.now(),
+      };
+      await joinGameRoom(room.id, player);
+      setShowJoinModal(false);
+      setJoinCode('');
+      navigation.navigate('GameLobby', { roomId: room.id, gameId: room.gameId });
+    } catch {
+      Alert.alert('Error', 'Could not join the room. Please try again.');
+    } finally {
+      setJoining(false);
+    }
+  }
+
   return (
     <View style={styles.root}>
       {isDark && <LinearGradient colors={['#0D0D1A', '#0A0A1F', '#0D0D1A']} style={StyleSheet.absoluteFill} />}
@@ -190,16 +249,18 @@ export default function GamesScreen() {
           style={styles.header}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         >
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Games 🎮</Text>
             <Text style={styles.headerSub}>Play solo or challenge friends</Text>
           </View>
-          <LinearGradient colors={['#00E67622', '#00B89422']} style={styles.headerBadge} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: C.success }} />
-            <Text style={styles.headerBadgeText}>
-              {liveRoomCount > 0 ? `${liveRoomCount} active ${liveRoomCount === 1 ? 'room' : 'rooms'}` : `${LIVE_GAMES.length} games`}
-            </Text>
-          </LinearGradient>
+          <TouchableOpacity
+            style={styles.joinCodeBtn}
+            onPress={() => { setShowJoinModal(true); setTimeout(() => joinInputRef.current?.focus(), 300); }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="enter-outline" size={16} color={C.primary} />
+            <Text style={styles.joinCodeBtnText}>Join by Code</Text>
+          </TouchableOpacity>
         </LinearGradient>
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -281,6 +342,58 @@ export default function GamesScreen() {
           </View>
 
         </ScrollView>
+
+        {/* ── Join by Code Modal ── */}
+        <Modal
+          visible={showJoinModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => { setShowJoinModal(false); setJoinCode(''); }}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => { Keyboard.dismiss(); setShowJoinModal(false); setJoinCode(''); }}
+          />
+          <View style={[styles.modalSheet, { backgroundColor: isDark ? '#1A1A2E' : C.background }]}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>🕹️ Join by Room Code</Text>
+            <Text style={styles.modalSub}>
+              Enter the 6-character code shared by your friend.
+            </Text>
+
+            <TextInput
+              ref={joinInputRef}
+              style={[styles.codeInput, { borderColor: joinCode.length === 6 ? C.primary : C.border, color: C.text }]}
+              value={joinCode}
+              onChangeText={(t) => setJoinCode(t.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+              placeholder="ABC123"
+              placeholderTextColor={C.textSecondary}
+              autoCapitalize="characters"
+              maxLength={6}
+              keyboardType="default"
+              returnKeyType="go"
+              onSubmitEditing={handleJoinByCode}
+            />
+
+            <TouchableOpacity
+              style={[styles.joinSubmitBtn, (joining || joinCode.length !== 6) && styles.joinSubmitBtnOff]}
+              onPress={handleJoinByCode}
+              disabled={joining || joinCode.length !== 6}
+              activeOpacity={0.85}
+            >
+              {joining
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.joinSubmitText}>Join Room →</Text>
+              }
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => { setShowJoinModal(false); setJoinCode(''); }} style={styles.modalCancel}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
+
       </SafeAreaView>
     </View>
   );
@@ -363,14 +476,55 @@ function makeStyles(C: AppColors) {
     flex: { flex: 1 },
 
     header: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
       paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
       borderBottomWidth: 1, borderBottomColor: '#ffffff10',
     },
     headerTitle: { fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
     headerSub:   { ...typography.small, color: C.textSecondary, marginTop: 2 },
-    headerBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm + 2, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1, borderColor: C.success + '30' },
-    headerBadgeText: { ...typography.small, fontWeight: '700', color: C.success },
+
+    joinCodeBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 5,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderRadius: radius.full, borderWidth: 1.5, borderColor: C.primary + '60',
+      backgroundColor: C.primary + '12',
+    },
+    joinCodeBtnText: { ...typography.small, fontWeight: '700', color: C.primary },
+
+    // ── Join by Code modal ────────────────────────────────────────────────────
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+    modalSheet: {
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      padding: spacing.xl, paddingBottom: spacing.xxl,
+      alignItems: 'center',
+    },
+    modalHandle: {
+      width: 40, height: 4, borderRadius: 2, backgroundColor: C.border,
+      marginBottom: spacing.lg,
+    },
+    modalTitle: { fontSize: 20, fontWeight: '800', color: C.text, marginBottom: spacing.xs },
+    modalSub:   { ...typography.caption, color: C.textSecondary, textAlign: 'center', marginBottom: spacing.xl },
+    codeInput: {
+      width: '100%',
+      fontSize: 32, fontWeight: '800', letterSpacing: 10,
+      textAlign: 'center',
+      color: C.text,
+      backgroundColor: C.surface,
+      borderWidth: 2, borderRadius: radius.lg,
+      paddingVertical: spacing.md,
+      marginBottom: spacing.xl,
+    },
+    joinSubmitBtn: {
+      width: '100%', paddingVertical: spacing.md,
+      borderRadius: radius.lg, backgroundColor: C.primary,
+      alignItems: 'center', marginBottom: spacing.sm,
+      ...shadows.card,
+    },
+    joinSubmitBtnOff: { opacity: 0.45 },
+    joinSubmitText: { ...typography.body, fontWeight: '800', color: '#fff' },
+    modalCancel: { padding: spacing.md },
+    modalCancelText: { ...typography.body, color: C.textSecondary },
 
     scroll: { padding: spacing.lg, paddingBottom: 100 },
 

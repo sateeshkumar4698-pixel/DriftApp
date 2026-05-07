@@ -1,12 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Modal, ScrollView,
-  StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator, Alert, FlatList,
+  Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ExpoClipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { WebView } from 'react-native-webview';
+// ─── Lazy-load react-native-webview so older binaries don't crash ─────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let NativeWebView: React.ComponentType<any> | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  NativeWebView = require('react-native-webview').WebView;
+} catch { /* Native module not compiled into this binary */ }
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -16,12 +23,21 @@ import {
   setPlayerReady,
   startGameRoom,
   leaveGameRoom,
+  subscribeToConnections,
+  getUserProfile,
+  sendGameInvite,
 } from '../../utils/firestore-helpers';
 // Voice uses Jitsi Meet — no backend required
 import Avatar from '../../components/Avatar';
 import { spacing, typography, radius } from '../../utils/theme';
 import { useTheme, AppColors } from '../../utils/useTheme';
-import { GameRoom, GamesStackParamList } from '../../types';
+import {
+  Connection,
+  GameInvite,
+  GameRoom,
+  GamesStackParamList,
+  UserProfile,
+} from '../../types';
 
 type Nav = NativeStackNavigationProp<GamesStackParamList, 'GameLobby'>;
 type Rt  = RouteProp<GamesStackParamList, 'GameLobby'>;
@@ -38,15 +54,26 @@ export default function GameLobbyScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Rt>();
   const { roomId, gameId } = route.params;
-  const { firebaseUser } = useAuthStore();
+  const { firebaseUser, userProfile } = useAuthStore();
   const { C, isDark } = useTheme();
   const styles = makeStyles(C);
 
-  const [room, setRoom] = useState<GameRoom | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [voiceState, setVoiceState] = useState<'idle' | 'joining' | 'joined' | 'error'>('idle');
+  const [room, setRoom]           = useState<GameRoom | null>(null);
+  const [busy, setBusy]           = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+
+  // Voice
+  const [voiceState, setVoiceState]   = useState<'idle' | 'joining' | 'joined' | 'error'>('idle');
   const [voiceRoomUrl, setVoiceRoomUrl] = useState<string | null>(null);
   const [showVoiceModal, setShowVoiceModal] = useState(false);
+
+  // Invite More
+  const [showInviteModal, setShowInviteModal]   = useState(false);
+  const [connections, setConnections]           = useState<Connection[]>([]);
+  const [profiles, setProfiles]                 = useState<Record<string, UserProfile>>({});
+  const [inviteSelected, setInviteSelected]     = useState<Set<string>>(new Set());
+  const [sendingInvites, setSendingInvites]     = useState(false);
+
   const hasNavigatedToGame = useRef(false);
 
   const gameColor = GAME_COLOR[gameId] ?? C.primary;
@@ -69,6 +96,36 @@ export default function GameLobbyScreen() {
   useEffect(() => {
     return () => { setShowVoiceModal(false); setVoiceRoomUrl(null); };
   }, []);
+
+  // ── Invite More: load connections when modal opens ──────────────────────────
+  useEffect(() => {
+    if (!showInviteModal || !firebaseUser) return;
+    const unsub = subscribeToConnections(firebaseUser.uid, setConnections);
+    return () => unsub();
+  }, [showInviteModal, firebaseUser]);
+
+  useEffect(() => {
+    if (!firebaseUser) return;
+    const uid = firebaseUser.uid;
+    const missing = connections
+      .map((c) => c.users.find((u) => u !== uid))
+      .filter((u): u is string => !!u && !profiles[u]);
+    if (!missing.length) return;
+    Promise.all(missing.map(async (u) => {
+      const p = await getUserProfile(u);
+      if (p) setProfiles((prev) => ({ ...prev, [u]: p }));
+    }));
+  }, [connections, firebaseUser]);
+
+  const inviteRows = useMemo(() => {
+    if (!firebaseUser || !room) return [];
+    return connections
+      .map((c) => {
+        const otherUid = c.users.find((u) => u !== firebaseUser.uid) ?? '';
+        return { otherUid, profile: profiles[otherUid] };
+      })
+      .filter((r) => !!r.profile && !room.players[r.otherUid]);
+  }, [connections, profiles, firebaseUser, room]);
 
   if (!firebaseUser) {
     return (
@@ -151,6 +208,47 @@ export default function GameLobbyScreen() {
     setVoiceState('idle');
   }
 
+  // ── Copy room code ───────────────────────────────────────────────────────────
+  function copyCode() {
+    const code = room?.code ?? room?.id.slice(0, 6).toUpperCase() ?? '';
+    ExpoClipboard.setStringAsync(code);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2000);
+  }
+
+  async function handleSendMoreInvites() {
+    if (!firebaseUser || !userProfile || !room || inviteSelected.size === 0) return;
+    setSendingInvites(true);
+    try {
+      const now      = Date.now();
+      const expiresAt = now + 5 * 60 * 1000;
+      await Promise.all(
+        Array.from(inviteSelected).map((toUid) => {
+          const invite: GameInvite = {
+            id:       `${firebaseUser.uid}_${toUid}_${room.gameId}_${now}`,
+            fromUid:  firebaseUser.uid,
+            fromName: userProfile.name,
+            ...(userProfile.photoURL ? { fromPhoto: userProfile.photoURL } : {}),
+            toUid,
+            gameId:    room.gameId,
+            roomId:    room.id,
+            status:    'pending',
+            createdAt: now,
+            expiresAt,
+          };
+          return sendGameInvite(invite);
+        }),
+      );
+      Alert.alert('Invites Sent!', `${inviteSelected.size} friend${inviteSelected.size > 1 ? 's' : ''} invited.`);
+      setInviteSelected(new Set());
+      setShowInviteModal(false);
+    } catch {
+      Alert.alert('Error', 'Could not send invites. Please try again.');
+    } finally {
+      setSendingInvites(false);
+    }
+  }
+
   return (
     <View style={styles.root}>
       {isDark && <LinearGradient colors={['#0D0D1A', '#0A0A1F', '#0D0D1A']} style={StyleSheet.absoluteFill} />}
@@ -173,12 +271,24 @@ export default function GameLobbyScreen() {
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-          {/* Room Code Badge */}
-          <LinearGradient colors={[gameColor + '25', gameColor + '10']} style={styles.roomBadge} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-            <View style={[styles.roomColorDot, { backgroundColor: gameColor }]} />
-            <Text style={styles.roomBadgeLabel}>Room</Text>
-            <Text style={[styles.roomBadgeCode, { color: gameColor }]}>{roomId.slice(0, 6).toUpperCase()}</Text>
-          </LinearGradient>
+          {/* Room Code Card */}
+          <View style={styles.codeCard}>
+            <LinearGradient colors={[gameColor + '20', gameColor + '08']} style={styles.codeCardInner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <View style={styles.codeCardLeft}>
+                <Text style={styles.codeCardLabel}>ROOM CODE</Text>
+                <Text style={[styles.codeCardCode, { color: gameColor }]}>
+                  {room.code ?? roomId.slice(0, 6).toUpperCase()}
+                </Text>
+                <Text style={styles.codeCardHint}>Share this code to invite friends</Text>
+              </View>
+              <TouchableOpacity onPress={copyCode} style={[styles.copyBtn, { borderColor: gameColor + '40' }]} activeOpacity={0.7}>
+                <Ionicons name={codeCopied ? 'checkmark' : 'copy-outline'} size={16} color={codeCopied ? '#00E676' : gameColor} />
+                <Text style={[styles.copyBtnText, { color: codeCopied ? '#00E676' : gameColor }]}>
+                  {codeCopied ? 'Copied!' : 'Copy'}
+                </Text>
+              </TouchableOpacity>
+            </LinearGradient>
+          </View>
 
           {/* Players */}
           <Text style={styles.sectionLabel}>PLAYERS ({playerList.length}/{room.maxPlayers})</Text>
@@ -208,6 +318,18 @@ export default function GameLobbyScreen() {
               </View>
             </View>
           ))}
+
+          {/* Invite More (host only, when room isn't full) */}
+          {isHost && Object.keys(room.players).length < room.maxPlayers && (
+            <TouchableOpacity
+              style={[styles.inviteMoreBtn, { borderColor: gameColor + '50', backgroundColor: gameColor + '10' }]}
+              onPress={() => setShowInviteModal(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="person-add-outline" size={18} color={gameColor} />
+              <Text style={[styles.inviteMoreText, { color: gameColor }]}>Invite More Friends</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Voice Chat */}
           <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>VOICE CHAT</Text>
@@ -254,8 +376,8 @@ export default function GameLobbyScreen() {
                   <Ionicons name="chevron-down" size={22} color="#fff" />
                 </TouchableOpacity>
               </View>
-              {voiceRoomUrl ? (
-                <WebView
+              {voiceRoomUrl && NativeWebView ? (
+                <NativeWebView
                   source={{ uri: voiceRoomUrl }}
                   style={{ flex: 1 }}
                   allowsInlineMediaPlayback
@@ -264,6 +386,12 @@ export default function GameLobbyScreen() {
                   domStorageEnabled
                   originWhitelist={['*']}
                 />
+              ) : voiceRoomUrl && !NativeWebView ? (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+                  <Text style={{ color: '#A855F7', textAlign: 'center', lineHeight: 22 }}>
+                    Voice chat requires a development build.{'\n'}Run: npx expo run:ios
+                  </Text>
+                </View>
               ) : (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                   <ActivityIndicator color="#A855F7" size="large" />
@@ -275,6 +403,93 @@ export default function GameLobbyScreen() {
                   <Text style={styles.voiceLeaveFullText}>Leave Voice</Text>
                 </LinearGradient>
               </TouchableOpacity>
+            </View>
+          </Modal>
+
+          {/* Invite More Modal */}
+          <Modal
+            visible={showInviteModal}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setShowInviteModal(false)}
+          >
+            <View style={styles.inviteModalOverlay}>
+              <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowInviteModal(false)} />
+              <View style={[styles.inviteModalSheet, { backgroundColor: isDark ? '#1A1A2E' : C.background }]}>
+                <View style={styles.inviteModalHandle} />
+                <Text style={styles.inviteModalTitle}>
+                  {GAME_NAME[gameId] ?? 'Game'} · Invite Friends
+                </Text>
+                <Text style={styles.inviteModalSub}>
+                  {room.maxPlayers - Object.keys(room.players).length} spot{room.maxPlayers - Object.keys(room.players).length !== 1 ? 's' : ''} remaining
+                </Text>
+
+                {inviteRows.length === 0 ? (
+                  <View style={styles.inviteModalEmpty}>
+                    <Text style={{ fontSize: 36 }}>🤝</Text>
+                    <Text style={styles.inviteModalEmptyText}>No available connections</Text>
+                    <Text style={styles.inviteModalEmptySub}>All your connections are already in the room or you have none yet.</Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={inviteRows}
+                    keyExtractor={(r) => r.otherUid}
+                    style={{ width: '100%', maxHeight: 260 }}
+                    contentContainerStyle={{ gap: spacing.sm }}
+                    renderItem={({ item }) => {
+                      const p = item.profile!;
+                      const checked = inviteSelected.has(item.otherUid);
+                      const spotsFull = inviteSelected.size + Object.keys(room.players).length >= room.maxPlayers;
+                      return (
+                        <TouchableOpacity
+                          style={[styles.inviteRow, checked && { borderColor: gameColor, backgroundColor: gameColor + '10' }]}
+                          onPress={() => {
+                            if (!checked && spotsFull) {
+                              Alert.alert('Room Full', `Max ${room.maxPlayers} players.`); return;
+                            }
+                            setInviteSelected((prev) => {
+                              const next = new Set(prev);
+                              checked ? next.delete(item.otherUid) : next.add(item.otherUid);
+                              return next;
+                            });
+                          }}
+                          activeOpacity={0.75}
+                        >
+                          <Avatar name={p.name} photoURL={p.photoURL} size={40} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.inviteRowName}>{p.name}</Text>
+                            {p.city && <Text style={styles.inviteRowMeta}>{p.city}</Text>}
+                          </View>
+                          <View style={[styles.inviteCheckbox, checked && { backgroundColor: gameColor, borderColor: gameColor }]}>
+                            {checked && <Ionicons name="checkmark" size={14} color="#fff" />}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    }}
+                  />
+                )}
+
+                <TouchableOpacity
+                  style={[
+                    styles.inviteSendBtn,
+                    { backgroundColor: gameColor },
+                    (sendingInvites || inviteSelected.size === 0) && { opacity: 0.45 },
+                  ]}
+                  onPress={handleSendMoreInvites}
+                  disabled={sendingInvites || inviteSelected.size === 0}
+                  activeOpacity={0.85}
+                >
+                  {sendingInvites
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={styles.inviteSendText}>
+                        Send Invite{inviteSelected.size > 1 ? 's' : ''}{inviteSelected.size > 0 ? ` (${inviteSelected.size})` : ''}
+                      </Text>
+                  }
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowInviteModal(false)} style={{ paddingVertical: spacing.md }}>
+                  <Text style={[styles.inviteModalSub, { color: C.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </Modal>
 
@@ -344,15 +559,62 @@ function makeStyles(C: AppColors) {
 
     scroll: { padding: spacing.lg, paddingBottom: 100 },
 
-    roomBadge: {
-      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-      borderRadius: radius.full, marginBottom: spacing.lg,
-      alignSelf: 'center', borderWidth: 1, borderColor: '#ffffff15',
+    // ── Room Code Card ────────────────────────────────────────────────────────
+    codeCard: {
+      borderRadius: radius.lg, overflow: 'hidden',
+      marginBottom: spacing.lg, borderWidth: 1.5, borderColor: '#ffffff15',
     },
-    roomColorDot:  { width: 10, height: 10, borderRadius: 5 },
-    roomBadgeLabel: { ...typography.small, color: C.textSecondary, fontWeight: '600', letterSpacing: 1 },
-    roomBadgeCode:  { ...typography.body, fontWeight: '800', letterSpacing: 3 },
+    codeCardInner: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    },
+    codeCardLeft:  { flex: 1 },
+    codeCardLabel: { ...typography.small, fontWeight: '800', color: C.textSecondary, letterSpacing: 1.5, marginBottom: 4 },
+    codeCardCode:  { fontSize: 32, fontWeight: '900', letterSpacing: 6 },
+    codeCardHint:  { ...typography.small, color: C.textSecondary, marginTop: 4 },
+    copyBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 5,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+      borderRadius: radius.full, borderWidth: 1.5,
+      backgroundColor: 'transparent',
+    },
+    copyBtnText: { ...typography.caption, fontWeight: '700' },
+
+    // ── Invite More button ─────────────────────────────────────────────────────
+    inviteMoreBtn: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+      paddingVertical: spacing.sm + 2, borderRadius: radius.md,
+      borderWidth: 1.5, marginBottom: spacing.lg,
+    },
+    inviteMoreText: { ...typography.caption, fontWeight: '700' },
+
+    // ── Invite More Modal ──────────────────────────────────────────────────────
+    inviteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    inviteModalSheet: {
+      borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl,
+      alignItems: 'center',
+    },
+    inviteModalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: C.border, marginBottom: spacing.md },
+    inviteModalTitle:  { ...typography.heading, color: C.text, fontWeight: '700', marginBottom: 4 },
+    inviteModalSub:    { ...typography.caption, color: C.textSecondary, marginBottom: spacing.lg, textAlign: 'center' },
+    inviteModalEmpty:  { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
+    inviteModalEmptyText: { ...typography.body, fontWeight: '700', color: C.text },
+    inviteModalEmptySub:  { ...typography.small, color: C.textSecondary, textAlign: 'center' },
+    inviteRow: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+      backgroundColor: C.surface, borderRadius: radius.md,
+      borderWidth: 1, borderColor: C.border, padding: spacing.sm + 2,
+    },
+    inviteRowName: { ...typography.body, fontWeight: '600', color: C.text },
+    inviteRowMeta: { ...typography.small, color: C.textSecondary, marginTop: 2 },
+    inviteCheckbox: {
+      width: 26, height: 26, borderRadius: radius.full,
+      borderWidth: 2, borderColor: C.border,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    inviteSendBtn:  { width: '100%', paddingVertical: spacing.md, borderRadius: radius.lg, alignItems: 'center', marginTop: spacing.lg },
+    inviteSendText: { ...typography.body, color: '#fff', fontWeight: '700' },
 
     sectionLabel: { ...typography.small, fontWeight: '800', color: C.textSecondary, letterSpacing: 1.2, marginBottom: spacing.sm },
 

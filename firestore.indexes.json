@@ -85,11 +85,36 @@
       ]
     },
     {
+      "collectionGroup": "coinTransactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "uid",       "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "eventInvites",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "toUid",  "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "eventInvites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toUid",     "order": "ASCENDING" },
+        { "fieldPath": "status",    "order": "ASCENDING" },
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "userNotifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "uid",  "order": "ASCENDING" },
+        { "fieldPath": "read", "order": "ASCENDING" }
       ]
     },
     {
@@ -140,6 +165,14 @@
       "fields": [
         { "fieldPath": "audience",  "order": "ASCENDING" },
         { "fieldPath": "expiresAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "gameRooms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "code",   "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
       ]
     }
   ],

@@ -24,7 +24,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+// ─── Lazy-load react-native-webview so older binaries don't crash ─────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let NativeWebView: React.ComponentType<any> | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  NativeWebView = require('react-native-webview').WebView;
+} catch { /* Native module not compiled into this binary */ }
 import { firebaseConfig } from '../config/firebase';
 import { useTheme } from '../utils/useTheme';
 
@@ -122,7 +128,8 @@ const RecaptchaVerifierModal = forwardRef<RecaptchaVerifierRef, Props>(
       },
     }));
 
-    function onMessage(e: WebViewMessageEvent) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function onMessage(e: any) {
       try {
         const data = JSON.parse(e.nativeEvent.data) as {
           type: string; token?: string; message?: string;
@@ -175,16 +182,24 @@ const RecaptchaVerifierModal = forwardRef<RecaptchaVerifierRef, Props>(
                 </Text>
               </View>
             )}
-            <WebView
-              source={{ html }}
-              onMessage={onMessage}
-              onLoad={() => setLoading(false)}
-              style={[styles.webview, loading && styles.webviewHidden]}
-              originWhitelist={['*']}
-              javaScriptEnabled
-              domStorageEnabled
-              thirdPartyCookiesEnabled
-            />
+            {NativeWebView ? (
+              <NativeWebView
+                source={{ html }}
+                onMessage={onMessage}
+                onLoad={() => setLoading(false)}
+                style={[styles.webview, loading && styles.webviewHidden]}
+                originWhitelist={['*']}
+                javaScriptEnabled
+                domStorageEnabled
+                thirdPartyCookiesEnabled
+              />
+            ) : (
+              <View style={styles.webview}>
+                <Text style={{ color: '#888', textAlign: 'center', padding: 16 }}>
+                  Verification requires a development build.{'\n'}Run: npx expo run:ios
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       </Modal>

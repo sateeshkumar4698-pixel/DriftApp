@@ -230,81 +230,119 @@ const DOT_COLORS: Record<number, string> = {
   6: '#FF8C00',
 };
 
+const SIDE_H = 16;  // top-face strip height
+const SIDE_W = 16;  // right-face strip width
+
+const PLAYER_FACE: Record<'red'|'green', { face:string; top:string; right:string; border:string }> = {
+  red:   { face:'#1C0008', top:'#3D0016', right:'#100004', border:'#8B003B' },
+  green: { face:'#001C08', top:'#003D16', right:'#000E04', border:'#007B3A' },
+};
+
 interface DiceProps {
-  value:    number | null;
-  rollSc:   Animated.Value;
-  rotY:     Animated.Value;
-  rotX:     Animated.Value;
-  faceFlip: Animated.Value;
-  onRoll:   () => void;
-  isRolling?: boolean;  // NEW — drives glow ring animation
+  value:       number | null;
+  rollSc:      Animated.Value;
+  rotY:        Animated.Value;
+  rotX:        Animated.Value;
+  faceFlip:    Animated.Value;
+  onRoll:      () => void;
+  isRolling?:  boolean;
+  playerColor: 'red' | 'green';
 }
 
-function Dice3D({ value, rollSc, rotY, rotX, faceFlip, onRoll, isRolling }: DiceProps) {
+function Dice3D({ value, rollSc, rotY, rotX, faceFlip, onRoll, isRolling, playerColor }: DiceProps) {
   const dots     = value ? (DOT_MAP[value] ?? []) : [];
-  const dotColor = value ? (DOT_COLORS[value] ?? '#FFFFFF') : '#666688';
+  const dotColor = value ? (DOT_COLORS[value] ?? '#FFFFFF') : '#888888';
+  const pc       = PLAYER_FACE[playerColor];
 
-  // Glow ring animation
-  const glowAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim    = useRef(new Animated.Value(0)).current;
+  const sideOpacity = useRef(new Animated.Value(1)).current;
+  const shadowScale = useRef(new Animated.Value(0.85)).current;
+  const shadowOp    = useRef(new Animated.Value(0.45)).current;
 
   useEffect(() => {
     if (isRolling) {
-      const loop = Animated.loop(
+      Animated.loop(
         Animated.sequence([
-          Animated.timing(glowAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-          Animated.timing(glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
         ]),
-      );
-      loop.start();
-      return () => loop.stop();
+      ).start();
+      Animated.timing(sideOpacity, { toValue: 0,    duration: 80,  useNativeDriver: true }).start();
+      Animated.spring(shadowScale, { toValue: 1.55, friction: 6,   useNativeDriver: true }).start();
+      Animated.timing(shadowOp,   { toValue: 0.18,  duration: 200, useNativeDriver: true }).start();
     } else {
-      glowAnim.setValue(0);
+      glowAnim.stopAnimation();
+      Animated.timing(glowAnim,    { toValue: 0,    duration: 200, useNativeDriver: true }).start();
+      Animated.timing(sideOpacity, { toValue: 1,    duration: 320, useNativeDriver: true }).start();
+      Animated.spring(shadowScale, { toValue: 0.85, friction: 6,   useNativeDriver: true }).start();
+      Animated.timing(shadowOp,   { toValue: 0.45,  duration: 200, useNativeDriver: true }).start();
     }
-  }, [isRolling, glowAnim]);
+  }, [isRolling]);
 
-  const rotYDeg = rotY.interpolate({
-    inputRange:  [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-  const rotXDeg = rotX.interpolate({
-    inputRange:  [0, 1],
-    outputRange: ['0deg', '-40deg'],
-  });
-  const glowOpacity = glowAnim.interpolate({
-    inputRange: [0, 1], outputRange: [0, 0.8],
-  });
-  const glowScale = glowAnim.interpolate({
-    inputRange: [0, 1], outputRange: [1, 1.35],
-  });
+  const rotYDeg    = rotY.interpolate({ inputRange: [0,1], outputRange: ['0deg','360deg'] });
+  const rotXDeg    = rotX.interpolate({ inputRange: [0,1], outputRange: ['0deg','-40deg'] });
+  const glowOpacity = glowAnim.interpolate({ inputRange:[0,1], outputRange:[0, 0.75] });
+  const glowScale   = glowAnim.interpolate({ inputRange:[0,1], outputRange:[1, 1.4] });
 
   return (
     <TouchableOpacity onPress={onRoll} activeOpacity={0.75}>
-      <View style={{ alignItems: 'center', gap: 8 }}>
-        {/* Glow ring behind the dice */}
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ alignItems: 'center', gap: 6 }}>
+        {/* 3-face isometric cube container */}
+        <View style={{ width: DS + SIDE_W, height: DS + SIDE_H, position: 'relative' }}>
+
+          {/* Glow ring — behind all faces */}
           <Animated.View style={{
-            width: DS + 20, height: DS + 20,
-            borderRadius: (DS + 20) / 2,
+            position: 'absolute',
+            width: DS + 28, height: DS + 28,
+            borderRadius: (DS + 28) / 2,
             backgroundColor: dotColor,
             opacity: glowOpacity,
             transform: [{ scale: glowScale }],
+            top: SIDE_H / 2 - 4,
+            left: -4,
+            zIndex: 0,
           }} />
-        </View>
 
-        {/* 3D dice body */}
-        <Animated.View style={{
-          width: DS, height: DS,
-          transform: [
-            { perspective: 400 },
-            { rotateX: rotXDeg },
-            { rotateY: rotYDeg },
-            { scale:   rollSc  },
-          ],
-        }}>
-          {/* Inner face: scaleX flip to swap dots */}
-          <Animated.View style={[dSt.face, { transform: [{ scaleX: faceFlip }] }]}>
-            {/* Dark gradient background rendered as solid color (LinearGradient needs no driver) */}
-            <View style={dSt.faceInner}>
+          {/* Top face (lighter = ambient light) */}
+          <Animated.View style={{
+            position: 'absolute',
+            width: DS, height: SIDE_H,
+            left: 0, top: 0,
+            backgroundColor: pc.top,
+            borderTopLeftRadius: 14, borderTopRightRadius: 14,
+            opacity: sideOpacity,
+            zIndex: 1,
+          }} />
+
+          {/* Right face (darker = shadow side) */}
+          <Animated.View style={{
+            position: 'absolute',
+            width: SIDE_W, height: DS,
+            right: 0, top: SIDE_H,
+            backgroundColor: pc.right,
+            borderTopRightRadius: 8, borderBottomRightRadius: 14,
+            opacity: sideOpacity,
+            zIndex: 1,
+          }} />
+
+          {/* Front face — animated */}
+          <Animated.View style={{
+            position: 'absolute',
+            width: DS, height: DS,
+            left: 0, top: SIDE_H,
+            zIndex: 2,
+            transform: [
+              { perspective: 420 },
+              { rotateX: rotXDeg },
+              { rotateY: rotYDeg },
+              { scale: rollSc },
+            ],
+          }}>
+            <Animated.View style={[dSt.face, {
+              backgroundColor: pc.face,
+              borderColor: pc.border + '90',
+              transform: [{ scaleX: faceFlip }],
+            }]}>
               <View style={dSt.grid}>
                 {([0,1,2] as const).map(r => (
                   <View key={r} style={dSt.row}>
@@ -316,37 +354,42 @@ function Dice3D({ value, rollSc, rotY, rotX, faceFlip, onRoll, isRolling }: Dice
                             <View style={[dSt.dot, {
                               backgroundColor: dotColor,
                               shadowColor: dotColor,
-                              shadowOffset: { width: 0, height: 0 },
+                              shadowOffset: { width:0, height:0 },
                               shadowOpacity: 1,
                               shadowRadius: 6,
                             }]} />
-                          ) : (
-                            <View style={dSt.empty} />
-                          )}
+                          ) : <View style={dSt.empty} />}
                         </View>
                       );
                     })}
                   </View>
                 ))}
               </View>
-
-              {/* Corner gloss highlight */}
               <View style={dSt.gloss} pointerEvents="none" />
-              {/* Bottom-right shadow accent */}
               <View style={dSt.shadow} pointerEvents="none" />
-            </View>
+            </Animated.View>
           </Animated.View>
-        </Animated.View>
+        </View>
 
-        {/* Number label below — shows settled value */}
+        {/* Floor shadow */}
+        <Animated.View style={{
+          width: DS * 0.65, height: 9,
+          borderRadius: 5,
+          backgroundColor: '#000',
+          opacity: shadowOp,
+          transform: [{ scaleX: shadowScale }],
+          marginTop: -2,
+        }} />
+
+        {/* Value badge */}
         {value !== null && !isRolling && (
-          <View style={[dSt.numBadge, { backgroundColor: dotColor + '25', borderColor: dotColor + '60' }]}>
+          <View style={[dSt.numBadge, { backgroundColor: dotColor+'25', borderColor: dotColor+'60' }]}>
             <Text style={[dSt.numText, { color: dotColor }]}>{value}</Text>
           </View>
         )}
         {isRolling && (
-          <View style={[dSt.numBadge, { backgroundColor: '#ffffff10', borderColor: '#ffffff20' }]}>
-            <Text style={[dSt.numText, { color: '#888' }]}>•••</Text>
+          <View style={[dSt.numBadge, { backgroundColor:'#ffffff10', borderColor:'#ffffff20' }]}>
+            <Text style={[dSt.numText, { color:'#888' }]}>•••</Text>
           </View>
         )}
       </View>
@@ -1400,6 +1443,7 @@ export default function LudoGame(): React.ReactElement {
             faceFlip={faceFlip}
             onRoll={handleRoll}
             isRolling={gs.phase === 'rolling'}
+            playerColor={gs.turn}
           />
 
           <Animated.View style={{ transform: [{ scale: btnScale }] }}>

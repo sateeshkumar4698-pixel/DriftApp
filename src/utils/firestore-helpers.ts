@@ -638,6 +638,22 @@ export async function getGameRoom(roomId: string): Promise<GameRoom | null> {
   return snap.exists() ? (snap.data() as GameRoom) : null;
 }
 
+/**
+ * Look up a game room by its short 6-char join code (case-insensitive).
+ * Returns the room if it exists and is still in 'waiting' status, else null.
+ */
+export async function getGameRoomByCode(code: string): Promise<GameRoom | null> {
+  const q = query(
+    collection(db, 'gameRooms'),
+    where('code', '==', code.trim().toUpperCase()),
+    limit(1),
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const room = snap.docs[0].data() as GameRoom;
+  return room.status === 'waiting' ? room : null;
+}
+
 export async function joinGameRoom(roomId: string, player: GameRoomPlayer): Promise<void> {
   await updateDoc(doc(db, 'gameRooms', roomId), {
     [`players.${player.uid}`]: stripUndefined(player),

@@ -325,6 +325,8 @@ export interface GameRoomPlayer {
 
 export interface GameRoom {
   id:          string;
+  /** Short 6-char alphanumeric code players can share to join (e.g. "ABX3K9") */
+  code?:       string;
   gameId:      GameId;
   hostUid:     string;
   status:      GameRoomStatus;

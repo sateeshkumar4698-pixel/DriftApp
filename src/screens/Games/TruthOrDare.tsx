@@ -2,23 +2,24 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   TextInput,
   ScrollView,
   Animated,
+  Easing,
   Dimensions,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
   Alert,
 } from 'react-native';
+import { makeStyles, PLAYER_COLORS, MAX_PLAYERS, MIN_PLAYERS, MAX_SKIPS, SPINNER_SIZE, SPINNER_CENTER, RING_RADIUS, BUBBLE_R, NEEDLE_W, NEEDLE_H } from './TruthOrDare.styles';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GamesStackParamList } from '../../types';
-import { spacing, typography, radius, shadows } from '../../utils/theme';
-import { useTheme, AppColors } from '../../utils/useTheme';
+import { spacing } from '../../utils/theme';
+import { useTheme } from '../../utils/useTheme';
 import { gameSounds } from '../../services/gameSounds';
 import { useAuthStore } from '../../store/authStore';
 import GameChatVoice from '../../components/GameChatVoice';
@@ -53,17 +54,6 @@ interface CardState {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const PLAYER_COLORS: readonly string[] = [
-  '#FF4B6E',
-  '#6C5CE7',
-  '#00B894',
-  '#FDCB6E',
-];
-
-const MAX_SKIPS = 3;
-const MAX_PLAYERS = 4;
-const MIN_PLAYERS = 2;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -398,6 +388,11 @@ export default function TruthOrDareScreen(): React.JSX.Element {
   const cardAnim = useRef(new Animated.Value(0)).current;
   const slideOutAnim = useRef(new Animated.Value(0)).current;
 
+  // ── Bottle Spinner ──
+  const [spinDone, setSpinDone] = useState(false);
+  const spinAnim = useRef(new Animated.Value(0)).current;
+  const totalDegsRef = useRef(0);
+
   // ── Multiplayer state ──
   const isHostRef = useRef(false);
   const suppressRemoteRef = useRef(false);
@@ -456,7 +451,15 @@ export default function TruthOrDareScreen(): React.JSX.Element {
       if (data.phase) setPhase(data.phase);
       if (data.spiceLevel) setSpiceLevel(data.spiceLevel);
       if (data.players) setPlayers(data.players);
-      if (data.currentPlayerIndex !== undefined) setCurrentPlayerIndex(data.currentPlayerIndex);
+      if (data.currentPlayerIndex !== undefined) {
+        const remoteIdx = data.currentPlayerIndex;
+        const n = (data.players ?? players).length;
+        setCurrentPlayerIndex(remoteIdx);
+        // Non-host mirrors the host's spinner animation to the same player
+        if (data.phase === 'playing') {
+          triggerRemoteSpin(remoteIdx, n);
+        }
+      }
       if (data.round) setRound(data.round);
       if (data.skipsLeft !== undefined) setSkipsLeft(data.skipsLeft);
       if (data.totalTruths !== undefined) setTotalTruths(data.totalTruths);
@@ -491,6 +494,66 @@ export default function TruthOrDareScreen(): React.JSX.Element {
       updatedAt: Date.now(),
     }).catch(console.error);
   }
+
+  // ─── Bottle Spinner Logic ──────────────────────────────────────────────────
+
+  const doSpin = useCallback((targetIdx: number, numPlayers: number, onLand?: () => void) => {
+    if (numPlayers === 0) return;
+    const targetAngle = (targetIdx / numPlayers) * 360;
+    const currentMod = totalDegsRef.current % 360;
+    let diff = (targetAngle - currentMod + 360) % 360;
+    // Guarantee at least a half-revolution of visible movement before landing
+    if (diff < 60) diff += 360;
+    // Random 4-8 full extra spins so each spin looks genuinely different
+    const extraSpins = (Math.floor(Math.random() * 5) + 4) * 360;
+    const newTotal = totalDegsRef.current + diff + extraSpins;
+    spinAnim.stopAnimation();
+    // Random duration 2000–3200ms — avoids identical-feeling spins
+    const duration = 2000 + Math.random() * 1200;
+    Animated.timing(spinAnim, {
+      toValue: newTotal,
+      duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        totalDegsRef.current = newTotal;
+        setSpinDone(true);
+        onLand?.();
+      }
+    });
+  }, [spinAnim]);
+
+  // ── Spin trigger: increments whenever we want a new random spin ───────────────
+  const [spinTrigger, setSpinTrigger] = useState(0);
+  // Target index for the CURRENT spin — kept in a ref so the onLand callback
+  // captures the same value that was passed to doSpin.
+  const spinTargetRef = useRef(0);
+
+  // Auto-spin on each trigger change
+  useEffect(() => {
+    if (phase !== 'playing' || players.length === 0 || spinTrigger === 0) return;
+    setSpinDone(false);
+    const randomIdx = spinTargetRef.current;
+    doSpin(randomIdx, players.length, () => {
+      setCurrentPlayerIndex(randomIdx);
+      // Multiplayer: host broadcasts the chosen player after spin lands
+      if (roomId && isHostRef.current) {
+        rtdbUpdate(rtdbRef(rtdb, `gameRooms/${roomId}/tod`), {
+          currentPlayerIndex: randomIdx,
+          updatedBy: firebaseUser?.uid ?? '',
+          updatedAt: Date.now(),
+        }).catch(console.error);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spinTrigger, phase, players.length]);
+
+  /** Spin to a specific player index (call this for non-host to mirror host). */
+  const triggerRemoteSpin = useCallback((idx: number, numPlayers: number) => {
+    setSpinDone(false);
+    doSpin(idx, numPlayers);
+  }, [doSpin]);
 
   // ─── Setup Handlers ────────────────────────────────────────────────────────
 
@@ -553,7 +616,11 @@ export default function TruthOrDareScreen(): React.JSX.Element {
       }));
       setPlayers(initialPlayers);
     }
-    setCurrentPlayerIndex(0);
+    // Pick the first player randomly rather than always starting at index 0
+    const firstIdx = Math.floor(Math.random() * Math.max(initialPlayers.length, 1));
+    spinTargetRef.current = firstIdx;
+
+    setCurrentPlayerIndex(firstIdx);
     setRound(1);
     setSkipsLeft(MAX_SKIPS);
     setTotalTruths(0);
@@ -561,12 +628,14 @@ export default function TruthOrDareScreen(): React.JSX.Element {
     setCard({ type: 'truth', text: '', visible: false });
     cardAnim.setValue(0);
     setPhase('playing');
-    
+    // Kick off the first spin
+    setSpinTrigger((t) => t + 1);
+
     if (roomId) {
       syncToRTDB({
         phase: 'playing',
         players: initialPlayers,
-        currentPlayerIndex: 0,
+        currentPlayerIndex: firstIdx,
         round: 1,
         skipsLeft: MAX_SKIPS,
         totalTruths: 0,
@@ -613,12 +682,16 @@ export default function TruthOrDareScreen(): React.JSX.Element {
     }
     nextPlayers[currentPlayerIndex] = current;
     
-    const nextIndex = (currentPlayerIndex + 1) % nextPlayers.length;
-    const isNewRound = nextIndex === 0;
-    
     const nextTruths = !wasSkip && card.type === 'truth' ? totalTruths + 1 : totalTruths;
-    const nextDares = !wasSkip && card.type === 'dare' ? totalDares + 1 : totalDares;
-    const nextRound = isNewRound ? round + 1 : round;
+    const nextDares  = !wasSkip && card.type === 'dare'  ? totalDares  + 1 : totalDares;
+
+    // Pick next player randomly — don't go sequentially
+    const nextIndex  = Math.floor(Math.random() * Math.max(nextPlayers.length, 1));
+    // Increment round counter every time we cycle through all players at least once
+    const totalPlayed = nextTruths + nextDares;
+    const nextRound   = totalPlayed > 0 && totalPlayed % nextPlayers.length === 0
+      ? round + 1
+      : round;
 
     setPlayers(nextPlayers);
     if (!wasSkip) {
@@ -635,18 +708,26 @@ export default function TruthOrDareScreen(): React.JSX.Element {
       cardAnim.setValue(0);
       const newCard = { type: 'truth' as CardType, text: '', visible: false };
       setCard(newCard);
-      setCurrentPlayerIndex(nextIndex);
-      if (isNewRound) setRound(nextRound);
+      if (nextRound !== round) setRound(nextRound);
 
       if (roomId) {
+        // Sync everything except currentPlayerIndex — host will broadcast that
+        // AFTER the spin lands (via triggerRandomSpin → onLand → RTDB update).
         syncToRTDB({
           players: nextPlayers,
-          currentPlayerIndex: nextIndex,
           round: nextRound,
           totalTruths: nextTruths,
           totalDares: nextDares,
           card: newCard,
         });
+        if (isHostRef.current) {
+          spinTargetRef.current = nextIndex;
+          setSpinTrigger((t) => t + 1);
+        }
+      } else {
+        // Solo: spin immediately
+        spinTargetRef.current = nextIndex;
+        setSpinTrigger((t) => t + 1);
       }
     });
   }, [currentPlayerIndex, players, card.type, totalTruths, totalDares, round, roomId, cardAnim, slideOutAnim]);
@@ -692,6 +773,11 @@ export default function TruthOrDareScreen(): React.JSX.Element {
   const slideOutX = slideOutAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, -SCREEN_WIDTH],
+  });
+  const bottleRotation = spinAnim.interpolate({
+    inputRange: [0, 360],
+    outputRange: ['0deg', '360deg'],
+    extrapolate: 'extend',
   });
 
   // ─── Leaderboard ────────────────────────────────────────────────────────────
@@ -880,6 +966,17 @@ export default function TruthOrDareScreen(): React.JSX.Element {
   // ─── Phase: Playing ────────────────────────────────────────────────────────
 
   if (phase === 'playing') {
+    // Guard: players may not be synced yet in multiplayer
+    if (!players.length || !players[currentPlayerIndex]) {
+      return (
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: C.textSecondary, fontSize: 16 }}>Loading game…</Text>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
     const currentPlayer = players[currentPlayerIndex];
     const spiceConfig = SPICE_OPTIONS.find((s) => s.level === spiceLevel)!;
 
@@ -947,27 +1044,103 @@ export default function TruthOrDareScreen(): React.JSX.Element {
             </View>
           </View>
 
-          {/* Action Buttons — shown when no card is visible */}
+          {/* Bottle Spinner / Action Buttons — shown when no card is visible */}
           {!card.visible && (
-            <View style={styles.actionBtnRow}>
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: isAdultPlus ? spiceConfig.color + 'CC' : C.secondary }]}
-                onPress={() => revealCard('truth')}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.actionBtnEmoji}>🤔</Text>
-                <Text style={styles.actionBtnLabel}>Truth</Text>
-                <Text style={styles.actionBtnSub}>Answer honestly</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: isAdultPlus ? spiceConfig.color : C.primary }]}
-                onPress={() => revealCard('dare')}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.actionBtnEmoji}>💥</Text>
-                <Text style={styles.actionBtnLabel}>Dare</Text>
-                <Text style={styles.actionBtnSub}>Do it or skip it</Text>
-              </TouchableOpacity>
+            <View style={styles.spinnerArea}>
+              {/* ── While spinning: show the bottle wheel ── */}
+              {!spinDone ? (
+                <>
+                  <View style={styles.spinnerContainer}>
+                    {/* Player bubbles arranged in a ring */}
+                    {players.map((p, i) => {
+                      const angle = (i / players.length) * 2 * Math.PI;
+                      const bx = SPINNER_CENTER + RING_RADIUS * Math.cos(angle) - BUBBLE_R;
+                      const by = SPINNER_CENTER + RING_RADIUS * Math.sin(angle) - BUBBLE_R;
+                      return (
+                        <View
+                          key={i}
+                          style={[
+                            styles.spinnerBubble,
+                            {
+                              left: bx,
+                              top: by,
+                              backgroundColor: p.color + '66',
+                              borderColor: p.color + '44',
+                            },
+                          ]}
+                        >
+                          <Text style={styles.spinnerBubbleText}>
+                            {p.name.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      );
+                    })}
+
+                    {/* Rotating needle */}
+                    <Animated.View
+                      style={[
+                        styles.bottleWrapper,
+                        { transform: [{ rotate: bottleRotation }] },
+                      ]}
+                    >
+                      <View style={styles.bottleTail} />
+                      <View style={[styles.bottleHead, { backgroundColor: spiceConfig.color }]} />
+                      <View style={[styles.bottleArrowhead, { borderLeftColor: spiceConfig.color }]} />
+                    </Animated.View>
+
+                    {/* Center pivot */}
+                    <View style={[styles.spinnerPivot, { borderColor: spiceConfig.color }]} />
+                  </View>
+
+                  <Text style={[styles.spinnerStatus, { color: spiceConfig.color }]}>
+                    Spinning...
+                  </Text>
+                </>
+              ) : (
+                /* ── After spin lands: compact winner + Truth/Dare buttons ── */
+                <>
+                  {/* Winner chip */}
+                  <View style={[styles.spinnerWinnerChip, { backgroundColor: currentPlayer.color + '18', borderColor: currentPlayer.color + '55' }]}>
+                    <View style={[styles.spinnerWinnerAvatar, { backgroundColor: currentPlayer.color }]}>
+                      <Text style={styles.spinnerWinnerAvatarText}>
+                        {currentPlayer.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.spinnerWinnerInfo}>
+                      <Text style={[styles.spinnerWinnerName, { color: currentPlayer.color }]}>
+                        {currentPlayer.name}
+                      </Text>
+                      <Text style={styles.spinnerWinnerSub}>The bottle chose you! 🎯</Text>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.spinnerStatus, { color: C.textSecondary, marginTop: spacing.lg }]}>
+                    Pick your challenge:
+                  </Text>
+
+                  {/* Truth / Dare buttons */}
+                  <View style={styles.actionBtnRow}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { backgroundColor: isAdultPlus ? spiceConfig.color + 'CC' : C.secondary }]}
+                      onPress={() => revealCard('truth')}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.actionBtnEmoji}>🤔</Text>
+                      <Text style={styles.actionBtnLabel}>Truth</Text>
+                      <Text style={styles.actionBtnSub}>Answer honestly</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { backgroundColor: isAdultPlus ? spiceConfig.color : C.primary }]}
+                      onPress={() => revealCard('dare')}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.actionBtnEmoji}>💥</Text>
+                      <Text style={styles.actionBtnLabel}>Dare</Text>
+                      <Text style={styles.actionBtnSub}>Do it or skip it</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </View>
           )}
 
@@ -1163,650 +1336,3 @@ export default function TruthOrDareScreen(): React.JSX.Element {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-function makeStyles(C: AppColors) {
-  return StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: C.background,
-  },
-  flex: {
-    flex: 1,
-  },
-
-  // ── Room Banner ────────────────────────────────────────────────────────────
-  roomBanner: {
-    backgroundColor: C.secondary,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-  },
-  roomBannerText: {
-    color: '#fff',
-    ...typography.small,
-    fontWeight: '700',
-  },
-
-  // ── Spice stripe ───────────────────────────────────────────────────────────
-  spiceStripe: {
-    height: 3,
-    width: '100%',
-  },
-
-  // ── Setup ──────────────────────────────────────────────────────────────────
-  setupScroll: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
-  setupHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: spacing.xl,
-    gap: spacing.md,
-  },
-  backBtn: {
-    padding: spacing.sm,
-    marginTop: 2,
-  },
-  backBtnText: {
-    fontSize: 22,
-    color: C.text,
-    fontWeight: '600',
-  },
-  setupTitleBlock: {
-    flex: 1,
-  },
-  setupTitle: {
-    ...typography.title,
-    color: C.text,
-  },
-  setupSubtitle: {
-    ...typography.body,
-    color: C.textSecondary,
-    marginTop: spacing.xs,
-  },
-  section: {
-    marginBottom: spacing.xl,
-  },
-  sectionLabel: {
-    ...typography.caption,
-    fontWeight: '700',
-    color: C.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: spacing.md,
-  },
-  playerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-    gap: spacing.sm,
-  },
-  playerDot: {
-    width: 12,
-    height: 12,
-    borderRadius: radius.full,
-  },
-  playerInput: {
-    flex: 1,
-    height: 48,
-    borderWidth: 1.5,
-    borderColor: C.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    ...typography.body,
-    color: C.text,
-    backgroundColor: C.surface,
-  },
-  removeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    backgroundColor: C.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  removeBtnText: {
-    fontSize: 12,
-    color: C.textSecondary,
-    fontWeight: '700',
-  },
-  addPlayerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 48,
-    borderWidth: 1.5,
-    borderColor: C.primary,
-    borderRadius: radius.md,
-    borderStyle: 'dashed',
-    marginTop: spacing.xs,
-  },
-  addPlayerText: {
-    ...typography.body,
-    color: C.primary,
-    fontWeight: '600',
-  },
-  spiceRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  spicePill: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xs,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: C.border,
-    backgroundColor: C.surface,
-    gap: 4,
-  },
-  spicePillWide: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: C.border,
-    backgroundColor: C.surface,
-  },
-  spicePillAgeGate: {
-    borderStyle: 'dashed',
-  },
-  spicePillWideInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    flex: 1,
-  },
-  ageBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-    backgroundColor: C.border,
-  },
-  ageBadgeSelected: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  ageBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: C.textSecondary,
-    letterSpacing: 0.5,
-  },
-  ageBadgeTextSelected: {
-    color: '#fff',
-  },
-  spicePillEmoji: {
-    fontSize: 20,
-  },
-  spicePillLabel: {
-    ...typography.caption,
-    fontWeight: '700',
-    color: C.text,
-  },
-  spicePillLabelSelected: {
-    color: C.background,
-  },
-  spicePillDesc: {
-    fontSize: 10,
-    fontWeight: '400',
-    color: C.textSecondary,
-    textAlign: 'center',
-  },
-  spicePillDescSelected: {
-    color: C.background + 'CC',
-  },
-  startBtn: {
-    height: 56,
-    borderRadius: radius.lg,
-    backgroundColor: C.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.card,
-    marginTop: spacing.sm,
-  },
-  startBtnDisabled: {
-    backgroundColor: C.border,
-  },
-  startBtnText: {
-    ...typography.body,
-    fontWeight: '700',
-    color: C.background,
-    fontSize: 18,
-  },
-
-  // ── Playing ────────────────────────────────────────────────────────────────
-  playingContainer: {
-    flex: 1,
-    padding: spacing.lg,
-    paddingBottom: spacing.md,
-  },
-  playingTopBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-  },
-  roundLabel: {
-    ...typography.heading,
-    color: C.text,
-    fontWeight: '700',
-  },
-  skipCounter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
-  },
-  skipDot: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.full,
-  },
-  skipDotActive: {
-    backgroundColor: C.success,
-  },
-  skipDotUsed: {
-    backgroundColor: C.border,
-  },
-  skipCounterText: {
-    ...typography.small,
-    color: C.textSecondary,
-    marginLeft: 2,
-  },
-  spiceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.full,
-    borderWidth: 1,
-  },
-  spiceBadgeEmoji: { fontSize: 14 },
-  spiceBadgeLabel: {
-    ...typography.small,
-    fontWeight: '700',
-  },
-  endBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: C.border,
-  },
-  endBtnText: {
-    ...typography.caption,
-    color: C.text,
-    fontWeight: '600',
-  },
-  playerBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
-    borderWidth: 1,
-  },
-  playerBannerDot: {
-    width: 14,
-    height: 14,
-    borderRadius: radius.full,
-  },
-  playerBannerInfo: {
-    flex: 1,
-  },
-  playerBannerName: {
-    ...typography.heading,
-    fontWeight: '700',
-  },
-  playerBannerSub: {
-    ...typography.small,
-    color: C.textSecondary,
-    fontWeight: '500',
-  },
-  playerBannerStats: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  playerBannerStatText: {
-    ...typography.caption,
-    color: C.textSecondary,
-    fontWeight: '600',
-  },
-  actionBtnRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  actionBtn: {
-    flex: 1,
-    height: 150,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    ...shadows.card,
-  },
-  actionBtnEmoji: {
-    fontSize: 44,
-  },
-  actionBtnLabel: {
-    ...typography.heading,
-    color: C.background,
-    fontWeight: '800',
-    fontSize: 20,
-  },
-  actionBtnSub: {
-    ...typography.small,
-    color: C.background + 'BB',
-    fontWeight: '500',
-  },
-  cardWrapper: {
-    flex: 1,
-  },
-  card: {
-    flex: 1,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    overflow: 'hidden',
-    ...shadows.modal,
-  },
-  cardAccentBar: {
-    height: 4,
-    width: '100%',
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: spacing.sm,
-  },
-  cardHeaderEmoji: {
-    fontSize: 20,
-  },
-  cardHeaderType: {
-    ...typography.caption,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-  },
-  spiceIndicator: {
-    flexDirection: 'row',
-    marginLeft: 'auto',
-    gap: 4,
-  },
-  spiceDot: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.full,
-  },
-  cardBody: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-  },
-  cardText: {
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 32,
-  },
-  cardActions: {
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  cardActionBtn: {
-    height: 52,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  doneText: {
-    ...typography.body,
-    color: C.background,
-    fontWeight: '700',
-  },
-  skipBtn: {
-    backgroundColor: C.surface,
-    borderWidth: 1.5,
-    borderColor: C.border,
-  },
-  skipBtnDisabled: {
-    opacity: 0.45,
-  },
-  skipText: {
-    ...typography.body,
-    color: C.textSecondary,
-    fontWeight: '600',
-  },
-  skipTextDisabled: {
-    color: C.border,
-  },
-  miniScoreboard: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginTop: spacing.md,
-  },
-  miniPlayerChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.full,
-    borderWidth: 1.5,
-    borderColor: C.border,
-    gap: 4,
-    maxWidth: '47%',
-  },
-  miniPlayerDot: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.full,
-  },
-  miniPlayerName: {
-    ...typography.small,
-    color: C.text,
-    fontWeight: '600',
-    flexShrink: 1,
-  },
-  miniPlayerActive: {
-    fontSize: 8,
-    marginLeft: 2,
-  },
-
-  // ── Game Over ──────────────────────────────────────────────────────────────
-  gameoverScroll: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
-    alignItems: 'center',
-  },
-  gameoverTitle: {
-    ...typography.title,
-    fontSize: 32,
-    color: C.text,
-    textAlign: 'center',
-    marginBottom: spacing.xs,
-  },
-  gameoverSubtitle: {
-    ...typography.body,
-    color: C.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-  },
-  gameoverSpiceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    borderWidth: 1.5,
-    marginBottom: spacing.xl,
-  },
-  gameoverSpiceEmoji: { fontSize: 18 },
-  gameoverSpiceLabel: {
-    ...typography.body,
-    fontWeight: '700',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.xl,
-    width: '100%',
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: C.surface,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xs,
-    borderTopWidth: 3,
-    ...shadows.card,
-  },
-  statEmoji: {
-    fontSize: 20,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  statLabel: {
-    ...typography.small,
-    color: C.textSecondary,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  leaderboardCard: {
-    backgroundColor: C.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-    ...shadows.card,
-    width: '100%',
-  },
-  leaderboardTitle: {
-    ...typography.heading,
-    color: C.text,
-    marginBottom: spacing.md,
-  },
-  leaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    gap: spacing.sm,
-  },
-  leaderRowFirst: {
-    backgroundColor: '#FFFBEB',
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.xs,
-  },
-  leaderRank: {
-    fontSize: 18,
-    width: 28,
-  },
-  leaderNameDot: {
-    width: 10,
-    height: 10,
-    borderRadius: radius.full,
-  },
-  leaderName: {
-    ...typography.body,
-    color: C.text,
-    fontWeight: '600',
-    flex: 1,
-  },
-  leaderStats: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  leaderStatItem: {
-    ...typography.small,
-    fontWeight: '600',
-    color: C.text,
-  },
-  leaderTotal: {
-    fontSize: 18,
-    fontWeight: '800',
-    minWidth: 28,
-    textAlign: 'right',
-  },
-  highlightsCard: {
-    backgroundColor: C.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.xl,
-    ...shadows.card,
-    width: '100%',
-  },
-  highlightsTitle: {
-    ...typography.heading,
-    color: C.text,
-    marginBottom: spacing.md,
-  },
-  highlightRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  highlightLabel: {
-    ...typography.body,
-    color: C.textSecondary,
-  },
-  highlightValue: {
-    ...typography.body,
-    fontWeight: '700',
-    color: C.text,
-  },
-  playAgainBtn: {
-    height: 56,
-    borderRadius: radius.lg,
-    backgroundColor: C.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.card,
-    marginBottom: spacing.md,
-    width: '100%',
-  },
-  playAgainText: {
-    ...typography.body,
-    fontWeight: '700',
-    color: C.background,
-    fontSize: 18,
-  },
-  backToGamesBtn: {
-    height: 52,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: C.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  backToGamesText: {
-    ...typography.body,
-    color: C.textSecondary,
-    fontWeight: '600',
-  },
-  });
-}

@@ -22,7 +22,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { WebView } from 'react-native-webview';
+// ─── Lazy-load react-native-webview so older binaries don't crash ─────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let NativeWebView: React.ComponentType<any> | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  NativeWebView = require('react-native-webview').WebView;
+} catch { /* Native module not compiled into this binary */ }
 import { useAuthStore } from '../../store/authStore';
 import {
   createCall,
@@ -203,25 +209,33 @@ export default function CallScreen() {
         {/* ── Jitsi WebView ── */}
         {jUrl && status === 'active' && (
           <View style={[styles.webviewWrap, webviewReady && styles.webviewVisible]}>
-            <WebView
-              source={{ uri: jUrl }}
-              style={styles.webview}
-              allowsInlineMediaPlayback
-              mediaPlaybackRequiresUserAction={false}
-              javaScriptEnabled
-              domStorageEnabled
-              originWhitelist={['*']}
-              allowsFullscreenVideo
-              onLoad={() => { setWebviewReady(true); setStatus('active'); }}
-              onError={() => handleEndCall()}
-              renderLoading={() => (
-                <View style={styles.webviewLoading}>
-                  <ActivityIndicator color="#FF4B6E" size="large" />
-                  <Text style={styles.webviewLoadingText}>Connecting to call…</Text>
-                </View>
-              )}
-              startInLoadingState
-            />
+            {NativeWebView ? (
+              <NativeWebView
+                source={{ uri: jUrl }}
+                style={styles.webview}
+                allowsInlineMediaPlayback
+                mediaPlaybackRequiresUserAction={false}
+                javaScriptEnabled
+                domStorageEnabled
+                originWhitelist={['*']}
+                allowsFullscreenVideo
+                onLoad={() => { setWebviewReady(true); setStatus('active'); }}
+                onError={() => handleEndCall()}
+                renderLoading={() => (
+                  <View style={styles.webviewLoading}>
+                    <ActivityIndicator color="#FF4B6E" size="large" />
+                    <Text style={styles.webviewLoadingText}>Connecting to call…</Text>
+                  </View>
+                )}
+                startInLoadingState
+              />
+            ) : (
+              <View style={[styles.webviewLoading, { flex: 1 }]}>
+                <Text style={styles.webviewLoadingText}>
+                  Calls require a development build.{'\n'}Run: npx expo run:ios
+                </Text>
+              </View>
+            )}
           </View>
         )}
 

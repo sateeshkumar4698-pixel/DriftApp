@@ -43,7 +43,6 @@ const GAME_INFO: Record<GameId, { name: string; emoji: string; maxPlayers: numbe
 };
 
 function makeRoomId(): string {
-  // crypto.randomUUID is available on RN Hermes 0.74+ ; fall back to simple uuid.
   const g = globalThis as { crypto?: { randomUUID?: () => string } };
   if (g.crypto?.randomUUID) return g.crypto.randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -51,6 +50,12 @@ function makeRoomId(): string {
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+/** 6-char alphanumeric join code — avoids ambiguous chars (0/O, 1/I, 5/S) */
+function makeRoomCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRTUVWXYZ23467';
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
 export default function GameInviteScreen() {
@@ -136,7 +141,8 @@ export default function GameInviteScreen() {
     setCreating(true);
     try {
       const roomId = makeRoomId();
-      const now = Date.now();
+      const code   = makeRoomCode();
+      const now    = Date.now();
 
       const host: GameRoomPlayer = {
         uid:      firebaseUser.uid,
@@ -150,6 +156,7 @@ export default function GameInviteScreen() {
 
       const room: GameRoom = {
         id:         roomId,
+        code,
         gameId,
         hostUid:    firebaseUser.uid,
         status:     'waiting',
