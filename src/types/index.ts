@@ -17,6 +17,19 @@ export interface UserStreak {
   lastLoginDate: string; // 'YYYY-MM-DD'
 }
 
+export interface PrivacyPrefs {
+  statusVisibility:           'connections' | 'everyone';
+  memoriesVisibility:         'private' | 'connections' | 'everyone';
+  showOnlineStatus:           boolean;
+  showLastSeen:               boolean;
+  allowConnectionRequests:    boolean;
+  showInDiscoverFeed:         boolean;
+  screenshotAlert:            boolean;
+  readReceipts:               boolean;
+  allowTagging:               boolean;
+  profileIndexed:             boolean;
+}
+
 export interface UserProfile {
   uid: string;
   email?: string;
@@ -40,6 +53,9 @@ export interface UserProfile {
   isBanned: boolean;
   blockedUsers?: string[];     // UIDs this user has blocked
   createdAt: number;
+  privacyPrefs?: PrivacyPrefs;
+  isPremium?: boolean;
+  premiumExpiresAt?: number;
   // ── Profile Share (Phase 1) ────────────────────────────────────────────────
   username?: string;           // unique @handle e.g. "priya_7f3a" (auto-generated)
   driftId?: string;            // display form user can customise e.g. "priya.drift"
@@ -476,7 +492,9 @@ export type ProfileStackParamList = {
   StatusCreate: { initialStatus?: DriftStatus } | undefined;
   ViewStatus: { status: DriftStatus; name: string; photoURL?: string; isMine: boolean };
   CoinHistory: undefined;
+  CoinShop: undefined;
   PrivacySettings: undefined;
+  BlockedUsers: undefined;
   Terms: undefined;
   ProfileShare: undefined;
   Settings: undefined;
@@ -532,7 +550,14 @@ export type CoinTxReason =
   | 'voice_call'
   | 'video_call'
   | 'boost'
-  | 'purchase';
+  | 'purchase'
+  | 'super_like'
+  | 'story_highlight'
+  | 'premium_month'
+  | 'invite_friend'
+  | 'game_win'
+  | 'event_join'
+  | 'referral_bonus';
 
 export interface CoinTransaction {
   id: string;

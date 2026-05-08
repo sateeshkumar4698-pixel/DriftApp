@@ -28,8 +28,15 @@ export const COIN_REWARDS: Record<CoinTxReason, number> = {
   profile_complete: 30,
   voice_call:       5,
   video_call:       10,
-  boost:            -50,   // spend
+  boost:            -50,
   purchase:         0,     // variable — set via amount param
+  super_like:       -30,
+  story_highlight:  -20,
+  premium_month:    -500,
+  invite_friend:    100,
+  game_win:         15,
+  event_join:       10,
+  referral_bonus:   200,
 };
 
 export const COIN_LABELS: Record<CoinTxReason, string> = {
@@ -43,7 +50,72 @@ export const COIN_LABELS: Record<CoinTxReason, string> = {
   video_call:       'Video Call',
   boost:            'Profile Boost',
   purchase:         'Coin Purchase',
+  super_like:       'Super Like',
+  story_highlight:  'Story Highlight',
+  premium_month:    'Drift Premium (1 Month)',
+  invite_friend:    'Friend Invite Bonus',
+  game_win:         'Game Win Reward',
+  event_join:       'Event Check-in',
+  referral_bonus:   'Referral Bonus',
 };
+
+// ─── Coin pack definitions (for CoinShop) ────────────────────────────────────
+
+export interface CoinPack {
+  id: string;
+  coins: number;
+  priceINR: number;
+  priceLabel: string;
+  bonus?: number;        // bonus coins on top
+  tag?: string;          // e.g. "Most Popular"
+}
+
+export const COIN_PACKS: CoinPack[] = [
+  { id: 'starter',    coins: 100,  priceINR: 49,   priceLabel: '₹49',  tag: 'Starter' },
+  { id: 'popular',    coins: 500,  priceINR: 199,  priceLabel: '₹199', bonus: 50,  tag: 'Popular' },
+  { id: 'value',      coins: 1200, priceINR: 399,  priceLabel: '₹399', bonus: 200, tag: 'Best Value' },
+  { id: 'mega',       coins: 3000, priceINR: 799,  priceLabel: '₹799', bonus: 700, tag: 'Mega Pack' },
+];
+
+export const PREMIUM_MONTHLY_PRICE_INR = 149;
+
+// ─── Spend item definitions (for CoinShop) ───────────────────────────────────
+
+export interface SpendItem {
+  id: CoinTxReason;
+  label: string;
+  description: string;
+  cost: number;
+  emoji: string;
+  color: string;
+}
+
+export const SPEND_ITEMS: SpendItem[] = [
+  {
+    id: 'boost',
+    label: 'Profile Boost',
+    description: 'Push your profile to top of Discover for 30 min',
+    cost: 50,
+    emoji: '🚀',
+    color: '#6C5CE7',
+  },
+  {
+    id: 'super_like',
+    label: 'Super Like',
+    description: 'Send a super like — they\'ll definitely notice you',
+    cost: 30,
+    emoji: '⭐',
+    color: '#FF4B6E',
+  },
+  {
+    id: 'story_highlight',
+    label: 'Story Highlight',
+    description: 'Pin your status story to your profile for 7 days',
+    cost: 20,
+    emoji: '✨',
+    color: '#FDCB6E',
+  },
+];
 
 // ─── Core helper ─────────────────────────────────────────────────────────────
 

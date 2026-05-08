@@ -8,7 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { signOut, deleteUser, reauthenticateWithCredential, PhoneAuthProvider } from 'firebase/auth';
+import { signOut, deleteUser } from 'firebase/auth';
 import { deleteDoc, doc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebase';
 import { useAuthStore } from '../../store/authStore';
@@ -199,12 +199,39 @@ export default function SettingsScreen() {
           <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
             <SettingRow icon="person-outline"    label="Edit Profile"       sublabel="Update your name, bio & photos"  iconGrad={['#FF4B6E', '#C2185B']} C={C} onPress={() => navigation.navigate('EditProfile')} />
             <SettingRow icon="at-outline"         label="Drift ID & Handle"  sublabel={userProfile?.driftId ? `@${userProfile.driftId}` : 'Set your @handle'} iconGrad={['#00D2FF', '#0077FF']} C={C} onPress={() => navigation.navigate('DriftId')} />
-            <SettingRow icon="shield-checkmark-outline" label="Privacy Settings" sublabel="Control who sees what"      iconGrad={['#6C5CE7', '#4834D4']} C={C} onPress={() => navigation.navigate('PrivacySettings')} />
+            <SettingRow icon="shield-checkmark-outline" label="Privacy & Safety" sublabel="Visibility, screenshot alerts, block list" iconGrad={['#6C5CE7', '#4834D4']} C={C} onPress={() => navigation.navigate('PrivacySettings')} />
+            <SettingRow icon="ban-outline"        label="Blocked Users"      sublabel="Manage people you've blocked"    iconGrad={['#EF4444', '#C62828']} C={C} onPress={() => navigation.navigate('BlockedUsers')} />
+          </View>
+
+          {/* ── Drift Premium ─────────────────────────────────────── */}
+          <SectionHeader title="Premium" C={C} />
+          <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+            <SettingRow
+              icon="star-outline"
+              label="Drift Premium"
+              sublabel={userProfile?.isPremium ? 'Active — unlimited features' : 'Boosts, super likes, no ads'}
+              iconGrad={['#FFD700', '#FF8C00']}
+              C={C}
+              onPress={() => navigation.navigate('CoinShop')}
+              rightEl={
+                userProfile?.isPremium
+                  ? <View style={s.premiumBadge}><Text style={s.premiumBadgeText}>PRO</Text></View>
+                  : <View style={s.upgradeBadge}><Text style={s.upgradeBadgeText}>Upgrade</Text></View>
+              }
+            />
           </View>
 
           {/* ── Coins & Rewards ──────────────────────────────────── */}
           <SectionHeader title="Coins & Rewards" C={C} />
           <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+            <SettingRow
+              icon="storefront-outline"
+              label="Coin Shop"
+              sublabel="Buy packs, spend on boosts & super likes"
+              iconGrad={['#FF4B6E', '#C2185B']}
+              C={C}
+              onPress={() => navigation.navigate('CoinShop')}
+            />
             <SettingRow
               icon="time-outline"
               label="Coin History"
@@ -275,7 +302,7 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backBtn:      { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  backBtn:      { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle:  { fontSize: 18, fontWeight: '700', letterSpacing: 0.2 },
   headerSub:    { fontSize: 12, marginTop: 1 },
@@ -288,6 +315,11 @@ const s = StyleSheet.create({
 
   coinBadge:     { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#FFD70022', paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.full },
   coinBadgeText: { fontSize: 12, fontWeight: '800', color: '#FFD700' },
+
+  premiumBadge:     { backgroundColor: '#FFD700', paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full },
+  premiumBadgeText: { fontSize: 10, fontWeight: '900', color: '#000' },
+  upgradeBadge:     { backgroundColor: '#FF4B6E20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full, borderWidth: 1, borderColor: '#FF4B6E40' },
+  upgradeBadgeText: { fontSize: 10, fontWeight: '800', color: '#FF4B6E' },
 
   version: { textAlign: 'center', fontSize: 11, marginTop: 32, marginBottom: 8 },
 });

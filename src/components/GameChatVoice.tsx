@@ -44,11 +44,12 @@ interface Props {
   myUid:       string;
   myName:      string;
   accentColor?: string;
+  hideVoice?:  boolean;
 }
 
 type VoiceState = 'idle' | 'joining' | 'joined' | 'error';
 
-export default function GameChatVoice({ roomId, myUid, myName, accentColor }: Props) {
+export default function GameChatVoice({ roomId, myUid, myName, accentColor, hideVoice = false }: Props) {
   const { C } = useTheme();
   const accent = accentColor ?? C.primary;
 
@@ -262,51 +263,53 @@ export default function GameChatVoice({ roomId, myUid, myName, accentColor }: Pr
               </TouchableOpacity>
             </View>
 
-            {/* ── Voice strip ── */}
-            <View style={sc.voiceStrip}>
-              <View style={sc.voiceStripLeft}>
-                <Ionicons
-                  name={isVoiceActive ? 'radio-outline' : 'mic-outline'}
-                  size={14}
-                  color={isVoiceActive ? '#A855F7' : C.textSecondary}
-                />
-                <Text style={[sc.voiceLabel, isVoiceActive && { color: '#A855F7' }]}>
-                  {voiceState === 'idle'    ? 'Voice Chat'
-                  : voiceState === 'joining' ? 'Connecting…'
-                  : voiceState === 'error'   ? 'Voice unavailable'
-                  : muted                    ? 'Muted'
-                  : `Live · ${participantCount} in voice`}
-                </Text>
-              </View>
-              <View style={sc.voiceActions}>
-                {voiceState === 'idle' && (
-                  <TouchableOpacity onPress={joinVoice} style={sc.voiceBtn}>
-                    <LinearGradient colors={['#6C5CE7', '#A855F7']} style={sc.voiceBtnGrad}>
-                      <Ionicons name="mic-outline" size={13} color="#fff" />
-                      <Text style={sc.voiceBtnText}>Join</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                )}
-                {voiceState === 'joining' && (
-                  <ActivityIndicator size="small" color="#6C5CE7" />
-                )}
-                {voiceState === 'joined' && (
-                  <>
-                    <TouchableOpacity onPress={() => setShowVoiceModal(true)} style={sc.voiceIconBtn}>
-                      <Ionicons name="mic" size={15} color="#fff" />
+            {/* ── Voice strip — hidden when InGameVoice handles voice ── */}
+            {!hideVoice && (
+              <View style={sc.voiceStrip}>
+                <View style={sc.voiceStripLeft}>
+                  <Ionicons
+                    name={isVoiceActive ? 'radio-outline' : 'mic-outline'}
+                    size={14}
+                    color={isVoiceActive ? '#A855F7' : C.textSecondary}
+                  />
+                  <Text style={[sc.voiceLabel, isVoiceActive && { color: '#A855F7' }]}>
+                    {voiceState === 'idle'    ? 'Voice Chat'
+                    : voiceState === 'joining' ? 'Connecting…'
+                    : voiceState === 'error'   ? 'Voice unavailable'
+                    : muted                    ? 'Muted'
+                    : `Live · ${participantCount} in voice`}
+                  </Text>
+                </View>
+                <View style={sc.voiceActions}>
+                  {voiceState === 'idle' && (
+                    <TouchableOpacity onPress={joinVoice} style={sc.voiceBtn}>
+                      <LinearGradient colors={['#6C5CE7', '#A855F7']} style={sc.voiceBtnGrad}>
+                        <Ionicons name="mic-outline" size={13} color="#fff" />
+                        <Text style={sc.voiceBtnText}>Join</Text>
+                      </LinearGradient>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={leaveVoice} style={sc.voiceLeaveBtn}>
-                      <Ionicons name="call" size={13} color={C.error} />
+                  )}
+                  {voiceState === 'joining' && (
+                    <ActivityIndicator size="small" color="#6C5CE7" />
+                  )}
+                  {voiceState === 'joined' && (
+                    <>
+                      <TouchableOpacity onPress={() => setShowVoiceModal(true)} style={sc.voiceIconBtn}>
+                        <Ionicons name="mic" size={15} color="#fff" />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={leaveVoice} style={sc.voiceLeaveBtn}>
+                        <Ionicons name="call" size={13} color={C.error} />
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  {voiceState === 'error' && (
+                    <TouchableOpacity onPress={() => setVoiceState('idle')}>
+                      <Text style={{ fontSize: 11, color: C.error }}>Retry</Text>
                     </TouchableOpacity>
-                  </>
-                )}
-                {voiceState === 'error' && (
-                  <TouchableOpacity onPress={() => setVoiceState('idle')}>
-                    <Text style={{ fontSize: 11, color: C.error }}>Retry</Text>
-                  </TouchableOpacity>
-                )}
+                  )}
+                </View>
               </View>
-            </View>
+            )}
 
             {/* ── Messages ── */}
             <FlatList

@@ -6,8 +6,9 @@ import {
   StyleSheet,
   Animated,
   Dimensions,
-  ScrollView,
   Platform,
+  Alert,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -21,6 +22,7 @@ import { useTheme, AppColors } from '../../utils/useTheme';
 import { gameSounds } from '../../services/gameSounds';
 import { useAuthStore } from '../../store/authStore';
 import GameChatVoice from '../../components/GameChatVoice';
+import InGameVoice from '../../components/InGameVoice';
 
 // ─── Board dimensions ──────────────────────────────────────────────────────────
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -206,193 +208,75 @@ function stackOffset(groupLen: number, idx: number) {
   return { ox, oy };
 }
 
-// ─── Premium Dice ─────────────────────────────────────────────────────────────
-// Visual improvements:
-//  • Larger (90px) dark-gradient face with rounded corners
-//  • Glowing colored dots per face value
-//  • Animated glow ring that pulses during roll
-//  • Number label underneath
-//  • Landing impact ring (scale-out animation)
-const DS    = 90;
-const DPAD  = 10;
+// ─── Classic Flat Dice ────────────────────────────────────────────────────────
+const DS   = 60;
+const DPAD = 8;
 const CELLD_SIZE = (DS - DPAD * 2) / 3;
-const DOTD  = Math.round(CELLD_SIZE * 0.60);
+const DOTD       = Math.round(CELLD_SIZE * 0.54);
 
-const ROT_X_REST = 0.37;
+const ROT_X_REST = 0.37; // kept for handleRoll compat
 
-// Dot color per face value — each value gets its own color for personality
-const DOT_COLORS: Record<number, string> = {
-  1: '#FF4B6E',
-  2: '#6C5CE7',
-  3: '#00D2FF',
-  4: '#00E676',
-  5: '#FFD700',
-  6: '#FF8C00',
-};
-
-const SIDE_H = 16;  // top-face strip height
-const SIDE_W = 16;  // right-face strip width
-
-const PLAYER_FACE: Record<'red'|'green', { face:string; top:string; right:string; border:string }> = {
-  red:   { face:'#1C0008', top:'#3D0016', right:'#100004', border:'#8B003B' },
-  green: { face:'#001C08', top:'#003D16', right:'#000E04', border:'#007B3A' },
-};
+// Classic dice palette — ivory face, slate dots, warm tan border
+const DICE_FACE_BG  = '#FFFDE7';
+const DICE_BORDER   = '#D4C9B0';
+const DICE_DOT      = '#1E293B';
+const DICE_SHADOW   = '#8B7355';
 
 interface DiceProps {
   value:       number | null;
   rollSc:      Animated.Value;
   rotY:        Animated.Value;
-  rotX:        Animated.Value;
-  faceFlip:    Animated.Value;
+  rotX:        Animated.Value;   // unused in flat design, kept for call-site compat
+  faceFlip:    Animated.Value;   // unused in flat design, kept for call-site compat
   onRoll:      () => void;
   isRolling?:  boolean;
   playerColor: 'red' | 'green';
 }
 
-function Dice3D({ value, rollSc, rotY, rotX, faceFlip, onRoll, isRolling, playerColor }: DiceProps) {
-  const dots     = value ? (DOT_MAP[value] ?? []) : [];
-  const dotColor = value ? (DOT_COLORS[value] ?? '#FFFFFF') : '#888888';
-  const pc       = PLAYER_FACE[playerColor];
+function Dice3D({ value, rollSc, rotY, onRoll, isRolling }: DiceProps) {
+  const dots = value && !isRolling ? (DOT_MAP[value] ?? []) : [];
 
-  const glowAnim    = useRef(new Animated.Value(0)).current;
-  const sideOpacity = useRef(new Animated.Value(1)).current;
-  const shadowScale = useRef(new Animated.Value(0.85)).current;
-  const shadowOp    = useRef(new Animated.Value(0.45)).current;
-
-  useEffect(() => {
-    if (isRolling) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
-          Animated.timing(glowAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
-        ]),
-      ).start();
-      Animated.timing(sideOpacity, { toValue: 0,    duration: 80,  useNativeDriver: true }).start();
-      Animated.spring(shadowScale, { toValue: 1.55, friction: 6,   useNativeDriver: true }).start();
-      Animated.timing(shadowOp,   { toValue: 0.18,  duration: 200, useNativeDriver: true }).start();
-    } else {
-      glowAnim.stopAnimation();
-      Animated.timing(glowAnim,    { toValue: 0,    duration: 200, useNativeDriver: true }).start();
-      Animated.timing(sideOpacity, { toValue: 1,    duration: 320, useNativeDriver: true }).start();
-      Animated.spring(shadowScale, { toValue: 0.85, friction: 6,   useNativeDriver: true }).start();
-      Animated.timing(shadowOp,   { toValue: 0.45,  duration: 200, useNativeDriver: true }).start();
-    }
-  }, [isRolling]);
-
-  const rotYDeg    = rotY.interpolate({ inputRange: [0,1], outputRange: ['0deg','360deg'] });
-  const rotXDeg    = rotX.interpolate({ inputRange: [0,1], outputRange: ['0deg','-40deg'] });
-  const glowOpacity = glowAnim.interpolate({ inputRange:[0,1], outputRange:[0, 0.75] });
-  const glowScale   = glowAnim.interpolate({ inputRange:[0,1], outputRange:[1, 1.4] });
+  // rotY 0→1 = one full 360° clockwise rotation
+  const spinDeg = rotY.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   return (
-    <TouchableOpacity onPress={onRoll} activeOpacity={0.75}>
-      <View style={{ alignItems: 'center', gap: 6 }}>
-        {/* 3-face isometric cube container */}
-        <View style={{ width: DS + SIDE_W, height: DS + SIDE_H, position: 'relative' }}>
-
-          {/* Glow ring — behind all faces */}
-          <Animated.View style={{
-            position: 'absolute',
-            width: DS + 28, height: DS + 28,
-            borderRadius: (DS + 28) / 2,
-            backgroundColor: dotColor,
-            opacity: glowOpacity,
-            transform: [{ scale: glowScale }],
-            top: SIDE_H / 2 - 4,
-            left: -4,
-            zIndex: 0,
-          }} />
-
-          {/* Top face (lighter = ambient light) */}
-          <Animated.View style={{
-            position: 'absolute',
-            width: DS, height: SIDE_H,
-            left: 0, top: 0,
-            backgroundColor: pc.top,
-            borderTopLeftRadius: 14, borderTopRightRadius: 14,
-            opacity: sideOpacity,
-            zIndex: 1,
-          }} />
-
-          {/* Right face (darker = shadow side) */}
-          <Animated.View style={{
-            position: 'absolute',
-            width: SIDE_W, height: DS,
-            right: 0, top: SIDE_H,
-            backgroundColor: pc.right,
-            borderTopRightRadius: 8, borderBottomRightRadius: 14,
-            opacity: sideOpacity,
-            zIndex: 1,
-          }} />
-
-          {/* Front face — animated */}
-          <Animated.View style={{
-            position: 'absolute',
-            width: DS, height: DS,
-            left: 0, top: SIDE_H,
-            zIndex: 2,
-            transform: [
-              { perspective: 420 },
-              { rotateX: rotXDeg },
-              { rotateY: rotYDeg },
-              { scale: rollSc },
-            ],
-          }}>
-            <Animated.View style={[dSt.face, {
-              backgroundColor: pc.face,
-              borderColor: pc.border + '90',
-              transform: [{ scaleX: faceFlip }],
-            }]}>
-              <View style={dSt.grid}>
-                {([0,1,2] as const).map(r => (
-                  <View key={r} style={dSt.row}>
-                    {([0,1,2] as const).map(c => {
-                      const on = dots.some(([dr,dc]) => dr===r && dc===c);
-                      return (
-                        <View key={c} style={dSt.cell}>
-                          {on ? (
-                            <View style={[dSt.dot, {
-                              backgroundColor: dotColor,
-                              shadowColor: dotColor,
-                              shadowOffset: { width:0, height:0 },
-                              shadowOpacity: 1,
-                              shadowRadius: 6,
-                            }]} />
-                          ) : <View style={dSt.empty} />}
-                        </View>
-                      );
-                    })}
-                  </View>
-                ))}
+    <TouchableOpacity onPress={onRoll} activeOpacity={0.78} style={{ alignItems: 'center' }}>
+      <Animated.View style={{
+        width: DS, height: DS,
+        transform: [{ rotate: spinDeg }, { scale: rollSc }],
+      }}>
+        <View style={dSt.face}>
+          {/* Dot grid */}
+          <View style={dSt.grid}>
+            {([0,1,2] as const).map(r => (
+              <View key={r} style={dSt.row}>
+                {([0,1,2] as const).map(c => {
+                  const on = dots.some(([dr,dc]) => dr===r && dc===c);
+                  return (
+                    <View key={c} style={dSt.cell}>
+                      {on ? <View style={dSt.dot} /> : <View style={dSt.empty} />}
+                    </View>
+                  );
+                })}
               </View>
-              <View style={dSt.gloss} pointerEvents="none" />
-              <View style={dSt.shadow} pointerEvents="none" />
-            </Animated.View>
-          </Animated.View>
+            ))}
+          </View>
+          {/* Rolling shimmer overlay */}
+          {isRolling && (
+            <View style={dSt.rollingOverlay}>
+              <Text style={dSt.rollingDots}>···</Text>
+            </View>
+          )}
+          {/* Gloss highlight */}
+          <View style={dSt.gloss} pointerEvents="none" />
         </View>
-
-        {/* Floor shadow */}
-        <Animated.View style={{
-          width: DS * 0.65, height: 9,
-          borderRadius: 5,
-          backgroundColor: '#000',
-          opacity: shadowOp,
-          transform: [{ scaleX: shadowScale }],
-          marginTop: -2,
-        }} />
-
-        {/* Value badge */}
-        {value !== null && !isRolling && (
-          <View style={[dSt.numBadge, { backgroundColor: dotColor+'25', borderColor: dotColor+'60' }]}>
-            <Text style={[dSt.numText, { color: dotColor }]}>{value}</Text>
-          </View>
-        )}
-        {isRolling && (
-          <View style={[dSt.numBadge, { backgroundColor:'#ffffff10', borderColor:'#ffffff20' }]}>
-            <Text style={[dSt.numText, { color:'#888' }]}>•••</Text>
-          </View>
-        )}
-      </View>
+      </Animated.View>
+      {/* Value badge */}
+      {value !== null && !isRolling && (
+        <View style={dSt.numBadge}>
+          <Text style={dSt.numText}>{value}</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -400,58 +284,49 @@ function Dice3D({ value, rollSc, rotY, rotX, faceFlip, onRoll, isRolling, player
 const dSt = StyleSheet.create({
   face: {
     width: DS, height: DS,
-    borderRadius: 18,
+    borderRadius: 15,
+    borderWidth: 2.5,
+    backgroundColor: DICE_FACE_BG,
+    borderColor: DICE_BORDER,
+    padding: DPAD,
     overflow: 'hidden',
     ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.5,
-        shadowRadius: 10,
-      },
-      android: { elevation: 10 },
+      ios:     { shadowColor: DICE_SHADOW, shadowOffset:{width:0,height:4}, shadowOpacity:0.32, shadowRadius:8 },
+      android: { elevation: 8 },
     }),
   },
-  faceInner: {
-    flex: 1,
-    backgroundColor: '#1A1A3E',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#3A3A6A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  grid: { gap: 3 },
-  row:  { flexDirection: 'row', gap: 3 },
-  cell: { width: CELLD_SIZE, height: CELLD_SIZE, alignItems: 'center', justifyContent: 'center' },
+  grid: { flex: 1, gap: 2 },
+  row:  { flex: 1, flexDirection: 'row', gap: 2 },
+  cell: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   dot: {
     width: DOTD, height: DOTD, borderRadius: DOTD / 2,
+    backgroundColor: DICE_DOT,
     ...Platform.select({
-      ios: { shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 6 },
-      android: { elevation: 4 },
+      ios:     { shadowColor: '#000', shadowOffset:{width:0,height:1}, shadowOpacity:0.28, shadowRadius:2 },
+      android: { elevation: 2 },
     }),
   },
   empty: { width: DOTD, height: DOTD },
   gloss: {
-    position: 'absolute', top: 7, left: 8,
-    width: DS * 0.32, height: DS * 0.14,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    transform: [{ rotate: '-22deg' }],
-  },
-  shadow: {
-    position: 'absolute', bottom: 6, right: 7,
+    position: 'absolute', top: 5, left: 6,
     width: DS * 0.28, height: DS * 0.12,
-    borderRadius: 5,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    transform: [{ rotate: '-22deg' }],
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.65)',
+    transform: [{ rotate: '-20deg' }],
   },
+  rollingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,253,231,0.88)',
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: 13,
+  },
+  rollingDots: { fontSize: 18, fontWeight: '900', letterSpacing: 5, color: DICE_DOT },
   numBadge: {
-    paddingHorizontal: 14, paddingVertical: 3,
+    marginTop: 5, paddingHorizontal: 12, paddingVertical: 2,
     borderRadius: 20, borderWidth: 1,
+    backgroundColor: '#F8F5EC', borderColor: DICE_BORDER,
   },
-  numText: { fontSize: 15, fontWeight: '900', letterSpacing: 1 },
+  numText: { fontSize: 13, fontWeight: '900', letterSpacing: 0.5, color: DICE_DOT },
 });
 
 // ─── 3D Coin ──────────────────────────────────────────────────────────────────
@@ -1025,11 +900,8 @@ export default function LudoGame(): React.ReactElement {
         Animated.spring (faceFlip, { toValue: 1, friction: 5, tension: 260, useNativeDriver: true }),
       ]).start();
 
-      // Snap tilt back to resting isometric angle
-      Animated.parallel([
-        Animated.spring(diceRotY, { toValue: 0,          friction: 6, tension: 140, useNativeDriver: true }),
-        Animated.spring(diceRotX, { toValue: ROT_X_REST, friction: 6, tension: 140, useNativeDriver: true }),
-      ]).start();
+      // Snap back to neutral (no shake, no wobble)
+      Animated.spring(diceRotY, { toValue: 0, friction: 6, tension: 140, useNativeDriver: true }).start();
 
       // Landing scale bounce
       Animated.sequence([
@@ -1047,54 +919,29 @@ export default function LudoGame(): React.ReactElement {
     }, settleAt);
     rollTimers.current.push(t);
 
-    // ── Rotation animation: continuous full 360° spins ───────────────────────────
-    // rotY: 0→1 = one full 360° spin (interpolated in Dice3D to '0deg'→'360deg')
-    // Animated.loop resets to startValue before each iteration → dice keeps spinning forward.
-    // Fast phase 5×120ms = 600ms, slow phase 3×270ms = 810ms — total ~1.4s before settle.
+    // ── Roll animation: full 360° spins that decelerate before settling ──────────
+    // rotY 0→1 = one full clockwise rotation (interpolated in Dice3D).
+    // Fast phase → slow phase → spring settle to 0 (face-forward).
     diceRotY.setValue(0);
     Animated.sequence([
-      // ① Fast tumble — rapid full spins (like the dice just left your hand)
+      // ① Fast spins — dice airborne (6 × 110ms = 660ms)
       Animated.loop(
-        Animated.timing(diceRotY, { toValue: 1, duration: 120, useNativeDriver: true }),
-        { iterations: 5 }
+        Animated.timing(diceRotY, { toValue: 1, duration: 110, useNativeDriver: true }),
+        { iterations: 6 }
       ),
-      // ② Deceleration — visibly slowing down
+      // ② Decelerating spins — dice slowing (4 × 220ms = 880ms)
       Animated.loop(
-        Animated.timing(diceRotY, { toValue: 1, duration: 270, useNativeDriver: true }),
-        { iterations: 3 }
+        Animated.timing(diceRotY, { toValue: 1, duration: 220, useNativeDriver: true }),
+        { iterations: 4 }
       ),
-      // ③ Settle — gentle spring to face-forward rest
+      // ③ Spring to face-forward rest
       Animated.spring(diceRotY, { toValue: 0, friction: 7, tension: 160, useNativeDriver: true }),
     ]).start();
 
-    // X-axis: oscillate between resting tilt and high lean during tumble.
-    // Different frequency from Y → chaotic, non-uniform tumble.
-    // Always returns to ROT_X_REST (persistent depth-cue tilt), never flat 0.
+    // Scale: pop up on throw, drift back while spinning
     Animated.sequence([
-      // Wild pitch during throw
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(diceRotX, { toValue: 0.85,       duration: 105, useNativeDriver: true }),
-          Animated.timing(diceRotX, { toValue: ROT_X_REST, duration: 105, useNativeDriver: true }),
-        ]),
-        { iterations: 6 }
-      ),
-      // Gentler rocking as it slows
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(diceRotX, { toValue: 0.60,       duration: 200, useNativeDriver: true }),
-          Animated.timing(diceRotX, { toValue: ROT_X_REST, duration: 200, useNativeDriver: true }),
-        ]),
-        { iterations: 2 }
-      ),
-      // Land at resting isometric tilt
-      Animated.spring(diceRotX, { toValue: ROT_X_REST, friction: 7, tension: 160, useNativeDriver: true }),
-    ]).start();
-
-    // Initial throw: scale up sharply, then slowly drift back during rolling
-    Animated.sequence([
-      Animated.timing(diceScale, { toValue: 1.48, duration: 80,  useNativeDriver: true }),
-      Animated.timing(diceScale, { toValue: 1.08, duration: 900, useNativeDriver: true }),
+      Animated.timing(diceScale, { toValue: 1.18, duration: 80,  useNativeDriver: true }),
+      Animated.timing(diceScale, { toValue: 1.04, duration: 900, useNativeDriver: true }),
       // Landing bounce handled in the settleAt timeout above
     ]).start();
 
@@ -1187,6 +1034,40 @@ export default function LudoGame(): React.ReactElement {
     bounceTurn();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [winAnim, bounceTurn]);
+
+  // ── Back navigation with confirmation ────────────────────────────────────────
+  const handleBack = useCallback(() => {
+    Alert.alert(
+      'Leave Game?',
+      roomId ? 'Your opponent will be notified that you left.' : 'The current game will be lost.',
+      [
+        { text: 'Stay', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: () => {
+            if (roomId && firebaseUser) {
+              updateDoc(doc(db, 'gameRooms', roomId), {
+                [`players.${firebaseUser.uid}.disconnected`]: true,
+                [`players.${firebaseUser.uid}.disconnectedAt`]: Date.now(),
+              }).catch(() => {});
+            }
+            navigation.goBack();
+          },
+        },
+      ]
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, firebaseUser, navigation]);
+
+  // Android hardware back button
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [handleBack]);
 
   // ─── Derived values ──────────────────────────────────────────────────────────
   const cfg        = P[gs.turn];
@@ -1369,16 +1250,7 @@ export default function LudoGame(): React.ReactElement {
       <View style={st.header}>
         <TouchableOpacity
           style={st.backBtn}
-          onPress={() => {
-            // Mark self as disconnected so opponent sees the banner
-            if (roomId && firebaseUser) {
-              updateDoc(doc(db, 'gameRooms', roomId), {
-                [`players.${firebaseUser.uid}.disconnected`]: true,
-                [`players.${firebaseUser.uid}.disconnectedAt`]: Date.now(),
-              }).catch(() => {});
-            }
-            navigation.goBack();
-          }}
+          onPress={handleBack}
           activeOpacity={0.7}
         >
           <Text style={st.backTxt}>← Back</Text>
@@ -1396,7 +1268,7 @@ export default function LudoGame(): React.ReactElement {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={st.scroll} showsVerticalScrollIndicator={false}>
+      <View style={st.content}>
 
         {/* Player cards */}
         <View style={[st.cards, { width: BOARD_PX }]}>
@@ -1418,23 +1290,9 @@ export default function LudoGame(): React.ReactElement {
           </View>
         </View>
 
-        {/* Multiplayer: waiting for opponent */}
-        {roomId && !isMyTurn && gs.phase !== 'won' && (
-          <View style={[st.waitBanner, { borderColor: cfg.color + '40' }]}>
-            <Text style={st.waitEmoji}>⏳</Text>
-            <Text style={[st.waitTxt, { color: cfg.color }]}>
-              Waiting for {P[gs.turn].label}…
-            </Text>
-          </View>
-        )}
-
-        {/* Status message */}
-        <Animated.View style={[st.msgBox, { borderLeftColor: cfg.color, opacity: msgFade }]}>
-          <Text style={[st.msgTxt, { color: cfg.color }]}>{gs.msg}</Text>
-        </Animated.View>
-
-        {/* Dice + Roll button */}
-        <View style={st.controls}>
+        {/* Bottom bar: status + dice + roll button */}
+        <View style={st.bottomBar}>
+          {/* Dice */}
           <Dice3D
             value={displayDice}
             rollSc={diceScale}
@@ -1446,41 +1304,54 @@ export default function LudoGame(): React.ReactElement {
             playerColor={gs.turn}
           />
 
-          <Animated.View style={{ transform: [{ scale: btnScale }] }}>
-            <TouchableOpacity
-              style={[st.rollBtn, { backgroundColor: canRoll ? cfg.color : '#CBD5E1' }]}
-              onPress={handleRoll}
-              disabled={!canRoll}
-              activeOpacity={0.82}
+          {/* Status + Roll + Mic column */}
+          <View style={st.bottomRight}>
+            <Animated.Text
+              style={[st.msgTxt, { color: cfg.color, opacity: msgFade }]}
+              numberOfLines={1}
             >
-              <Text style={st.rollEmoji}>🎲</Text>
-              <Text style={st.rollTxt}>
-                {gs.phase === 'rolling' ? 'Rolling…'
-                 : gs.phase === 'moving' ? 'Moving…'
-                 : gs.phase === 'rolled' ? 'Tap coin'
-                 : 'Roll Dice'}
+              {gs.msg}
+            </Animated.Text>
+
+            {gs.bonusRoll && gs.phase === 'idle' && (
+              <Text style={[st.bonusTxt, { color: cfg.color }]}>🎉 Bonus roll!</Text>
+            )}
+
+            {roomId && !isMyTurn && gs.phase !== 'won' && (
+              <Text style={[st.waitTxt, { color: cfg.color }]}>
+                ⏳ Waiting for {P[gs.turn].label}…
               </Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
+            )}
 
-        {gs.bonusRoll && gs.phase === 'idle' && (
-          <View style={[st.bonus, { backgroundColor: cfg.light, borderColor: cfg.color }]}>
-            <Text style={[st.bonusTxt, { color: cfg.color }]}>🎉 Bonus roll!</Text>
+            {/* Roll button + mic icon side-by-side */}
+            <View style={st.rollRow}>
+              <Animated.View style={[{ flex: 1 }, { transform: [{ scale: btnScale }] }]}>
+                <TouchableOpacity
+                  style={[st.rollBtn, { backgroundColor: canRoll ? cfg.color : '#CBD5E1' }]}
+                  onPress={handleRoll}
+                  disabled={!canRoll}
+                  activeOpacity={0.82}
+                >
+                  <Text style={st.rollTxt}>
+                    {gs.phase === 'rolling' ? '🎲 Rolling…'
+                     : gs.phase === 'moving' ? '⏳ Moving…'
+                     : gs.phase === 'rolled' ? '👆 Tap coin'
+                     : '🎲 Roll'}
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+
+              {roomId && (
+                <InGameVoice
+                  roomId={roomId}
+                  myName={userProfile?.name ?? 'Player'}
+                />
+              )}
+            </View>
           </View>
-        )}
-
-        {/* Rules */}
-        <View style={[st.rulesBox, { width: BOARD_PX }]}>
-          <Text style={st.rulesTitle}>📖 Quick Rules</Text>
-          <Text style={st.rule}>• Roll 6 to bring a coin out of yard</Text>
-          <Text style={st.rule}>• ★ Safe squares — can't be captured</Text>
-          <Text style={st.rule}>• Land on enemy = capture → roll again</Text>
-          <Text style={st.rule}>• Roll 6 → move then roll again</Text>
-          <Text style={st.rule}>• Get all 4 coins home to win 🏆</Text>
         </View>
 
-      </ScrollView>
+      </View>
 
       {gs.winner && winnerCfg && (
         <>
@@ -1511,6 +1382,7 @@ export default function LudoGame(): React.ReactElement {
         myUid={firebaseUser?.uid ?? ''}
         myName={userProfile?.name ?? 'Player'}
         accentColor="#6C5CE7"
+        hideVoice
       />
     </SafeAreaView>
   );
@@ -1573,9 +1445,13 @@ function makeStyles(C: AppColors) {
   timerTxt: { fontSize: 11, fontWeight: '700', color: '#64748B' },
   timerTxtUrgent: { color: '#EF4444' }, // red when ≤10s
 
-  scroll: { alignItems: 'center', paddingVertical: 12, paddingBottom: 50 },
+  content: {
+    flex: 1, alignItems: 'center',
+    paddingTop: 8, paddingBottom: 6,
+    justifyContent: 'space-between',
+  },
 
-  cards:  { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 6 },
+  cards:  { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 },
   vsWrap: { width: 26, alignItems: 'center' },
   vs:     { fontSize: 11, fontWeight: '900', color: '#9CA3AF' },
 
@@ -1596,61 +1472,31 @@ function makeStyles(C: AppColors) {
   },
   centreStar: { color: '#9C27B0', fontWeight: '900' },
 
-  waitBanner: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingHorizontal: 20, paddingVertical: 8, marginTop: 8,
-    backgroundColor: '#ffffff10', borderRadius: 12,
-    borderWidth: 1,
-  },
-  waitEmoji: { fontSize: 15 },
-  waitTxt:   { fontSize: 13, fontWeight: '700' },
-
-  msgBox: {
-    marginTop: 12, marginBottom: 2,
-    paddingHorizontal: 18, paddingVertical: 9,
-    backgroundColor: '#fff', borderRadius: 12,
-    borderWidth: 1.5, borderColor: '#E5E7EB', borderLeftWidth: 5,
-    minWidth: 230, alignItems: 'center',
-    ...Platform.select({
-      ios:     { shadowColor:'#000',shadowOffset:{width:0,height:1},shadowOpacity:0.05,shadowRadius:3 },
-      android: { elevation: 1 },
-    }),
-  },
-  msgTxt: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
-
-  controls: {
+  // ── Bottom bar: dice + status/roll side-by-side ──
+  bottomBar: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', gap: 22,
-    marginVertical: 14, paddingHorizontal: 16,
+    gap: 14, paddingHorizontal: 16, paddingVertical: 8,
+    width: '100%',
+  },
+  bottomRight: {
+    flex: 1, gap: 4,
+  },
+  msgTxt: { fontSize: 12, fontWeight: '700', textAlign: 'left' },
+  waitTxt: { fontSize: 11, fontWeight: '600', color: '#64748B' },
+  bonusTxt: { fontSize: 11, fontWeight: '800' },
+  rollRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
   },
   rollBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 16, paddingHorizontal: 24,
-    borderRadius: 18, minWidth: 150,
+    alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 9, paddingHorizontal: 12,
+    borderRadius: 14,
     ...Platform.select({
-      ios:     { shadowColor:'#000',shadowOffset:{width:0,height:4},shadowOpacity:0.24,shadowRadius:8 },
-      android: { elevation: 7 },
+      ios:     { shadowColor:'#000',shadowOffset:{width:0,height:3},shadowOpacity:0.22,shadowRadius:6 },
+      android: { elevation: 6 },
     }),
   },
-  rollEmoji: { fontSize: 24 },
-  rollTxt:   { fontSize: 15, fontWeight: '800', color: '#fff' },
-
-  bonus: {
-    marginTop: 4, paddingHorizontal: 20, paddingVertical: 7,
-    borderRadius: 20, borderWidth: 1.5,
-  },
-  bonusTxt: { fontSize: 13, fontWeight: '800' },
-
-  rulesBox: {
-    marginTop: 16, backgroundColor: '#fff', borderRadius: 14, padding: 14,
-    borderWidth: 1, borderColor: '#E5E7EB',
-    ...Platform.select({
-      ios:     { shadowColor:'#000',shadowOffset:{width:0,height:1},shadowOpacity:0.05,shadowRadius:3 },
-      android: { elevation: 1 },
-    }),
-  },
-  rulesTitle: { fontSize: 13, fontWeight: '800', color: '#374151', marginBottom: 6 },
-  rule:       { fontSize: 11, color: '#6B7280', lineHeight: 19 },
+  rollTxt: { fontSize: 12, fontWeight: '800', color: '#fff' },
 
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 98 },
   winCard: {

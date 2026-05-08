@@ -47,7 +47,7 @@ function makeStyles(C: AppColors, tags: string[] = []) {
       borderBottomWidth: 1, borderBottomColor: '#ffffff10',
     },
     backBtn:       { marginRight: spacing.sm },
-    backBtnGrad:   { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ffffff20' },
+    backBtnGrad:   { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ffffff20' },
     headerCenter:  { flex: 1, alignItems: 'center' },
     headerTitle:   { fontSize: 18, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
     headerSub:     { fontSize: 12, color: C.textSecondary, marginTop: 1 },

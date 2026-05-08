@@ -49,6 +49,7 @@ interface GameItem {
 interface ComingSoonItem {
   id: string;
   emoji: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
   name: string;
   color: string;
   available: false;
@@ -102,7 +103,7 @@ const LIVE_GAMES: GameItem[] = [
 ];
 
 const COMING_SOON: ComingSoonItem[] = [
-  { id: 'drift-world', emoji: '🌍', name: 'Drift World', color: '#0984E3', available: false },
+  { id: 'drift-world', emoji: '🌍', icon: 'earth-outline', name: 'Drift World', color: '#0984E3', available: false },
 ];
 
 const GAME_DISPLAY: Record<string, { name: string; emoji: string }> = {
@@ -343,7 +344,7 @@ export default function GamesScreen() {
                   activeOpacity={0.7}
                 >
                   <LinearGradient colors={[game.color + '25', game.color + '10']} style={styles.comingSoonIconWrap} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                    <Text style={styles.comingSoonEmoji}>{game.emoji}</Text>
+                    <Ionicons name={game.icon} size={28} color={game.color} />
                   </LinearGradient>
                   <Text style={styles.comingSoonName}>{game.name}</Text>
                   <View style={styles.soonBadge}>

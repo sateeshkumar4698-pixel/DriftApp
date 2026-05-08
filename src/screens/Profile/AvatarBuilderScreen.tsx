@@ -92,7 +92,7 @@ const BG_GRADIENTS: Array<{ label: string; from: string; to: string }> = [
   { label: 'Sunset',   from: 'FF8C00', to: 'FF4B6E' },
   { label: 'Night',    from: '2D3436', to: '636E72' },
   { label: 'Gold',     from: 'FFD700', to: 'FF8C00' },
-  { label: 'Forest',   from: '00B894', to: '2ECC71' },
+  { label: 'Forest',   from: '27AE60', to: '2ECC71' },
 ];
 
 // ─── URL Builder ──────────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ function BgSelector({
         {BG_GRADIENTS.map((bg) => {
           const active = selected === bg.from;
           return (
-            <TouchableOpacity key={bg.from} onPress={() => onSelect(bg.from, bg.to)} activeOpacity={0.8}>
+            <TouchableOpacity key={bg.label} onPress={() => onSelect(bg.from, bg.to)} activeOpacity={0.8}>
               <LinearGradient
                 colors={[`#${bg.from}`, `#${bg.to}`]}
                 style={{

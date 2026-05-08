@@ -77,6 +77,8 @@ module.exports = {
 
       permissions: [
         'CAMERA',
+        'RECORD_AUDIO',
+        'MODIFY_AUDIO_SETTINGS',
         'READ_MEDIA_IMAGES',
         'READ_EXTERNAL_STORAGE',
         'WRITE_EXTERNAL_STORAGE',

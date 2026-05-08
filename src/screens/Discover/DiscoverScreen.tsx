@@ -38,6 +38,7 @@ import { makeMainStyles, makeSvStyles, makeMs, makeCs } from './DiscoverScreen.s
 import { Connection, DiscoverStackParamList, DriftStatus, UserProfile } from '../../types';
 import { dynamicVibeMatch } from '../../utils/vibeMatch';
 import { useMoodStore, MOOD_META, MoodPreset } from '../../store/moodStore';
+import { hapticSelection } from '../../utils/haptics';
 
 
 
@@ -51,13 +52,13 @@ interface StatusViewItem {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const INTENT_FILTERS: Array<{ key: string; label: string; emoji: string; color: string }> = [
-  { key: 'All',        label: 'All',     emoji: '✨', color: '#6C5CE7' },
-  { key: 'Friends',    label: 'Friends', emoji: '🤝', color: '#00B894' },
-  { key: 'Networking', label: 'Network', emoji: '💼', color: '#0984E3' },
-  { key: 'Events',     label: 'Events',  emoji: '🎉', color: '#E17055' },
-  { key: 'Dating',     label: 'Dating',  emoji: '💘', color: '#FF4B6E' },
-  { key: 'Active',     label: 'Online',  emoji: '🟢', color: '#00E676' },
+const INTENT_FILTERS: Array<{ key: string; label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string }> = [
+  { key: 'All',        label: 'All',     icon: 'apps-outline',          color: '#6C5CE7' },
+  { key: 'Friends',    label: 'Friends', icon: 'people-outline',        color: '#00B894' },
+  { key: 'Networking', label: 'Network', icon: 'briefcase-outline',     color: '#0984E3' },
+  { key: 'Events',     label: 'Events',  icon: 'calendar-outline',      color: '#E17055' },
+  { key: 'Dating',     label: 'Dating',  icon: 'heart-outline',         color: '#FF4B6E' },
+  { key: 'Active',     label: 'Online',  icon: 'radio-button-on-outline', color: '#00E676' },
 ];
 
 const CHIP_PALETTE = [
@@ -890,13 +891,13 @@ export default function DiscoverScreen() {
           contentContainerStyle={{ paddingHorizontal: spacing.md, gap: 8, paddingVertical: 10, alignItems: 'center' }}
           style={{ borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.background }}
         >
-          {INTENT_FILTERS.map(({ key, label, emoji, color }) => {
+          {INTENT_FILTERS.map(({ key, label, icon, color }) => {
             const active = activeFilter === key;
             const liveCount = key === 'Active' ? activeUids.size : null;
             return (
               <TouchableOpacity
                 key={key}
-                onPress={() => setActiveFilter(key)}
+                onPress={() => { hapticSelection(); setActiveFilter(key); }}
                 activeOpacity={0.75}
                 style={{
                   height: 36,
@@ -910,7 +911,7 @@ export default function DiscoverScreen() {
                   borderColor: active ? color : C.border,
                 }}
               >
-                <Text style={{ fontSize: 14, lineHeight: 18 }}>{emoji}</Text>
+                <Ionicons name={icon} size={13} color={active ? '#fff' : color} />
                 <Text style={{
                   fontSize: 13,
                   fontWeight: active ? '700' : '500',

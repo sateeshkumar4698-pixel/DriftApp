@@ -65,7 +65,9 @@ import VibeQuizScreen from '../screens/Profile/VibeQuizScreen';
 import ViewMemoriesScreen from '../screens/Profile/ViewMemoriesScreen';
 import StatusCreateScreen from '../screens/Profile/StatusCreateScreen';
 import CoinHistoryScreen from '../screens/Profile/CoinHistoryScreen';
+import CoinShopScreen from '../screens/Profile/CoinShopScreen';
 import PrivacySettingsScreen from '../screens/Profile/PrivacySettingsScreen';
+import BlockedUsersScreen from '../screens/Profile/BlockedUsersScreen';
 import TermsScreen from '../screens/Profile/TermsScreen';
 import ProfileShareScreen from '../screens/Profile/ProfileShareScreen';
 import SettingsScreen from '../screens/Profile/SettingsScreen';
@@ -169,7 +171,9 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="ViewMemories"   component={ViewMemoriesScreen} />
       <ProfileStack.Screen name="StatusCreate"   component={StatusCreateScreen} />
       <ProfileStack.Screen name="CoinHistory"    component={CoinHistoryScreen} />
+      <ProfileStack.Screen name="CoinShop"       component={CoinShopScreen} />
       <ProfileStack.Screen name="PrivacySettings"component={PrivacySettingsScreen} />
+      <ProfileStack.Screen name="BlockedUsers"   component={BlockedUsersScreen} />
       <ProfileStack.Screen name="Terms"          component={TermsScreen} />
       <ProfileStack.Screen name="ProfileShare"   component={ProfileShareScreen} />
       <ProfileStack.Screen name="Settings"       component={SettingsScreen} />
@@ -236,8 +240,8 @@ export default function MainTabs() {
         name="Community"
         component={FeedNavigator}
         options={{
-          tabBarIcon: ({ focused, color }) => TabIcon('people-outline', 'people', focused, color),
-          tabBarLabel: 'Community',
+          tabBarIcon: ({ focused, color }) => TabIcon('newspaper-outline', 'newspaper', focused, color),
+          tabBarLabel: 'Feed',
         }}
       />
       <Tab.Screen

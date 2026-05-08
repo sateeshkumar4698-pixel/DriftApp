@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useAuthStore } from '../../store/authStore';
 import { sendConnectionRequest } from '../../utils/firestore-helpers';
+import { hapticSuccess, hapticError } from '../../utils/haptics';
 import Avatar from '../../components/Avatar';
 import { spacing, typography, radius, shadows } from '../../utils/theme';
 import { useTheme, AppColors } from '../../utils/useTheme';
@@ -60,12 +61,14 @@ export default function ConnectRequestScreen() {
     setLoading(true);
     try {
       await sendConnectionRequest(firebaseUser.uid, user.uid, note);
+      hapticSuccess();
       Alert.alert(
-        'Request Sent! 🤝',
+        'Request Sent!',
         `Your connect request has been sent to ${user.name}. They'll get back to you soon.`,
         [{ text: 'Done', onPress: () => navigation.goBack() }],
       );
     } catch {
+      hapticError();
       Alert.alert('Error', 'Could not send request. Please try again.');
     } finally {
       setLoading(false);

@@ -1,21 +1,39 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, AppColors, spacing, typography } from '../utils/useTheme';
 
 interface EmptyStateProps {
+  iconName?: React.ComponentProps<typeof Ionicons>['name'];
+  iconGrad?: readonly [string, string];
   emoji?: string;
   title: string;
   subtitle?: string;
   children?: React.ReactNode;
 }
 
-export default function EmptyState({ emoji = '✨', title, subtitle, children }: EmptyStateProps) {
+export default function EmptyState({
+  iconName,
+  iconGrad,
+  emoji,
+  title,
+  subtitle,
+  children,
+}: EmptyStateProps) {
   const { C } = useTheme();
   const styles = makeStyles(C);
+  const grad: readonly [string, string] = iconGrad ?? [`${C.primary}40`, `${C.secondary}20`];
 
   return (
     <View style={styles.container}>
-      <Text style={styles.emoji}>{emoji}</Text>
+      {iconName ? (
+        <LinearGradient colors={grad} style={styles.iconCircle} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <Ionicons name={iconName} size={36} color="#fff" />
+        </LinearGradient>
+      ) : (
+        <Text style={styles.emoji}>{emoji ?? '✨'}</Text>
+      )}
       <Text style={styles.title}>{title}</Text>
       {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
       {children}
@@ -30,6 +48,15 @@ function makeStyles(C: AppColors) {
       alignItems: 'center',
       justifyContent: 'center',
       padding: spacing.xxl,
+      gap: spacing.sm,
+    },
+    iconCircle: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: spacing.sm,
     },
     emoji: {
       fontSize: 56,
@@ -39,7 +66,6 @@ function makeStyles(C: AppColors) {
       ...typography.heading,
       color: C.text,
       textAlign: 'center',
-      marginBottom: spacing.sm,
     },
     subtitle: {
       ...typography.body,

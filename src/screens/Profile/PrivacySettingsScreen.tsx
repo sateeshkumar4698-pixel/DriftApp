@@ -5,23 +5,31 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
 import { setUserProfile } from '../../utils/firestore-helpers';
 import { useTheme } from '../../utils/useTheme';
-import { spacing, radius, shadows } from '../../utils/theme';
+import { spacing, radius } from '../../utils/theme';
+import { ProfileStackParamList, PrivacyPrefs } from '../../types';
 
-interface PrivacyPrefs {
-  statusVisibility:        'connections' | 'everyone';
-  memoriesVisibility:      'private' | 'connections' | 'everyone';
-  showOnlineStatus:        boolean;
-  showLastSeen:            boolean;
-  allowConnectionRequests: boolean;
-  showInDiscoverFeed:      boolean;
-}
+type Nav = NativeStackNavigationProp<ProfileStackParamList>;
 
-// ─── Section component ────────────────────────────────────────────────────────
+const DEFAULT_PREFS: PrivacyPrefs = {
+  statusVisibility:        'connections',
+  memoriesVisibility:      'connections',
+  showOnlineStatus:        true,
+  showLastSeen:            true,
+  allowConnectionRequests: true,
+  showInDiscoverFeed:      true,
+  screenshotAlert:         true,
+  readReceipts:            true,
+  allowTagging:            true,
+  profileIndexed:          true,
+};
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function Section({
   title, icon, grad, children, C,
@@ -48,7 +56,7 @@ function Section({
 }
 
 function ToggleRow({
-  icon, label, sublabel, value, onToggle, activeColor, C,
+  icon, label, sublabel, value, onToggle, activeColor, last, C,
 }: {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   label: string;
@@ -56,10 +64,11 @@ function ToggleRow({
   value: boolean;
   onToggle: (v: boolean) => void;
   activeColor?: string;
+  last?: boolean;
   C: ReturnType<typeof useTheme>['C'];
 }) {
   return (
-    <View style={[ps.toggleRow, { borderBottomColor: C.border }]}>
+    <View style={[ps.toggleRow, !last && { borderBottomColor: C.border, borderBottomWidth: StyleSheet.hairlineWidth }]}>
       <Ionicons name={icon} size={18} color={value ? (activeColor ?? C.primary) : C.textTertiary} style={{ marginRight: 12 }} />
       <View style={ps.toggleInfo}>
         <Text style={[ps.toggleLabel, { color: C.text }]}>{label}</Text>
@@ -76,7 +85,7 @@ function ToggleRow({
 }
 
 function ChoiceRow({
-  icon, label, sublabel, options, value, onChange, C, activeGrad,
+  icon, label, sublabel, options, value, onChange, last, C, activeGrad,
 }: {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   label: string;
@@ -84,11 +93,12 @@ function ChoiceRow({
   options: { label: string; value: string }[];
   value: string;
   onChange: (v: string) => void;
+  last?: boolean;
   C: ReturnType<typeof useTheme>['C'];
   activeGrad: readonly [string, string];
 }) {
   return (
-    <View style={[ps.choiceBlock, { borderBottomColor: C.border }]}>
+    <View style={[ps.choiceBlock, !last && { borderBottomColor: C.border, borderBottomWidth: StyleSheet.hairlineWidth }]}>
       <View style={ps.choiceTop}>
         <Ionicons name={icon} size={18} color={C.textTertiary} style={{ marginRight: 12 }} />
         <View style={{ flex: 1 }}>
@@ -107,7 +117,12 @@ function ChoiceRow({
               </LinearGradient>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity key={opt.value} style={[ps.chipUnsel, { backgroundColor: C.cardAlt, borderColor: C.border }]} onPress={() => onChange(opt.value)} activeOpacity={0.75}>
+            <TouchableOpacity
+              key={opt.value}
+              style={[ps.chipUnsel, { backgroundColor: C.cardAlt, borderColor: C.border }]}
+              onPress={() => onChange(opt.value)}
+              activeOpacity={0.75}
+            >
               <Text style={[ps.chipText, { color: C.textSecondary }]}>{opt.label}</Text>
             </TouchableOpacity>
           );
@@ -117,25 +132,46 @@ function ChoiceRow({
   );
 }
 
+function NavRow({
+  icon, label, sublabel, iconGrad, onPress, last, C,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  sublabel?: string;
+  iconGrad: readonly [string, string];
+  onPress: () => void;
+  last?: boolean;
+  C: ReturnType<typeof useTheme>['C'];
+}) {
+  return (
+    <TouchableOpacity
+      style={[ps.navRow, !last && { borderBottomColor: C.border, borderBottomWidth: StyleSheet.hairlineWidth }]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <LinearGradient colors={iconGrad} style={ps.navIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <Ionicons name={icon} size={14} color="#fff" />
+      </LinearGradient>
+      <View style={ps.toggleInfo}>
+        <Text style={[ps.toggleLabel, { color: C.text }]}>{label}</Text>
+        {sublabel ? <Text style={[ps.toggleSub, { color: C.textSecondary }]}>{sublabel}</Text> : null}
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={C.textTertiary} />
+    </TouchableOpacity>
+  );
+}
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function PrivacySettingsScreen() {
-  const navigation    = useNavigation();
+  const navigation    = useNavigation<Nav>();
   const { C, isDark } = useTheme();
   const { firebaseUser, userProfile, setUserProfile: setStoreProfile } = useAuthStore();
   const [saving, setSaving] = useState(false);
 
   const [prefs, setPrefs] = useState<PrivacyPrefs>(() => {
-    const saved = (userProfile as Record<string, unknown> | null)
-      ?.privacyPrefs as Partial<PrivacyPrefs> | undefined;
-    return {
-      statusVisibility:        saved?.statusVisibility        ?? 'connections',
-      memoriesVisibility:      saved?.memoriesVisibility      ?? 'connections',
-      showOnlineStatus:        saved?.showOnlineStatus        ?? true,
-      showLastSeen:            saved?.showLastSeen            ?? true,
-      allowConnectionRequests: saved?.allowConnectionRequests ?? true,
-      showInDiscoverFeed:      saved?.showInDiscoverFeed      ?? true,
-    };
+    const saved = (userProfile as any)?.privacyPrefs as Partial<PrivacyPrefs> | undefined;
+    return { ...DEFAULT_PREFS, ...saved };
   });
 
   function update<K extends keyof PrivacyPrefs>(key: K, value: PrivacyPrefs[K]) {
@@ -148,7 +184,7 @@ export default function PrivacySettingsScreen() {
     try {
       await setUserProfile(firebaseUser.uid, { privacyPrefs: prefs } as any);
       setStoreProfile({ ...userProfile, privacyPrefs: prefs } as any);
-      Alert.alert('Saved ✓', 'Privacy settings updated.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      Alert.alert('Saved', 'Privacy settings updated.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
     } catch {
       Alert.alert('Error', 'Could not save settings.');
     } finally {
@@ -167,20 +203,25 @@ export default function PrivacySettingsScreen() {
           style={[ps.header, { borderBottomColor: C.border }]}
         >
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <LinearGradient colors={isDark ? ['#ffffff18', '#ffffff0A'] : ['#F3F4F6', '#E5E7EB']} style={ps.backBtn}>
+            <LinearGradient
+              colors={isDark ? ['#ffffff18', '#ffffff0A'] : ['#F3F4F6', '#E5E7EB']}
+              style={ps.backBtn}
+            >
               <Ionicons name="chevron-back" size={22} color={C.text} />
             </LinearGradient>
           </TouchableOpacity>
           <View style={ps.headerCenter}>
-            <Text style={[ps.headerTitle, { color: C.text }]}>Privacy Settings</Text>
+            <Text style={[ps.headerTitle, { color: C.text }]}>Privacy & Safety</Text>
             <Text style={[ps.headerSub, { color: C.textSecondary }]}>Control your visibility</Text>
           </View>
           <TouchableOpacity onPress={handleSave} disabled={saving}>
             {saving
               ? <ActivityIndicator color={C.primary} size="small" />
-              : <LinearGradient colors={['#FF4B6E', '#C2185B']} style={ps.saveBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+              : (
+                <LinearGradient colors={['#FF4B6E', '#C2185B']} style={ps.saveBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                   <Text style={ps.saveBtnText}>Save</Text>
                 </LinearGradient>
+              )
             }
           </TouchableOpacity>
         </LinearGradient>
@@ -207,9 +248,28 @@ export default function PrivacySettingsScreen() {
               activeColor="#FF4B6E"
               C={C}
             />
+            <ToggleRow
+              icon="search-outline"
+              label="Appear in Search Results"
+              sublabel="Show up when people search by name or @handle"
+              value={prefs.profileIndexed}
+              onToggle={(v) => update('profileIndexed', v)}
+              activeColor="#0984E3"
+              C={C}
+            />
+            <ToggleRow
+              icon="pricetag-outline"
+              label="Allow Tagging"
+              sublabel="Others can tag you in their posts and events"
+              value={prefs.allowTagging}
+              onToggle={(v) => update('allowTagging', v)}
+              activeColor="#00CEC9"
+              last
+              C={C}
+            />
           </Section>
 
-          {/* Status */}
+          {/* Status Posts */}
           <Section title="Status Posts" icon="radio-outline" grad={['#FF4B6E', '#C2185B']} C={C}>
             <ChoiceRow
               icon="people-outline"
@@ -222,6 +282,7 @@ export default function PrivacySettingsScreen() {
               value={prefs.statusVisibility}
               onChange={(v) => update('statusVisibility', v as any)}
               activeGrad={['#FF4B6E', '#C2185B']}
+              last
               C={C}
             />
           </Section>
@@ -240,11 +301,12 @@ export default function PrivacySettingsScreen() {
               value={prefs.memoriesVisibility}
               onChange={(v) => update('memoriesVisibility', v as any)}
               activeGrad={['#FFD700', '#FF8C00']}
+              last
               C={C}
             />
           </Section>
 
-          {/* Presence */}
+          {/* Online Presence */}
           <Section title="Online Presence" icon="wifi-outline" grad={['#00E676', '#00BCD4']} C={C}>
             <ToggleRow
               icon="ellipse"
@@ -262,6 +324,59 @@ export default function PrivacySettingsScreen() {
               value={prefs.showLastSeen}
               onToggle={(v) => update('showLastSeen', v)}
               activeColor="#00BCD4"
+              last
+              C={C}
+            />
+          </Section>
+
+          {/* Chat Safety */}
+          <Section title="Chat Safety" icon="chatbubble-ellipses-outline" grad={['#E17055', '#C0392B']} C={C}>
+            <ToggleRow
+              icon="camera-outline"
+              label="Screenshot Alert"
+              sublabel="Notify you when someone screenshots your chat"
+              value={prefs.screenshotAlert}
+              onToggle={(v) => update('screenshotAlert', v)}
+              activeColor="#E17055"
+              C={C}
+            />
+            <ToggleRow
+              icon="checkmark-done-outline"
+              label="Read Receipts"
+              sublabel="Show blue ticks when you've read messages"
+              value={prefs.readReceipts}
+              onToggle={(v) => update('readReceipts', v)}
+              activeColor="#0984E3"
+              last
+              C={C}
+            />
+          </Section>
+
+          {/* Account & Data */}
+          <Section title="Account & Data" icon="shield-outline" grad={['#2D3436', '#636E72']} C={C}>
+            <NavRow
+              icon="ban-outline"
+              label="Blocked Users"
+              sublabel="Manage people you've blocked"
+              iconGrad={['#EF4444', '#C62828']}
+              onPress={() => navigation.navigate('BlockedUsers')}
+              C={C}
+            />
+            <NavRow
+              icon="download-outline"
+              label="Export My Data"
+              sublabel="Download a copy of your Drift data"
+              iconGrad={['#0984E3', '#0056A3']}
+              onPress={() => Alert.alert('Export Data', 'Your data export will be emailed to you within 24 hours at your registered email address.')}
+              C={C}
+            />
+            <NavRow
+              icon="document-text-outline"
+              label="Terms & Privacy Policy"
+              sublabel="Read our policies"
+              iconGrad={['#636E72', '#2D3436']}
+              onPress={() => navigation.navigate('Terms')}
+              last
               C={C}
             />
           </Section>
@@ -291,7 +406,7 @@ const ps = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backBtn:      { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  backBtn:      { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle:  { fontSize: 18, fontWeight: '700' },
   headerSub:    { fontSize: 12, marginTop: 1 },
@@ -303,20 +418,23 @@ const ps = StyleSheet.create({
   sectionIcon:   { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   sectionTitle:  { fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  card: { borderRadius: radius.xl, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing.md, ...shadows.card, shadowColor: '#000', shadowOpacity: 0.15 },
+  card: { borderRadius: radius.xl, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing.md },
 
-  toggleRow:  { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  toggleRow:  { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
   toggleInfo: { flex: 1 },
   toggleLabel:{ fontSize: 14, fontWeight: '600' },
   toggleSub:  { fontSize: 12, marginTop: 2 },
 
-  choiceBlock: { paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  choiceBlock: { paddingVertical: 14 },
   choiceTop:   { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
   choiceChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingLeft: 30 },
   chipSel:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.full },
   chipUnsel:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1.5 },
   chipTextSel: { fontSize: 12, fontWeight: '700', color: '#fff' },
   chipText:    { fontSize: 12, fontWeight: '600' },
+
+  navRow:  { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 12 },
+  navIcon: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
 
   safetyNote: { flexDirection: 'row', alignItems: 'flex-start', padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, marginTop: spacing.sm },
   safetyText: { flex: 1, fontSize: 13, lineHeight: 20 },
