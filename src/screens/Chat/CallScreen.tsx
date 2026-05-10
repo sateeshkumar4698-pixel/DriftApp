@@ -44,13 +44,15 @@ type RouteProps = RouteProp<DiscoverStackParamList, 'Call'>;
 // Jitsi domain — free, no API key, no backend
 const JITSI = 'https://meet.jit.si';
 
-function jitsiUrl(roomName: string, callType: 'audio' | 'video'): string {
+function jitsiUrl(roomName: string, callType: 'audio' | 'video', displayName?: string): string {
   const params = [
     'config.prejoinPageEnabled=false',
     'config.disableDeepLinking=true',
     'config.startWithAudioMuted=false',
-    callType === 'audio' ? 'config.startWithVideoMuted=true' : '',
+    'config.enableNoisyMicDetection=false',
+    callType === 'audio' ? 'config.startWithVideoMuted=true' : 'config.startWithVideoMuted=false',
     callType === 'audio' ? 'config.disableVideo=true' : '',
+    displayName ? `userInfo.displayName=${encodeURIComponent(displayName)}` : '',
     'interfaceConfig.SHOW_JITSI_WATERMARK=false',
     'interfaceConfig.SHOW_BRAND_WATERMARK=false',
     'interfaceConfig.SHOW_POWERED_BY=false',
@@ -167,7 +169,7 @@ export default function CallScreen() {
     return `${m}:${(s % 60).toString().padStart(2, '0')}`;
   }
 
-  const jUrl = roomName ? jitsiUrl(roomName, callType) : null;
+  const jUrl = roomName ? jitsiUrl(roomName, callType, userProfile?.name) : null;
 
   return (
     <View style={styles.root}>
@@ -219,6 +221,11 @@ export default function CallScreen() {
                 domStorageEnabled
                 originWhitelist={['*']}
                 allowsFullscreenVideo
+                // ── Critical: grant mic/camera inside the WebView ──────────
+                // iOS: auto-approve microphone (and camera for video calls)
+                mediaCapturePermissionGrantType="grant"
+                // Android: grant AUDIO_CAPTURE / VIDEO_CAPTURE when Jitsi requests
+                onPermissionRequest={(request: any) => request.grant(request.resources)}
                 onLoad={() => { setWebviewReady(true); setStatus('active'); }}
                 onError={() => handleEndCall()}
                 renderLoading={() => (

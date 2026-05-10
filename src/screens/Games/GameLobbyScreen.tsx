@@ -185,15 +185,19 @@ export default function GameLobbyScreen() {
 
   function joinVoice() {
     if (voiceState !== 'idle' && voiceState !== 'error') return;
-    // All players in this room join the same Jitsi channel automatically
-    const jitsiRoom = `drift-game-${roomId.slice(0, 8)}`;
+    // All players in this room share the same Jitsi channel (roomId is the key)
+    const jitsiRoom = `drift-${roomId.slice(0, 12)}`;
+    const displayName = encodeURIComponent(userProfile?.name ?? 'Player');
     const params = [
       'config.prejoinPageEnabled=false',
       'config.disableDeepLinking=true',
       'config.startWithVideoMuted=true',
       'config.disableVideo=true',
       'config.startWithAudioMuted=false',
+      'config.enableNoisyMicDetection=false',
+      `userInfo.displayName=${displayName}`,
       'interfaceConfig.SHOW_JITSI_WATERMARK=false',
+      'interfaceConfig.SHOW_POWERED_BY=false',
       'interfaceConfig.TOOLBAR_BUTTONS=["microphone","hangup"]',
     ].join('&');
     const url = `https://meet.jit.si/${encodeURIComponent(jitsiRoom)}#${params}`;
@@ -385,6 +389,11 @@ export default function GameLobbyScreen() {
                   javaScriptEnabled
                   domStorageEnabled
                   originWhitelist={['*']}
+                  // ── Mic/camera permission fixes ───────────────────────────
+                  // iOS: auto-grant microphone without showing a dialog inside WebView
+                  mediaCapturePermissionGrantType="grant"
+                  // Android: grant audio/video capture when WebView requests it
+                  onPermissionRequest={(request: any) => request.grant(request.resources)}
                 />
               ) : voiceRoomUrl && !NativeWebView ? (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
