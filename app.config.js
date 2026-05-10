@@ -36,6 +36,14 @@ module.exports = {
       'expo-audio',
       'expo-updates',
       [
+        'expo-location',
+        {
+          locationAlwaysAndWhenInUsePermission: 'Drift uses your location to show nearby friends and meetup spots.',
+          locationWhenInUsePermission: 'Drift uses your location to show nearby friends and meetup spots.',
+          isAndroidBackgroundLocationEnabled: false,
+        },
+      ],
+      [
         'expo-camera',
         {
           cameraPermission: 'Drift needs camera access to scan QR codes and share profiles.',
@@ -67,6 +75,7 @@ module.exports = {
         NSPhotoLibraryUsageDescription:      'Drift accesses your photos to let you set a profile picture and share images.',
         NSPhotoLibraryAddUsageDescription:   'Drift saves shared profile cards to your photo library.',
         NSMicrophoneUsageDescription:        'Drift uses the microphone for voice rooms with your connections.',
+        NSLocationWhenInUseUsageDescription: 'Drift uses your location to show nearby friends and meetup spots.',
       },
       ...(hasGooglePlist ? { googleServicesFile: './ios/Drift/GoogleService-Info.plist' } : {}),
     },
@@ -79,6 +88,8 @@ module.exports = {
         'CAMERA',
         'RECORD_AUDIO',
         'MODIFY_AUDIO_SETTINGS',
+        'ACCESS_FINE_LOCATION',
+        'ACCESS_COARSE_LOCATION',
         'READ_MEDIA_IMAGES',
         'READ_EXTERNAL_STORAGE',
         'WRITE_EXTERNAL_STORAGE',
