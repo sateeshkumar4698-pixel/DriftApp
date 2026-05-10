@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { ref as rtdbRef, onValue, set, remove } from 'firebase/database';
@@ -29,6 +30,7 @@ import {
   joinGameRoom,
 } from '../../utils/firestore-helpers';
 import { formatTime } from '../../utils/helpers';
+import { getConversationStarters } from '../../utils/vibeUtils';
 import Avatar from '../../components/Avatar';
 import { spacing, typography, radius } from '../../utils/theme';
 import { useTheme, AppColors } from '../../utils/useTheme';
@@ -207,6 +209,69 @@ function AnimatedTypingDots({ color }: { color: string }) {
   );
 }
 
+// ─── Conversation Starters Card ──────────────────────────────────────────────
+
+function ConversationStartersCard({
+  starters,
+  onSelect,
+  onDismiss,
+}: {
+  starters: string[];
+  onSelect: (s: string) => void;
+  onDismiss: () => void;
+}) {
+  const { C } = useTheme();
+  if (starters.length === 0) return null;
+
+  return (
+    <View style={{
+      margin: spacing.md,
+      marginBottom: 0,
+      backgroundColor: C.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: C.primary + '30',
+      padding: spacing.md,
+    }}>
+      {/* Header row */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }}>
+        <Text style={{ fontSize: 16, marginRight: spacing.xs }}>💬</Text>
+        <Text style={{ ...typography.label, color: C.text, flex: 1 }}>Break the ice</Text>
+        <TouchableOpacity
+          onPress={onDismiss}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="close" size={18} color={C.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Starter chips */}
+      <View style={{ gap: spacing.xs }}>
+        {starters.map((s, i) => (
+          <TouchableOpacity
+            key={i}
+            onPress={() => onSelect(s)}
+            activeOpacity={0.75}
+            style={{
+              backgroundColor: C.background,
+              borderRadius: radius.sm,
+              borderWidth: 1,
+              borderColor: C.border,
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.sm,
+            }}
+          >
+            <Text style={{ ...typography.caption, color: C.text, lineHeight: 18 }}>
+              {s}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
@@ -226,7 +291,27 @@ export default function ChatScreen() {
   const [showGamePicker, setShowGamePicker] = useState(false);
 
   const flatListRef  = useRef<FlatList>(null);
+  const inputRef     = useRef<TextInput>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Conversation starters / ice-breaker card ──────────────────────────────
+  const [iceDismissed, setIceDismissed] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(`ice_dismissed_${connectionId}`).then((val) => {
+      if (val === 'true') setIceDismissed(true);
+    });
+  }, [connectionId]);
+
+  function dismissIce() {
+    setIceDismissed(true);
+    AsyncStorage.setItem(`ice_dismissed_${connectionId}`, 'true');
+  }
+
+  const starters = useMemo(
+    () => getConversationStarters(userProfile, connectedUser),
+    [userProfile, connectedUser],
+  );
 
   const messages  = activeMessages[connectionId] ?? [];
   const myUid     = firebaseUser?.uid ?? '';
@@ -454,6 +539,18 @@ export default function ChatScreen() {
           data={messages}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messagesList}
+          ListHeaderComponent={
+            !iceDismissed && messages.length < 5 ? (
+              <ConversationStartersCard
+                starters={starters}
+                onDismiss={dismissIce}
+                onSelect={(starter) => {
+                  setText(starter);
+                  inputRef.current?.focus();
+                }}
+              />
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyChat}>
               <Text style={styles.emptyChatEmoji}>👋</Text>
@@ -572,6 +669,7 @@ export default function ChatScreen() {
             <Text style={styles.gameBtnText}>🎮</Text>
           </TouchableOpacity>
           <TextInput
+            ref={inputRef}
             style={styles.textInput}
             value={text}
             onChangeText={handleTextChange}

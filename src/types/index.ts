@@ -375,6 +375,10 @@ export type DiscoverStackParamList = {
   // ── Profile Share (Phase 1) ────────────────────────────────────────────────
   QRScanner: undefined;
   ShakeShare: undefined;
+  // ── Phase 2 ───────────────────────────────────────────────────────────────
+  MeetupBoard: undefined;
+  VibeRooms:   undefined;
+  VibeRoom:    { roomId: string; role: 'host' | 'speaker' | 'listener' };
 };
 
 export type EventsStackParamList = {

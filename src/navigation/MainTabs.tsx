@@ -76,6 +76,10 @@ import FeedbackScreen from '../screens/Profile/FeedbackScreen';
 import QRScannerScreen from '../screens/Discover/QRScannerScreen';
 import ShakeToShareScreen from '../screens/Discover/ShakeToShareScreen';
 import ViewStatusScreen from '../screens/Discover/ViewStatusScreen';
+// Discover extras (Phase 2)
+import MeetupBoardScreen from '../screens/Discover/MeetupBoardScreen';
+import VibeRoomsScreen   from '../screens/Discover/VibeRoomsScreen';
+import VibeRoomScreen    from '../screens/Discover/VibeRoomScreen';
 
 // ─── Stubs ────────────────────────────────────────────────────────────────────
 
@@ -112,6 +116,10 @@ function DiscoverNavigator() {
       <DiscoverStack.Screen name="QRScanner"   component={QRScannerScreen} />
       <DiscoverStack.Screen name="ShakeShare"  component={ShakeToShareScreen} />
       <DiscoverStack.Screen name="ViewStatus"  component={ViewStatusScreen} />
+      {/* Phase 2 extras */}
+      <DiscoverStack.Screen name="MeetupBoard" component={MeetupBoardScreen} />
+      <DiscoverStack.Screen name="VibeRooms"   component={VibeRoomsScreen} />
+      <DiscoverStack.Screen name="VibeRoom"    component={VibeRoomScreen}  options={{ headerShown: false }} />
     </DiscoverStack.Navigator>
   );
 }

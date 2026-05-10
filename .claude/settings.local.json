@@ -7,7 +7,29 @@
       "Bash(kill %1)",
       "Bash(npx expo-doctor *)",
       "Bash(xargs -I{} cat {})",
-      "Bash(npm dedupe *)"
+      "Bash(npm dedupe *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); deps=d.get\\('dependencies',{}\\); [print\\(k,v\\) for k,v in deps.items\\(\\) if 'haptic' in k.lower\\(\\) or 'expo' in k.lower\\(\\)]\")",
+      "Bash(/usr/local/bin/npx expo *)",
+      "Read(//Users/satish/.nvm/versions/node/**)",
+      "Bash(~/.nvm/versions/node/v20.14.0/bin/npx expo *)",
+      "Read(//Users/satish/.nvm/**)",
+      "Read(//opt/homebrew/**)",
+      "Read(//usr/local/**)",
+      "Read(//opt/**)",
+      "Bash(/opt/homebrew/bin/node /opt/homebrew/lib/node_modules/npm/bin/npm-cli.js install expo-haptics@~14.0.1)",
+      "Bash(sed -i '' 's/backBtnGrad: { width: 38, height: 38, borderRadius: 19,/backBtnGrad: { width: 42, height: 42, borderRadius: 21,/g' /Users/satish/Meta/Drift/DriftApp/src/screens/Profile/EditProfileScreen.tsx)",
+      "Bash(sed -i '' 's/backBtnGrad:   { width: 38, height: 38, borderRadius: 19,/backBtnGrad:   { width: 42, height: 42, borderRadius: 21,/g' /Users/satish/Meta/Drift/DriftApp/src/screens/Events/CreateEventScreen.tsx)",
+      "Bash(/usr/local/bin/npx tsc *)",
+      "Bash(/Users/satish/.nvm/versions/node/v22.11.0/bin/npx tsc *)",
+      "Bash(~/.nvm/versions/node/v20.19.4/bin/npx tsc *)",
+      "Bash(export HOME=/Users/satish)",
+      "Bash(zsh -c 'source ~/.nvm/nvm.sh && npx tsc --noEmit 2>&1')",
+      "Bash(zsh -c 'export NVM_DIR=\"$HOME/.nvm\"; source \"$NVM_DIR/nvm.sh\"; nvm use 20 > /dev/null; npx tsc --noEmit 2>&1')",
+      "Bash(zsh -l -c 'npx tsc --noEmit 2>&1')",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npx eas-cli *)"
     ]
   }
 }
